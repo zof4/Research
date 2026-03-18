@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>QuickDrop</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>QuickDrop</h1>
+      <p class="subtitle">Upload photos/files here and grab them from any device.</p>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+      <div class="messages">
+        {% for category, message in messages %}
+        <p class="message {{ category }}">{{ message }}</p>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% endwith %}
+
+      <section class="card">
+        <h2>Upload</h2>
+        <form method="post" enctype="multipart/form-data" class="upload-form">
+          <input type="file" name="file" required />
+          <button type="submit">Upload</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>Files</h2>
+        {% if files %}
+        <ul class="file-list">
+          {% for file in files %}
+          <li>
+            <a href="{{ url_for('download_file', filename=file.name) }}" target="_blank">{{ file.name }}</a>
+            <span>{{ human_size(file.size) }} • {{ file.modified.strftime('%Y-%m-%d %H:%M') }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p>No files uploaded yet.</p>
+        {% endif %}
+      </section>
+    </main>
+  </body>
+</html>
