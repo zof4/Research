@@ -3,15 +3,23 @@
 A tiny Flask web app for quickly sharing photos/files between devices.
 
 ## Features
-- Upload files from the browser.
-- Download/view files from `/files/<filename>` links.
-- File list sorted newest first.
+- Password-protected write access saved in a long-lived browser session.
+- Public file downloads from `/files/<filename>` without logging in.
+- A text transfer area with visible history for quick copy/paste on another device.
+- A LaTeX rendering area that saves PDFs for download from `/latex/<filename>`.
+- Live total storage usage summary, remaining space, and file count.
+- Configurable per-file and total-storage limits to reduce server abuse.
 
 ## Run locally
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+export QUICKDROP_SECRET_KEY=change-me
+export QUICKDROP_PASSWORD=change-this-write-password
+export QUICKDROP_MAX_UPLOAD_MB=100
+export QUICKDROP_MAX_STORAGE_MB=2048
+export QUICKDROP_PDFLATEX_BIN=pdflatex
 PORT=8003 python app.py
 ```
 Then open `http://YOUR_SERVER_IP:8003`.
@@ -19,37 +27,35 @@ Then open `http://YOUR_SERVER_IP:8003`.
 ## Exact SSH deployment steps for Oracle Linux on port 8003
 
 > Replace placeholders before running:
+> - `YOUR_REPO_SSH_URL` (example: `git@github.com:you/quickdrop.git`)
+> - `YOUR_BRANCH` (example: `work`)
 > - `YOUR_USER` (for example `opc`)
 > - `YOUR_SERVER_IP`
-> - `~/quickdrop` local folder where this repo is located
+>
+> Important: run each command on its own line. If you paste `sudo dnf install ... sudo systemctl ...` as one line, `dnf` will treat `sudo` and `systemctl` as extra package names and fail.
 
-### 1) From your local machine: copy project to the server
-```bash
-cd ~/quickdrop
-tar --exclude='.git' --exclude='.venv' -czf quickdrop.tar.gz .
-scp quickdrop.tar.gz YOUR_USER@YOUR_SERVER_IP:/tmp/
-```
-
-### 2) SSH to the server
+### 1) SSH to the server
 ```bash
 ssh YOUR_USER@YOUR_SERVER_IP
 ```
 
-### 3) On the server: install system packages
+### 2) On the server: install system packages
 ```bash
-sudo dnf install -y python3 python3-pip policycoreutils-python-utils firewalld
+sudo dnf install -y git python3 python3-pip policycoreutils-python-utils firewalld texlive-scheme-basic
 sudo systemctl enable --now firewalld
 ```
 
-### 4) Put app files in `/opt/quickdrop`
+### 3) Clone the repo on the server
 ```bash
-sudo mkdir -p /opt/quickdrop
-sudo tar -xzf /tmp/quickdrop.tar.gz -C /opt/quickdrop
-sudo chown -R YOUR_USER:YOUR_USER /opt/quickdrop
-cd /opt/quickdrop
+cd ~
+git clone YOUR_REPO_SSH_URL quickdrop
+cd quickdrop
+git fetch --all
+git checkout YOUR_BRANCH
+git pull --ff-only origin YOUR_BRANCH
 ```
 
-### 5) Create Python venv and install dependencies
+### 4) Create Python venv and install dependencies
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
@@ -57,15 +63,16 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 6) Set a strong app secret and quick test on 8003
+### 5) Set a strong app secret, choose a shared upload password, and quick test on 8003
 ```bash
 export QUICKDROP_SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+export QUICKDROP_PASSWORD='choose-a-shared-upload-password'
 PORT=8003 python app.py
 ```
 - Verify from another terminal: `curl -I http://YOUR_SERVER_IP:8003`
 - Press `Ctrl+C` to stop.
 
-### 7) Create a systemd service that always runs on port 8003
+### 6) Create a systemd service that always runs on port 8003
 ```bash
 sudo tee /etc/systemd/system/quickdrop.service >/dev/null <<'EOF'
 [Unit]
@@ -76,11 +83,13 @@ After=network.target
 Type=simple
 User=YOUR_USER
 Group=YOUR_USER
-WorkingDirectory=/opt/quickdrop
-Environment="PATH=/opt/quickdrop/.venv/bin"
+WorkingDirectory=/home/YOUR_USER/quickdrop
+Environment="PATH=/home/YOUR_USER/quickdrop/.venv/bin"
 Environment="PORT=8003"
 Environment="QUICKDROP_SECRET_KEY=CHANGE_ME_TO_A_LONG_RANDOM_VALUE"
-ExecStart=/opt/quickdrop/.venv/bin/python /opt/quickdrop/app.py
+Environment="QUICKDROP_PASSWORD=CHANGE_ME_TO_A_SHARED_WRITE_PASSWORD"
+Environment="QUICKDROP_PDFLATEX_BIN=pdflatex"
+ExecStart=/home/YOUR_USER/quickdrop/.venv/bin/python /home/YOUR_USER/quickdrop/app.py
 Restart=always
 RestartSec=3
 
@@ -89,7 +98,7 @@ WantedBy=multi-user.target
 EOF
 ```
 
-Now set a real secret in that service file:
+Now set a real secret in that service file and replace `CHANGE_ME_TO_A_SHARED_WRITE_PASSWORD` with your own shared write password:
 ```bash
 sudo sed -i "s#CHANGE_ME_TO_A_LONG_RANDOM_VALUE#$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')#" /etc/systemd/system/quickdrop.service
 ```
@@ -101,21 +110,21 @@ sudo systemctl enable --now quickdrop
 sudo systemctl status quickdrop --no-pager
 ```
 
-### 8) Open firewall port 8003
+### 7) Open firewall port 8003
 ```bash
 sudo firewall-cmd --permanent --add-port=8003/tcp
 sudo firewall-cmd --reload
 sudo firewall-cmd --list-ports
 ```
 
-### 9) Validate it is reachable
+### 8) Validate it is reachable
 ```bash
 curl -I http://127.0.0.1:8003
 ```
 From another device/browser, open:
 - `http://YOUR_SERVER_IP:8003`
 
-### 10) Helpful operations over SSH
+### 9) Helpful operations over SSH
 ```bash
 sudo systemctl restart quickdrop
 sudo systemctl stop quickdrop
@@ -123,6 +132,80 @@ sudo systemctl start quickdrop
 sudo journalctl -u quickdrop -f
 ```
 
+### 10) One-command version after you know your repo URL and branch
+```bash
+ssh YOUR_USER@YOUR_SERVER_IP
+sudo dnf install -y git python3 python3-pip policycoreutils-python-utils firewalld texlive-scheme-basic
+sudo systemctl enable --now firewalld
+cd ~
+git clone YOUR_REPO_SSH_URL quickdrop
+cd quickdrop
+git fetch --all
+git checkout YOUR_BRANCH
+git pull --ff-only origin YOUR_BRANCH
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+sudo tee /etc/systemd/system/quickdrop.service >/dev/null <<'EOF'
+[Unit]
+Description=QuickDrop Flask app
+After=network.target
+
+[Service]
+Type=simple
+User=YOUR_USER
+Group=YOUR_USER
+WorkingDirectory=/home/YOUR_USER/quickdrop
+Environment="PATH=/home/YOUR_USER/quickdrop/.venv/bin"
+Environment="PORT=8003"
+Environment="QUICKDROP_SECRET_KEY=CHANGE_ME_TO_A_LONG_RANDOM_VALUE"
+Environment="QUICKDROP_PASSWORD=CHANGE_ME_TO_A_SHARED_WRITE_PASSWORD"
+Environment="QUICKDROP_PDFLATEX_BIN=pdflatex"
+ExecStart=/home/YOUR_USER/quickdrop/.venv/bin/python /home/YOUR_USER/quickdrop/app.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+sudo sed -i "s#CHANGE_ME_TO_A_LONG_RANDOM_VALUE#$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')#" /etc/systemd/system/quickdrop.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now quickdrop
+sudo firewall-cmd --permanent --add-port=8003/tcp
+sudo firewall-cmd --reload
+curl -I http://127.0.0.1:8003
+```
+
 ## Notes
 - Uploaded files are stored in `uploads/`.
-- This is intentionally simple and has no authentication; do not expose it publicly without access controls.
+- Upload, delete, login, and logout forms use CSRF tokens tied to the Flask session, so cross-site form submission is harder.
+- The app defaults to a **100 MB per-file cap** and a **2 GB total storage cap**. Override them with `QUICKDROP_MAX_UPLOAD_MB` and `QUICKDROP_MAX_STORAGE_MB` in your shell or `systemd` unit.
+- Upload/delete/text/LaTeX write access now uses a shared password from `QUICKDROP_PASSWORD` and stores the signed login session in the browser for `QUICKDROP_LOGIN_DAYS` days (default `30`).
+- Text history is stored in `data/text_history.json`. Rendered LaTeX PDFs are stored in `latex_outputs/` and indexed in `data/latex_history.json`.
+- LaTeX rendering calls `pdflatex` (or whatever `QUICKDROP_PDFLATEX_BIN` points to), so the server needs a TeX installation for that feature.
+- When a filename already exists, QuickDrop now keeps the old file and stores the new upload with a numbered suffix instead of overwriting it.
+- Files that are not obviously safe to render inline are now sent as downloads to reduce browser-side script surprises from uploaded HTML/SVG-like content.
+- This is intentionally simple and now protects upload/delete with one shared password stored in a signed browser session, but downloads are still public. Do not expose it broadly without access controls such as a VPN, reverse-proxy auth, or firewall restrictions.
+- Set `QUICKDROP_SECRET_KEY` in production so Flask sessions survive restarts and keep their CSRF protection stable.
+
+## Security answer: can someone brick the server by uploading junk?
+
+**Less likely now, but not impossible if you expose it too broadly.** The main server-bricking risk for this app is filling disk space. The app now defends against that by:
+
+- rejecting uploads above the configured per-file size limit (`QUICKDROP_MAX_UPLOAD_MB`, default `100`),
+- rejecting uploads once the configured total storage limit (`QUICKDROP_MAX_STORAGE_MB`, default `2048`) is full,
+- refusing to overwrite an existing file with the same name, and
+- forcing download for most non-image/non-text file types instead of rendering them inline.
+
+What this still **does not** solve:
+
+- Downloads and text/PDF history are still intentionally visible to anyone who can reach the app. If that is too open, add firewall restrictions, VPN, or reverse-proxy auth.
+- A malicious user can still fill the allowed quota with garbage files until the app limit is reached. That protects the rest of the server **only if your configured cap is comfortably below free disk space**.
+- Running this directly on the public internet is still risky. Best practice is to restrict access with firewall source IP rules, a VPN, or reverse-proxy authentication.
+
+For a small personal transfer box, a practical setup is: set `QUICKDROP_MAX_STORAGE_MB` to something intentionally small for your server, keep the app behind a firewall allowlist if possible, and monitor free disk with `df -h`.
+
+## Password answer
+
+The app does **not** contain a built-in password in the repo. The login password is whatever you set in the `QUICKDROP_PASSWORD` environment variable on the server. If you have not set it yet, there is no password to tell you from the codebase.
