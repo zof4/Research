@@ -12,10 +12,11 @@
         <a class="brand" href="{{ url_for('index') }}">Dropper</a>
 
         <nav class="top-nav" aria-label="Sections">
-          <a href="#files">Files</a>
-          <a href="#reader">Reader</a>
-          <a href="#text">Text</a>
-          <a href="#latex">LaTeX</a>
+          <a href="{{ url_for('access_page') }}">Access</a>
+          <a href="{{ url_for('files_page') }}">Files</a>
+          <a href="{{ url_for('reader_page') }}">Reader</a>
+          <a href="{{ url_for('text_page') }}">Text</a>
+          <a href="{{ url_for('latex_page') }}">LaTeX</a>
         </nav>
 
         {% if is_authenticated %}
@@ -64,6 +65,7 @@
       </section>
 
       <div class="dashboard-grid">
+        {% if active_page in ['home', 'access'] %}
         <section class="card section-card access-card">
           <div class="section-head">
             <div>
@@ -91,7 +93,9 @@
           <p class="helper-text">Set <code>QUICKDROP_PASSWORD</code> on the server.</p>
           {% endif %}
         </section>
+        {% endif %}
 
+        {% if active_page in ['home', 'reader'] %}
         <section id="reader" class="card section-card reader-card">
           <div class="section-head">
             <div>
@@ -169,7 +173,9 @@
             {% endif %}
           </div>
         </section>
+        {% endif %}
 
+        {% if active_page in ['home', 'files'] %}
         <section id="files" class="card section-card files-card">
           <div class="section-head">
             <div>
@@ -180,7 +186,7 @@
           </div>
 
           {% if is_authenticated %}
-          <form method="post" enctype="multipart/form-data" class="stack-form">
+          <form method="post" action="{{ url_for('upload_file') }}" enctype="multipart/form-data" class="stack-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
             <input type="file" name="file" required />
             <button type="submit" class="block-button">Upload file</button>
@@ -219,7 +225,9 @@
             {% endif %}
           </div>
         </section>
+        {% endif %}
 
+        {% if active_page in ['home', 'text'] %}
         <section id="text" class="card section-card">
           <div class="section-head">
             <div>
@@ -255,7 +263,9 @@
             {% endif %}
           </div>
         </section>
+        {% endif %}
 
+        {% if active_page in ['home', 'latex'] %}
         <section id="latex" class="card section-card">
           <div class="section-head">
             <div>
@@ -300,6 +310,7 @@
             {% endif %}
           </div>
         </section>
+        {% endif %}
       </div>
     </main>
   </body>

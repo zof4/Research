@@ -759,7 +759,7 @@ def fetch_proxy_reader_payload(url: str) -> Dict:
     """
     Uses r.jina.ai as a fallback text proxy for pages that block direct fetches.
     """
-    proxy_url = f"https://r.jina.ai/http://{url}"
+    proxy_url = f"https://r.jina.ai/{url}"
     response, payload = fetch_url_bytes(proxy_url)
     text = payload.decode(response.encoding or "utf-8", errors="replace").strip()
     if not text:
@@ -816,7 +816,13 @@ def fetch_reader_payload(url: str, reader_mode: str = "auto") -> Dict:
             if mode == "json":
                 raise ValueError("Reddit JSON fetch failed for this URL. Try HTML or proxy mode.")
 
-        return fetch_html_reader_payload(reddit_html_url(normalized_url))
+        try:
+            return fetch_html_reader_payload(reddit_html_url(normalized_url))
+        except requests.HTTPError as error:
+            response = getattr(error, "response", None)
+            if mode == "auto" and response is not None and response.status_code in {401, 403, 429}:
+                return fetch_proxy_reader_payload(normalized_url)
+            raise
 
     try:
         return fetch_html_reader_payload(normalized_url)
@@ -877,6 +883,12 @@ def build_template_context() -> Dict:
     }
 
 
+def render_dashboard_page(active_page: str):
+    context = build_template_context()
+    context["active_page"] = active_page
+    return render_template("index.html", **context)
+
+
 @app.context_processor
 def utility_processor():
     return {
@@ -892,7 +904,7 @@ def handle_file_too_large(_error):
         f"Upload blocked. Files must be {human_size(MAX_UPLOAD_BYTES)} or smaller and fit within your remaining storage.",
         "error",
     )
-    return redirect(url_for("index")), 413
+    return redirect(url_for("files_page")), 413
 
 
 @app.post("/login")
@@ -901,19 +913,19 @@ def login():
 
     if not QUICKDROP_PASSWORD:
         flash("Set QUICKDROP_PASSWORD on the server before using login protection.", "error")
-        return redirect(url_for("index"))
+        return redirect(url_for("access_page"))
 
     supplied_password = request.form.get("password", "")
     if not secrets.compare_digest(supplied_password, QUICKDROP_PASSWORD):
         flash("Incorrect password.", "error")
-        return redirect(url_for("index"))
+        return redirect(url_for("access_page"))
 
     session.clear()
     session.permanent = True
     session["authenticated"] = True
     rotate_csrf_token()
     flash(f"Logged in. This device stays trusted for {LOGIN_DAYS} days unless you log out.", "success")
-    return redirect(url_for("index"))
+    return redirect(url_for("access_page"))
 
 
 @app.post("/logout")
@@ -922,55 +934,75 @@ def logout():
     session.clear()
     rotate_csrf_token()
     flash("Logged out on this device.", "success")
-    return redirect(url_for("index"))
+    return redirect(url_for("access_page"))
 
 
-@app.route("/", methods=["GET", "POST"])
+@app.get("/")
 def index():
-    if request.method == "POST":
-        if not QUICKDROP_PASSWORD:
-            flash("Write access is not configured yet. Set QUICKDROP_PASSWORD on the server.", "error")
-            return redirect(url_for("index"))
-        if not is_authenticated():
-            flash("Log in to use Dropper tools from this device.", "error")
-            return redirect(url_for("index"))
+    return render_dashboard_page("home")
 
-        validate_csrf()
 
-        upload = request.files.get("file")
-        if upload is None or upload.filename == "":
-            flash("Pick a file first.", "error")
-            return redirect(url_for("index"))
+@app.get("/access")
+def access_page():
+    return render_dashboard_page("access")
 
-        filename = secure_filename(upload.filename)
-        if not filename:
-            flash("Invalid filename.", "error")
-            return redirect(url_for("index"))
 
-        total_bytes = get_total_storage_bytes()
-        remaining_bytes = max(MAX_STORAGE_BYTES - total_bytes, 0)
-        if remaining_bytes <= 0:
-            flash(
-                f"Storage is full. Delete something before uploading more. Limit: {human_size(MAX_STORAGE_BYTES)}.",
-                "error",
-            )
-            return redirect(url_for("index"))
+@app.get("/reader")
+def reader_page():
+    return render_dashboard_page("reader")
 
-        if request.content_length and request.content_length > (remaining_bytes + 4096):
-            flash(
-                f"Not enough remaining space. Free up room or raise QUICKDROP_MAX_STORAGE_MB. Remaining: {human_size(remaining_bytes)}.",
-                "error",
-            )
-            return redirect(url_for("index"))
 
-        final_name = ensure_unique_filename(UPLOAD_DIR, filename)
-        destination = UPLOAD_DIR / final_name
-        max_bytes = min(MAX_UPLOAD_BYTES, remaining_bytes)
-        bytes_written = save_upload_with_limits(upload, destination, max_bytes)
-        flash(f"Uploaded {final_name} ({human_size(bytes_written)})", "success")
-        return redirect(url_for("index"))
+@app.get("/files")
+def files_page():
+    return render_dashboard_page("files")
 
-    return render_template("index.html", **build_template_context())
+
+@app.get("/text")
+def text_page():
+    return render_dashboard_page("text")
+
+
+@app.get("/latex")
+def latex_page():
+    return render_dashboard_page("latex")
+
+
+@app.post("/files/upload")
+@login_required
+def upload_file():
+    validate_csrf()
+    upload = request.files.get("file")
+    if upload is None or upload.filename == "":
+        flash("Pick a file first.", "error")
+        return redirect(url_for("files_page"))
+
+    filename = secure_filename(upload.filename)
+    if not filename:
+        flash("Invalid filename.", "error")
+        return redirect(url_for("files_page"))
+
+    total_bytes = get_total_storage_bytes()
+    remaining_bytes = max(MAX_STORAGE_BYTES - total_bytes, 0)
+    if remaining_bytes <= 0:
+        flash(
+            f"Storage is full. Delete something before uploading more. Limit: {human_size(MAX_STORAGE_BYTES)}.",
+            "error",
+        )
+        return redirect(url_for("files_page"))
+
+    if request.content_length and request.content_length > (remaining_bytes + 4096):
+        flash(
+            f"Not enough remaining space. Free up room or raise QUICKDROP_MAX_STORAGE_MB. Remaining: {human_size(remaining_bytes)}.",
+            "error",
+        )
+        return redirect(url_for("files_page"))
+
+    final_name = ensure_unique_filename(UPLOAD_DIR, filename)
+    destination = UPLOAD_DIR / final_name
+    max_bytes = min(MAX_UPLOAD_BYTES, remaining_bytes)
+    bytes_written = save_upload_with_limits(upload, destination, max_bytes)
+    flash(f"Uploaded {final_name} ({human_size(bytes_written)})", "success")
+    return redirect(url_for("files_page"))
 
 
 @app.post("/text")
@@ -982,10 +1014,10 @@ def save_text_entry():
 
     if not content:
         flash("Text transfer cannot be empty.", "error")
-        return redirect(url_for("index"))
+        return redirect(url_for("text_page"))
     if len(content) > MAX_TEXT_CHARS:
         flash(f"Text transfer is too large. Limit: {MAX_TEXT_CHARS} characters.", "error")
-        return redirect(url_for("index"))
+        return redirect(url_for("text_page"))
 
     item = {
         "id": uuid4().hex,
@@ -995,7 +1027,7 @@ def save_text_entry():
     }
     add_history_item(TEXT_HISTORY_FILE, item, MAX_TEXT_HISTORY_ITEMS)
     flash("Saved text snippet.", "success")
-    return redirect(url_for("index"))
+    return redirect(url_for("text_page"))
 
 
 @app.post("/latex")
@@ -1007,10 +1039,10 @@ def save_latex_entry():
 
     if not source:
         flash("LaTeX source cannot be empty.", "error")
-        return redirect(url_for("index"))
+        return redirect(url_for("latex_page"))
     if len(source) > MAX_LATEX_CHARS:
         flash(f"LaTeX source is too large. Limit: {MAX_LATEX_CHARS} characters.", "error")
-        return redirect(url_for("index"))
+        return redirect(url_for("latex_page"))
 
     try:
         pdf_name, _created = render_latex_pdf(title, source)
@@ -1023,7 +1055,7 @@ def save_latex_entry():
     else:
         flash(f"Rendered {pdf_name}", "success")
 
-    return redirect(url_for("index"))
+    return redirect(url_for("latex_page"))
 
 
 @app.post("/reader")
@@ -1036,7 +1068,7 @@ def save_reader_entry():
         entry = cache_reader_entry(url, reader_mode=reader_mode)
     except (requests.RequestException, ValueError) as error:
         flash(f"Reader fetch failed: {error}", "error")
-        return redirect(url_for("index"))
+        return redirect(url_for("reader_page"))
 
     flash(f"Cached reader page: {entry['title']}", "success")
     return redirect(url_for("view_reader_entry", entry_id=entry["id"]))
@@ -1049,13 +1081,13 @@ def live_reader():
     reader_mode = normalize_reader_mode(request.args.get("reader_mode", "auto"))
     if not url:
         flash("Paste a URL first.", "error")
-        return redirect(url_for("index"))
+        return redirect(url_for("reader_page"))
 
     try:
         payload = fetch_reader_payload(url, reader_mode=reader_mode)
     except (requests.RequestException, ValueError) as error:
         flash(f"Live reader fetch failed: {error}", "error")
-        return redirect(url_for("index"))
+        return redirect(url_for("reader_page"))
 
     entry = {
         "id": "live",
@@ -1129,7 +1161,7 @@ def delete_reader_entry(entry_id: str):
 
     delete_reader_content(removed.get("content_filename"))
     flash("Reader cache entry removed.", "success")
-    return redirect(url_for("index"))
+    return redirect(url_for("reader_page"))
 
 
 @app.post("/delete/<path:filename>")
@@ -1144,11 +1176,11 @@ def delete_file(filename: str):
     target = UPLOAD_DIR / safe_name
     if not target.exists() or not target.is_file():
         flash(f"{safe_name} was already gone.", "error")
-        return redirect(url_for("index"))
+        return redirect(url_for("files_page"))
 
     target.unlink()
     flash(f"Deleted {safe_name}", "success")
-    return redirect(url_for("index"))
+    return redirect(url_for("files_page"))
 
 
 @app.get("/files/<path:filename>")
