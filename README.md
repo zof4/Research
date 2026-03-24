@@ -8,6 +8,7 @@ A tiny Flask web app for quickly sharing photos/files between devices.
 - A text transfer area with visible history for quick copy/paste on another device.
 - A LaTeX rendering area that saves PDFs for download from `/latex/<filename>`.
 - A reader tool with both cached and live views for remote webpages, including Reddit-aware JSON parsing and a proxy fallback mode for 403-heavy sites.
+- Dedicated Access / Files / Reader / Text / LaTeX pages so each tool has its own URL instead of anchor scrolling.
 - Live total storage usage summary, remaining space, and file count.
 - Configurable per-file and total-storage limits to reduce server abuse.
 
