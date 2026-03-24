@@ -3,174 +3,276 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>QuickDrop</title>
+    <title>Dropper</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   </head>
-  <body>
-    <main class="container">
-      <h1>QuickDrop</h1>
-      <p class="subtitle">Upload files, move text, and render small LaTeX PDFs between devices.</p>
+  <body class="app-shell">
+    <header class="topbar">
+      <div class="container topbar-inner">
+        <div>
+          <p class="eyebrow">Dropper</p>
+          <h1>Simple transfer, reader cache, and quick tools.</h1>
+        </div>
+        <div class="topbar-actions">
+          {% if is_authenticated %}
+          <span class="status-pill status-live">Trusted for {{ login_days }} days</span>
+          {% else %}
+          <span class="status-pill status-muted">Read-only until login</span>
+          {% endif %}
+        </div>
+      </div>
+    </header>
 
+    <main class="container content-shell">
       {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
-      <div class="messages">
+      <div class="flash-stack">
         {% for category, message in messages %}
-        <p class="message {{ category }}">{{ message }}</p>
+        <p class="flash-message {{ category }}">{{ message }}</p>
         {% endfor %}
       </div>
       {% endif %}
       {% endwith %}
 
-      <section class="card auth-card">
-        <div>
-          <h2>Write access</h2>
+      <section class="hero card">
+        <div class="hero-copy">
+          <p class="eyebrow">Designed for phones first</p>
+          <h2>Get what you need in one tap from anywhere.</h2>
+          <p class="hero-text">
+            Upload files, save text, render PDFs, and cache public webpages into a clean reader view from a logged-in device.
+          </p>
+
+          <div class="stat-row">
+            <div class="stat-pill">
+              <span class="stat-label">Storage used</span>
+              <strong>{{ human_size(storage.total_bytes) }}</strong>
+            </div>
+            <div class="stat-pill">
+              <span class="stat-label">Remaining</span>
+              <strong>{{ human_size(storage.remaining_bytes) }}</strong>
+            </div>
+            <div class="stat-pill">
+              <span class="stat-label">Saved files</span>
+              <strong>{{ files|length }}</strong>
+            </div>
+          </div>
+
+          <nav class="quick-nav" aria-label="Quick navigation">
+            <a href="#reader">Reader</a>
+            <a href="#files">Files</a>
+            <a href="#text">Text</a>
+            <a href="#latex">LaTeX</a>
+          </nav>
+        </div>
+
+        <aside class="hero-side auth-panel">
+          <h3>Write access</h3>
           {% if login_configured %}
           {% if is_authenticated %}
-          <p class="helper-text">This device is trusted for {{ login_days }} days unless you log out.</p>
+          <p class="helper-text">This device is logged in for uploads, reader caching, text saves, and LaTeX rendering.</p>
+          <form method="post" action="{{ url_for('logout') }}" class="stack-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <button type="submit" class="secondary-button block-button">Log out</button>
+          </form>
           {% else %}
-          <p class="helper-text">Log in once on this device to upload, save text, or render LaTeX. Downloads stay public.</p>
+          <p class="helper-text">Log in once on this device to unlock all tools. Public downloads still work without login.</p>
+          <form method="post" action="{{ url_for('login') }}" class="stack-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <input type="password" name="password" placeholder="Shared password" autocomplete="current-password" required />
+            <button type="submit" class="block-button">Log in</button>
+          </form>
           {% endif %}
           {% else %}
-          <p class="helper-text">Write login is not configured yet. Set <code>QUICKDROP_PASSWORD</code> on the server.</p>
+          <p class="helper-text">Write access is not configured. Set <code>QUICKDROP_PASSWORD</code> on the server.</p>
           {% endif %}
-        </div>
-
-        {% if login_configured and not is_authenticated %}
-        <form method="post" action="{{ url_for('login') }}" class="auth-form">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-          <input type="password" name="password" placeholder="Shared password" autocomplete="current-password" required />
-          <button type="submit">Log in</button>
-        </form>
-        {% elif is_authenticated %}
-        <form method="post" action="{{ url_for('logout') }}" class="auth-form">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-          <button type="submit" class="secondary-button">Log out</button>
-        </form>
-        {% endif %}
+        </aside>
       </section>
 
-      <section class="card">
-        <h2>File upload</h2>
-        {% if is_authenticated %}
-        <form method="post" enctype="multipart/form-data" class="upload-form">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-          <input type="file" name="file" required />
-          <button type="submit">Upload</button>
-        </form>
-        {% else %}
-        <p class="helper-text">Uploads are locked until you log in on this device.</p>
-        {% endif %}
-        <p class="helper-text">
-          Per-file limit: {{ human_size(storage.max_upload_bytes) }}. Remaining space:
-          {{ human_size(storage.remaining_bytes) }}.
-        </p>
-      </section>
+      <div class="section-grid">
+        <section id="reader" class="card section-card reader-section">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Reader cache</p>
+              <h2>Paste a public URL and keep a readable copy here.</h2>
+            </div>
+            <p class="section-note">Useful when a site loads badly from your network but your server can still fetch it.</p>
+          </div>
 
-      <section class="card usage-card">
-        <div>
-          <h2>Storage used</h2>
-          <p class="usage-total">{{ human_size(storage.total_bytes) }}</p>
-          <p class="usage-meta">{{ files|length }} file{% if files|length != 1 %}s{% endif %} stored</p>
-        </div>
-        <div class="usage-side">
-          <p class="usage-limit">Limit: {{ human_size(storage.max_storage_bytes) }}</p>
-          <div class="usage-bar" aria-hidden="true">
+          {% if is_authenticated %}
+          <form method="post" action="{{ url_for('save_reader_entry') }}" class="stack-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <input type="text" name="url" placeholder="https://example.com/article" inputmode="url" autocomplete="url" required />
+            <button type="submit" class="block-button">Cache reader view</button>
+          </form>
+          {% else %}
+          <p class="helper-text">Log in to cache public webpages into the reader.</p>
+          {% endif %}
+
+          <div class="item-stack">
+            {% if reader_history %}
+            {% for item in reader_history %}
+            <article class="item-card">
+              <div class="item-header">
+                <div>
+                  <h3>{{ item.title }}</h3>
+                  <p class="item-meta">
+                    {{ item.source_label }}
+                    {% if item.author %} • {{ item.author }}{% endif %}
+                    {% if item.word_count %} • {{ item.word_count }} words{% endif %}
+                    • Updated {{ format_timestamp(item.updated) }}
+                  </p>
+                </div>
+              </div>
+              <p class="item-summary">{{ item.summary }}</p>
+              <div class="action-row">
+                <a class="button-link" href="{{ url_for('view_reader_entry', entry_id=item.id) }}">Open reader</a>
+                <a class="button-link ghost-button" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Source</a>
+                {% if is_authenticated %}
+                <form method="post" action="{{ url_for('refresh_reader_entry', entry_id=item.id) }}" class="inline-form">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                  <button type="submit" class="secondary-button">Refresh</button>
+                </form>
+                <form method="post" action="{{ url_for('delete_reader_entry', entry_id=item.id) }}" class="inline-form">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                  <button type="submit" class="delete-button">Delete</button>
+                </form>
+                {% endif %}
+              </div>
+            </article>
+            {% endfor %}
+            {% else %}
+            <p class="helper-text empty-state">No cached reader pages yet.</p>
+            {% endif %}
+          </div>
+        </section>
+
+        <section id="files" class="card section-card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Files</p>
+              <h2>Upload and grab files fast</h2>
+            </div>
+            <p class="section-note">Per-file limit: {{ human_size(storage.max_upload_bytes) }}</p>
+          </div>
+
+          {% if is_authenticated %}
+          <form method="post" enctype="multipart/form-data" class="stack-form upload-form-mobile">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <input type="file" name="file" required />
+            <button type="submit" class="block-button">Upload file</button>
+          </form>
+          {% else %}
+          <p class="helper-text">Log in to upload or delete files from this device.</p>
+          {% endif %}
+
+          <div class="storage-meter" aria-hidden="true">
             <span style="width: {{ '%.2f'|format(storage.usage_percent) }}%"></span>
           </div>
-          <p class="usage-meta">{{ human_size(storage.remaining_bytes) }} free</p>
-        </div>
-      </section>
 
-      <section class="card split-card">
-        <div class="panel">
-          <h2>Text transfer</h2>
+          <div class="file-grid">
+            {% if files %}
+            {% for file in files %}
+            <article class="file-card">
+              <div class="file-main">
+                <h3><a href="{{ url_for('download_file', filename=file.name) }}" target="_blank" rel="noopener noreferrer">{{ file.name }}</a></h3>
+                <p class="item-meta">{{ human_size(file.size) }} • {{ file.modified.strftime('%Y-%m-%d %H:%M') }}</p>
+              </div>
+              {% if is_authenticated %}
+              <form method="post" action="{{ url_for('delete_file', filename=file.name) }}" class="inline-form file-delete-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <button type="submit" class="delete-button">Delete</button>
+              </form>
+              {% endif %}
+            </article>
+            {% endfor %}
+            {% else %}
+            <p class="helper-text empty-state">No files uploaded yet.</p>
+            {% endif %}
+          </div>
+        </section>
+
+        <section id="text" class="card section-card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Text</p>
+              <h2>Quick text transfer</h2>
+            </div>
+            <p class="section-note">Paste once, copy anywhere else later.</p>
+          </div>
+
           {% if is_authenticated %}
           <form method="post" action="{{ url_for('save_text_entry') }}" class="stack-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
             <input type="text" name="title" maxlength="120" placeholder="Optional title" />
-            <textarea name="content" rows="8" maxlength="{{ max_text_chars }}" placeholder="Paste text here for quick transfer between devices." required></textarea>
-            <button type="submit">Save text</button>
+            <textarea name="content" rows="7" maxlength="{{ max_text_chars }}" placeholder="Paste text here." required></textarea>
+            <button type="submit" class="block-button">Save text</button>
           </form>
           {% else %}
-          <p class="helper-text">Log in to add a text snippet. History stays visible for quick copy/paste on other devices.</p>
+          <p class="helper-text">Log in to save text snippets.</p>
           {% endif %}
 
-          <div class="history-list">
+          <div class="item-stack">
             {% if text_history %}
             {% for item in text_history %}
-            <article class="history-item">
-              <div class="history-header">
-                <strong>{{ item.title }}</strong>
-                <span>{{ item.created }}</span>
+            <article class="item-card">
+              <div class="item-header">
+                <h3>{{ item.title }}</h3>
+                <p class="item-meta">{{ format_timestamp(item.created) }}</p>
               </div>
-              <pre>{{ item.content }}</pre>
+              <pre class="history-pre">{{ item.content }}</pre>
             </article>
             {% endfor %}
             {% else %}
-            <p class="helper-text">No text history yet.</p>
+            <p class="helper-text empty-state">No text history yet.</p>
             {% endif %}
           </div>
-        </div>
+        </section>
 
-        <div class="panel">
-          <h2>LaTeX to PDF</h2>
-          <p class="helper-text">Server renderer: <code>{{ pdflatex_bin }}</code>. PDFs download from the history list below.</p>
+        <section id="latex" class="card section-card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">LaTeX</p>
+              <h2>Render a quick PDF</h2>
+            </div>
+            <p class="section-note">Server renderer: <code>{{ pdflatex_bin }}</code></p>
+          </div>
+
           {% if is_authenticated %}
           <form method="post" action="{{ url_for('save_latex_entry') }}" class="stack-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
             <input type="text" name="title" maxlength="120" placeholder="PDF title" />
-            <textarea name="source" rows="10" maxlength="{{ max_latex_chars }}" placeholder="Example: \section*{Hello} $E=mc^2$" required></textarea>
-            <button type="submit">Render PDF</button>
+            <textarea name="source" rows="8" maxlength="{{ max_latex_chars }}" placeholder="Example: \section*{Hello} $E=mc^2$" required></textarea>
+            <button type="submit" class="block-button">Render PDF</button>
           </form>
           {% else %}
-          <p class="helper-text">Log in to render LaTeX into a downloadable PDF.</p>
+          <p class="helper-text">Log in to render LaTeX PDFs.</p>
           {% endif %}
 
-          <div class="history-list">
+          <div class="item-stack">
             {% if latex_history %}
             {% for item in latex_history %}
-            <article class="history-item">
-              <div class="history-header">
-                <strong>{{ item.title }}</strong>
-                <span>{{ item.created }}</span>
+            <article class="item-card">
+              <div class="item-header">
+                <div>
+                  <h3>{{ item.title }}</h3>
+                  <p class="item-meta">{{ format_timestamp(item.created) }}</p>
+                </div>
               </div>
-              <a href="{{ url_for('download_latex_pdf', filename=item.pdf_name) }}">Download {{ item.pdf_name }}</a>
-              <details>
+              <div class="action-row">
+                <a class="button-link" href="{{ url_for('download_latex_pdf', filename=item.pdf_name) }}">Download PDF</a>
+              </div>
+              <details class="source-details">
                 <summary>Show source</summary>
-                <pre>{{ item.source }}</pre>
+                <pre class="history-pre">{{ item.source }}</pre>
               </details>
             </article>
             {% endfor %}
             {% else %}
-            <p class="helper-text">No rendered PDFs yet.</p>
+            <p class="helper-text empty-state">No rendered PDFs yet.</p>
             {% endif %}
           </div>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>Files</h2>
-        {% if files %}
-        <ul class="file-list">
-          {% for file in files %}
-          <li>
-            <div class="file-main">
-              <a href="{{ url_for('download_file', filename=file.name) }}" target="_blank" rel="noopener noreferrer">{{ file.name }}</a>
-              <span>{{ human_size(file.size) }} • {{ file.modified.strftime('%Y-%m-%d %H:%M') }}</span>
-            </div>
-            {% if is_authenticated %}
-            <form method="post" action="{{ url_for('delete_file', filename=file.name) }}" class="delete-form">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-              <button type="submit" class="delete-button">Delete</button>
-            </form>
-            {% endif %}
-          </li>
-          {% endfor %}
-        </ul>
-        {% else %}
-        <p>No files uploaded yet.</p>
-        {% endif %}
-      </section>
+        </section>
+      </div>
     </main>
   </body>
 </html>
