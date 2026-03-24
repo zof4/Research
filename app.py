@@ -1,14 +1,21 @@
+import ipaddress
 import json
 import mimetypes
 import os
 import secrets
+import socket
 import subprocess
 import tempfile
 from datetime import datetime, timedelta, timezone
 from functools import wraps
+from html import unescape
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+from urllib.parse import urljoin, urlparse
 from uuid import uuid4
 
+import requests
+from bs4 import BeautifulSoup, Comment, Tag
 from flask import (
     Flask,
     flash,
@@ -26,10 +33,12 @@ BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 DATA_DIR = BASE_DIR / "data"
 LATEX_DIR = BASE_DIR / "latex_outputs"
+READER_DIR = BASE_DIR / "reader_cache"
 TEXT_HISTORY_FILE = DATA_DIR / "text_history.json"
 LATEX_HISTORY_FILE = DATA_DIR / "latex_history.json"
+READER_HISTORY_FILE = DATA_DIR / "reader_history.json"
 
-for directory in (UPLOAD_DIR, DATA_DIR, LATEX_DIR):
+for directory in (UPLOAD_DIR, DATA_DIR, LATEX_DIR, READER_DIR):
     directory.mkdir(exist_ok=True)
 
 DEFAULT_MAX_UPLOAD_MB = int(os.environ.get("QUICKDROP_MAX_UPLOAD_MB", "100"))
@@ -42,9 +51,16 @@ MAX_TEXT_HISTORY_ITEMS = int(os.environ.get("QUICKDROP_MAX_TEXT_HISTORY", "25"))
 MAX_TEXT_CHARS = int(os.environ.get("QUICKDROP_MAX_TEXT_CHARS", "12000"))
 MAX_LATEX_HISTORY_ITEMS = int(os.environ.get("QUICKDROP_MAX_LATEX_HISTORY", "15"))
 MAX_LATEX_CHARS = int(os.environ.get("QUICKDROP_MAX_LATEX_CHARS", "12000"))
+MAX_READER_HISTORY_ITEMS = int(os.environ.get("QUICKDROP_MAX_READER_HISTORY", "20"))
+MAX_READER_FETCH_BYTES = int(os.environ.get("QUICKDROP_MAX_READER_FETCH_BYTES", str(2 * 1024 * 1024)))
+READER_FETCH_TIMEOUT = int(os.environ.get("QUICKDROP_READER_FETCH_TIMEOUT", "20"))
 PDFLATEX_BIN = os.environ.get("QUICKDROP_PDFLATEX_BIN", "pdflatex")
 SAFE_INLINE_MIME_PREFIXES = ("image/", "text/plain")
 SAFE_INLINE_MIME_TYPES = {"application/pdf"}
+READER_USER_AGENT = os.environ.get(
+    "QUICKDROP_READER_USER_AGENT",
+    "DropperReader/1.0 (+https://example.invalid; purpose=offline-reader-cache)",
+)
 FORBIDDEN_LATEX_TOKENS = {
     "\\write18",
     "\\input",
@@ -56,6 +72,37 @@ FORBIDDEN_LATEX_TOKENS = {
     "\\usepackage{shellesc}",
     "\\immediate",
 }
+CONTENT_SELECTORS = (
+    "article",
+    "main",
+    "[role='main']",
+    ".post-content",
+    ".entry-content",
+    ".article-content",
+    ".content",
+    "#content",
+)
+READER_ALLOWED_TAGS = {
+    "a",
+    "blockquote",
+    "br",
+    "code",
+    "details",
+    "em",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "hr",
+    "li",
+    "ol",
+    "p",
+    "pre",
+    "strong",
+    "summary",
+    "ul",
+}
+READER_ALLOWED_ATTRS = {"href", "title"}
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
@@ -76,6 +123,21 @@ def human_size(num_bytes: int) -> str:
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def format_timestamp(value: str) -> str:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return value
+    return parsed.astimezone().strftime("%Y-%m-%d %H:%M")
+
+
+def summarize_text(text: str, limit: int = 180) -> str:
+    collapsed = " ".join(text.split())
+    if len(collapsed) <= limit:
+        return collapsed
+    return collapsed[: limit - 1].rstrip() + "…"
 
 
 def get_or_create_csrf_token() -> str:
@@ -108,14 +170,14 @@ def login_required(view):
             flash("Write access is not configured yet. Set QUICKDROP_PASSWORD on the server.", "error")
             return redirect(url_for("index"))
         if not is_authenticated():
-            flash("Log in to upload, save text, or render LaTeX.", "error")
+            flash("Log in to use Dropper tools from this device.", "error")
             return redirect(url_for("index"))
         return view(*args, **kwargs)
 
     return wrapped
 
 
-def load_history(path: Path) -> list[dict]:
+def load_history(path: Path) -> List[Dict]:
     if not path.exists():
         return []
 
@@ -129,14 +191,48 @@ def load_history(path: Path) -> list[dict]:
     return data
 
 
-def save_history(path: Path, items: list[dict]) -> None:
+def save_history(path: Path, items: List[Dict]) -> None:
     path.write_text(json.dumps(items, indent=2))
 
 
-def add_history_item(path: Path, item: dict, limit: int) -> None:
+def add_history_item(path: Path, item: Dict, limit: int) -> None:
     items = load_history(path)
     items.insert(0, item)
     save_history(path, items[:limit])
+
+
+def replace_history_item(path: Path, item: Dict) -> None:
+    items = load_history(path)
+    updated = False
+    for index, existing in enumerate(items):
+        if existing.get("id") == item.get("id"):
+            items[index] = item
+            updated = True
+            break
+    if not updated:
+        items.insert(0, item)
+    save_history(path, items[:MAX_READER_HISTORY_ITEMS])
+
+
+def remove_history_item(path: Path, item_id: str) -> Optional[Dict]:
+    items = load_history(path)
+    removed = None
+    kept = []
+    for item in items:
+        if item.get("id") == item_id and removed is None:
+            removed = item
+            continue
+        kept.append(item)
+    if removed is not None:
+        save_history(path, kept)
+    return removed
+
+
+def find_history_item(path: Path, item_id: str) -> Optional[Dict]:
+    for item in load_history(path):
+        if item.get("id") == item_id:
+            return item
+    return None
 
 
 def iter_uploaded_files():
@@ -149,7 +245,7 @@ def get_total_storage_bytes() -> int:
     return sum(path.stat().st_size for path in iter_uploaded_files())
 
 
-def get_file_listing() -> tuple[list[dict], int]:
+def get_file_listing() -> Tuple[List[Dict], int]:
     files = []
     total_bytes = 0
 
@@ -167,7 +263,7 @@ def get_file_listing() -> tuple[list[dict], int]:
     return files, total_bytes
 
 
-def build_storage_summary(total_bytes: int) -> dict:
+def build_storage_summary(total_bytes: int) -> Dict:
     remaining_bytes = max(MAX_STORAGE_BYTES - total_bytes, 0)
     usage_percent = min((total_bytes / MAX_STORAGE_BYTES) * 100, 100) if MAX_STORAGE_BYTES else 100
     return {
@@ -226,7 +322,7 @@ def should_force_download(filename: str) -> bool:
     return not mime_type.startswith(SAFE_INLINE_MIME_PREFIXES)
 
 
-def latex_has_forbidden_tokens(source: str) -> str | None:
+def latex_has_forbidden_tokens(source: str) -> Optional[str]:
     lowered = source.lower()
     for token in FORBIDDEN_LATEX_TOKENS:
         if token in lowered:
@@ -234,7 +330,7 @@ def latex_has_forbidden_tokens(source: str) -> str | None:
     return None
 
 
-def render_latex_pdf(title: str, source: str) -> tuple[str, str]:
+def render_latex_pdf(title: str, source: str) -> Tuple[str, str]:
     blocked_token = latex_has_forbidden_tokens(source)
     if blocked_token:
         raise ValueError(f"Blocked LaTeX command: {blocked_token}")
@@ -293,7 +389,389 @@ def render_latex_pdf(title: str, source: str) -> tuple[str, str]:
     return pdf_name, item["created"]
 
 
-def build_template_context():
+def normalize_reader_url(raw_url: str) -> str:
+    candidate = raw_url.strip()
+    if not candidate:
+        raise ValueError("Paste a URL first.")
+    parsed = urlparse(candidate)
+    if not parsed.scheme:
+        candidate = f"https://{candidate}"
+        parsed = urlparse(candidate)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("Only http:// and https:// reader URLs are supported.")
+    if not parsed.netloc:
+        raise ValueError("That URL does not look valid.")
+    return candidate
+
+
+def assert_public_reader_target(url: str) -> None:
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("That URL is missing a hostname.")
+    lowered = hostname.lower()
+    if lowered in {"localhost", "localhost.localdomain"} or lowered.endswith(".local"):
+        raise ValueError("Local-only hostnames are blocked for reader fetches.")
+
+    try:
+        addresses = socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        raise ValueError("Could not resolve that hostname from the server.")
+
+    for entry in addresses:
+        ip_text = entry[4][0]
+        ip_obj = ipaddress.ip_address(ip_text)
+        if (
+            ip_obj.is_private
+            or ip_obj.is_loopback
+            or ip_obj.is_link_local
+            or ip_obj.is_multicast
+            or ip_obj.is_reserved
+            or ip_obj.is_unspecified
+        ):
+            raise ValueError("Reader fetches only allow public internet hosts.")
+
+
+def fetch_url_bytes(url: str) -> Tuple[requests.Response, bytes]:
+    response = requests.get(
+        url,
+        headers={"User-Agent": READER_USER_AGENT, "Accept-Language": "en-US,en;q=0.9"},
+        timeout=READER_FETCH_TIMEOUT,
+        stream=True,
+        allow_redirects=True,
+    )
+    response.raise_for_status()
+    assert_public_reader_target(response.url)
+
+    content = bytearray()
+    for chunk in response.iter_content(chunk_size=65536):
+        if not chunk:
+            continue
+        content.extend(chunk)
+        if len(content) > MAX_READER_FETCH_BYTES:
+            raise ValueError(
+                f"Reader fetch is too large. Limit: {human_size(MAX_READER_FETCH_BYTES)}."
+            )
+    return response, bytes(content)
+
+
+def get_best_title(soup: BeautifulSoup) -> str:
+    for selector, attr in (
+        ("meta[property='og:title']", "content"),
+        ("meta[name='twitter:title']", "content"),
+        ("meta[name='title']", "content"),
+    ):
+        node = soup.select_one(selector)
+        if node and node.get(attr):
+            return node.get(attr).strip()
+    if soup.title and soup.title.string:
+        return soup.title.string.strip()
+    heading = soup.find(["h1", "h2"])
+    return heading.get_text(" ", strip=True) if heading else "Cached Reader Page"
+
+
+def get_author_name(soup: BeautifulSoup) -> Optional[str]:
+    for selector, attr in (
+        ("meta[name='author']", "content"),
+        ("meta[property='article:author']", "content"),
+    ):
+        node = soup.select_one(selector)
+        if node and node.get(attr):
+            return node.get(attr).strip()
+    return None
+
+
+def remove_non_content_nodes(soup: BeautifulSoup) -> None:
+    for comment in soup.find_all(string=lambda text: isinstance(text, Comment)):
+        comment.extract()
+
+    for tag in soup.find_all(
+        [
+            "script",
+            "style",
+            "noscript",
+            "iframe",
+            "svg",
+            "canvas",
+            "form",
+            "button",
+            "input",
+            "select",
+            "textarea",
+            "footer",
+            "header",
+            "nav",
+            "aside",
+        ]
+    ):
+        tag.decompose()
+
+
+def score_candidate(tag: Tag) -> int:
+    text = tag.get_text(" ", strip=True)
+    if len(text) < 200:
+        return 0
+    paragraphs = len(tag.find_all("p"))
+    headings = len(tag.find_all(["h1", "h2", "h3"]))
+    lists = len(tag.find_all(["ul", "ol"]))
+    links = len(tag.find_all("a"))
+    penalty = min(links * 15, 400)
+    return len(text) + paragraphs * 180 + headings * 120 + lists * 50 - penalty
+
+
+def choose_content_root(soup: BeautifulSoup) -> Tag:
+    for selector in CONTENT_SELECTORS:
+        node = soup.select_one(selector)
+        if isinstance(node, Tag) and score_candidate(node) > 0:
+            return node
+
+    candidates = soup.find_all(["article", "main", "section", "div"])
+    best = None
+    best_score = -1
+    for candidate in candidates:
+        score = score_candidate(candidate)
+        if score > best_score:
+            best = candidate
+            best_score = score
+
+    if isinstance(best, Tag) and best_score > 0:
+        return best
+
+    if soup.body:
+        return soup.body
+    return soup
+
+
+def sanitize_reader_html(html_fragment: str, base_url: str) -> str:
+    soup = BeautifulSoup(html_fragment, "html.parser")
+
+    for tag in list(soup.find_all(True)):
+        if tag.name not in READER_ALLOWED_TAGS:
+            tag.unwrap()
+            continue
+
+        cleaned_attrs = {}
+        for attr_name, attr_value in tag.attrs.items():
+            if attr_name not in READER_ALLOWED_ATTRS:
+                continue
+            value = attr_value[0] if isinstance(attr_value, list) else attr_value
+            if attr_name == "href":
+                value = urljoin(base_url, value)
+            cleaned_attrs[attr_name] = value
+        tag.attrs = cleaned_attrs
+
+        if tag.name == "a" and tag.get("href"):
+            tag["target"] = "_blank"
+            tag["rel"] = "noopener noreferrer"
+
+    return str(soup)
+
+
+def extract_generic_reader_payload(url: str, html_bytes: bytes, encoding_hint: Optional[str]) -> Dict:
+    html_text = html_bytes.decode(encoding_hint or "utf-8", errors="replace")
+    soup = BeautifulSoup(html_text, "html.parser")
+    remove_non_content_nodes(soup)
+    root = choose_content_root(soup)
+    content_html = sanitize_reader_html(str(root), url)
+    content_soup = BeautifulSoup(content_html, "html.parser")
+    title = get_best_title(soup)
+    author = get_author_name(soup)
+    text_content = content_soup.get_text(" ", strip=True)
+    word_count = len(text_content.split())
+
+    return {
+        "title": title,
+        "author": author,
+        "source_label": urlparse(url).netloc,
+        "summary": summarize_text(text_content),
+        "word_count": word_count,
+        "content_html": str(content_soup),
+    }
+
+
+def reddit_json_url(url: str) -> Optional[str]:
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+    if "reddit.com" not in host:
+        return None
+    path = parsed.path.rstrip("/")
+    if "/comments/" not in path:
+        return None
+    if not path.endswith(".json"):
+        path = f"{path}.json"
+    return f"https://www.reddit.com{path}?raw_json=1&limit=20"
+
+
+def sanitize_html_snippet(snippet: str, base_url: str) -> str:
+    return sanitize_reader_html(unescape(snippet), base_url)
+
+
+def render_reddit_comment(comment_data: Dict, depth: int = 0, max_depth: int = 2) -> str:
+    body_html = sanitize_html_snippet(comment_data.get("body_html") or "", "https://www.reddit.com")
+    author = comment_data.get("author") or "[deleted]"
+    score = comment_data.get("score")
+    permalink = comment_data.get("permalink")
+    meta_bits = [f"u/{author}"]
+    if score is not None:
+        meta_bits.append(f"{score} points")
+    header = f"<div class='reader-comment-meta'>{' • '.join(meta_bits)}</div>"
+    link_html = ""
+    if permalink:
+        absolute_link = urljoin("https://www.reddit.com", permalink)
+        link_html = (
+            "<p class='reader-inline-link'>"
+            f"<a href='{absolute_link}' target='_blank' rel='noopener noreferrer'>Open comment on Reddit</a>"
+            "</p>"
+        )
+
+    html_parts = [f"<article class='reader-comment depth-{depth}'>{header}{body_html}{link_html}"]
+
+    if depth < max_depth:
+        replies = comment_data.get("replies")
+        if isinstance(replies, dict):
+            reply_children = replies.get("data", {}).get("children", [])
+            rendered = []
+            for child in reply_children[:5]:
+                if child.get("kind") != "t1":
+                    continue
+                rendered.append(render_reddit_comment(child.get("data", {}), depth + 1, max_depth))
+            if rendered:
+                html_parts.append("<div class='reader-replies'>" + "".join(rendered) + "</div>")
+
+    html_parts.append("</article>")
+    return "".join(html_parts)
+
+
+def extract_reddit_reader_payload(url: str) -> Optional[Dict]:
+    json_url = reddit_json_url(url)
+    if not json_url:
+        return None
+
+    response, payload = fetch_url_bytes(json_url)
+    content_type = response.headers.get("Content-Type", "")
+    if "json" not in content_type:
+        return None
+
+    try:
+        parsed = json.loads(payload.decode("utf-8"))
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(parsed, list) or len(parsed) < 2:
+        return None
+
+    post_children = parsed[0].get("data", {}).get("children", [])
+    if not post_children:
+        return None
+
+    post = post_children[0].get("data", {})
+    title = post.get("title") or "Reddit thread"
+    subreddit = post.get("subreddit_name_prefixed") or "Reddit"
+    author = post.get("author") or "[deleted]"
+    selftext_html = sanitize_html_snippet(post.get("selftext_html") or "", "https://www.reddit.com")
+    outbound_url = post.get("url")
+    outbound_html = ""
+    if outbound_url and outbound_url != url:
+        outbound_html = (
+            "<p class='reader-inline-link'>"
+            f"<a href='{outbound_url}' target='_blank' rel='noopener noreferrer'>Open linked URL</a>"
+            "</p>"
+        )
+
+    post_meta = [subreddit, f"u/{author}"]
+    if post.get("score") is not None:
+        post_meta.append(f"{post.get('score')} points")
+
+    html_parts = [
+        f"<section class='reader-post'><p class='reader-kicker'>{' • '.join(post_meta)}</p>{selftext_html}{outbound_html}</section>"
+    ]
+
+    comment_children = parsed[1].get("data", {}).get("children", [])
+    rendered_comments = []
+    for child in comment_children[:12]:
+        if child.get("kind") != "t1":
+            continue
+        rendered_comments.append(render_reddit_comment(child.get("data", {}), 0, 1))
+
+    if rendered_comments:
+        html_parts.append("<h2>Top comments</h2><div class='reader-comments'>" + "".join(rendered_comments) + "</div>")
+
+    combined_html = "".join(html_parts)
+    text_summary = summarize_text(BeautifulSoup(combined_html, "html.parser").get_text(" ", strip=True))
+    return {
+        "title": title,
+        "author": author,
+        "source_label": subreddit,
+        "summary": text_summary,
+        "word_count": len(BeautifulSoup(combined_html, "html.parser").get_text(" ", strip=True).split()),
+        "content_html": combined_html,
+    }
+
+
+def write_reader_content(entry_id: str, content_html: str) -> str:
+    filename = f"{entry_id}.html"
+    path = READER_DIR / filename
+    path.write_text(content_html)
+    return filename
+
+
+def delete_reader_content(filename: Optional[str]) -> None:
+    if not filename:
+        return
+    (READER_DIR / filename).unlink(missing_ok=True)
+
+
+def fetch_reader_payload(url: str) -> Dict:
+    normalized_url = normalize_reader_url(url)
+    assert_public_reader_target(normalized_url)
+
+    reddit_payload = extract_reddit_reader_payload(normalized_url)
+    if reddit_payload:
+        reddit_payload["resolved_url"] = normalized_url
+        return reddit_payload
+
+    response, payload = fetch_url_bytes(normalized_url)
+    content_type = response.headers.get("Content-Type", "")
+    if "html" not in content_type and "xml" not in content_type:
+        raise ValueError("Reader fetch only supports HTML pages right now.")
+
+    generic_payload = extract_generic_reader_payload(response.url, payload, response.encoding)
+    generic_payload["resolved_url"] = response.url
+    return generic_payload
+
+
+def cache_reader_entry(url: str, existing_entry: Optional[Dict] = None) -> Dict:
+    payload = fetch_reader_payload(url)
+    entry_id = existing_entry.get("id") if existing_entry else uuid4().hex
+    content_filename = write_reader_content(entry_id, payload["content_html"])
+    entry = {
+        "id": entry_id,
+        "url": payload["resolved_url"],
+        "title": payload["title"],
+        "summary": payload["summary"],
+        "author": payload.get("author"),
+        "source_label": payload["source_label"],
+        "word_count": payload["word_count"],
+        "created": existing_entry.get("created") if existing_entry else now_iso(),
+        "updated": now_iso(),
+        "content_filename": content_filename,
+    }
+    replace_history_item(READER_HISTORY_FILE, entry)
+    return entry
+
+
+def get_reader_history() -> List[Dict]:
+    return load_history(READER_HISTORY_FILE)
+
+
+def read_reader_content(filename: str) -> str:
+    path = READER_DIR / filename
+    if not path.exists():
+        raise NotFound()
+    return path.read_text()
+
+
+def build_template_context() -> Dict:
     files, total_bytes = get_file_listing()
     storage = build_storage_summary(total_bytes)
     return {
@@ -301,6 +779,7 @@ def build_template_context():
         "storage": storage,
         "text_history": load_history(TEXT_HISTORY_FILE),
         "latex_history": load_history(LATEX_HISTORY_FILE),
+        "reader_history": get_reader_history(),
         "is_authenticated": is_authenticated(),
         "login_configured": bool(QUICKDROP_PASSWORD),
         "login_days": LOGIN_DAYS,
@@ -312,7 +791,11 @@ def build_template_context():
 
 @app.context_processor
 def utility_processor():
-    return {"human_size": human_size, "csrf_token": get_or_create_csrf_token()}
+    return {
+        "human_size": human_size,
+        "csrf_token": get_or_create_csrf_token(),
+        "format_timestamp": format_timestamp,
+    }
 
 
 @app.errorhandler(RequestEntityTooLarge)
@@ -361,7 +844,7 @@ def index():
             flash("Write access is not configured yet. Set QUICKDROP_PASSWORD on the server.", "error")
             return redirect(url_for("index"))
         if not is_authenticated():
-            flash("Log in to upload, save text, or render LaTeX.", "error")
+            flash("Log in to use Dropper tools from this device.", "error")
             return redirect(url_for("index"))
 
         validate_csrf()
@@ -452,6 +935,73 @@ def save_latex_entry():
     else:
         flash(f"Rendered {pdf_name}", "success")
 
+    return redirect(url_for("index"))
+
+
+@app.post("/reader")
+@login_required
+def save_reader_entry():
+    validate_csrf()
+    url = request.form.get("url", "").strip()
+    try:
+        entry = cache_reader_entry(url)
+    except (requests.RequestException, ValueError) as error:
+        flash(f"Reader fetch failed: {error}", "error")
+        return redirect(url_for("index"))
+
+    flash(f"Cached reader page: {entry['title']}", "success")
+    return redirect(url_for("view_reader_entry", entry_id=entry["id"]))
+
+
+@app.get("/reader/<entry_id>")
+@login_required
+def view_reader_entry(entry_id: str):
+    entry = find_history_item(READER_HISTORY_FILE, entry_id)
+    if entry is None:
+        raise NotFound()
+
+    content_html = read_reader_content(entry.get("content_filename", ""))
+    return render_template(
+        "reader.html",
+        entry=entry,
+        content_html=content_html,
+        is_authenticated=is_authenticated(),
+        login_configured=bool(QUICKDROP_PASSWORD),
+    )
+
+
+@app.post("/reader/refresh/<entry_id>")
+@login_required
+def refresh_reader_entry(entry_id: str):
+    validate_csrf()
+    entry = find_history_item(READER_HISTORY_FILE, entry_id)
+    if entry is None:
+        raise NotFound()
+
+    old_filename = entry.get("content_filename")
+    try:
+        updated_entry = cache_reader_entry(entry.get("url", ""), entry)
+    except (requests.RequestException, ValueError) as error:
+        flash(f"Reader refresh failed: {error}", "error")
+        return redirect(url_for("view_reader_entry", entry_id=entry_id))
+
+    if old_filename != updated_entry.get("content_filename"):
+        delete_reader_content(old_filename)
+
+    flash("Reader cache refreshed.", "success")
+    return redirect(url_for("view_reader_entry", entry_id=entry_id))
+
+
+@app.post("/reader/delete/<entry_id>")
+@login_required
+def delete_reader_entry(entry_id: str):
+    validate_csrf()
+    removed = remove_history_item(READER_HISTORY_FILE, entry_id)
+    if removed is None:
+        raise NotFound()
+
+    delete_reader_content(removed.get("content_filename"))
+    flash("Reader cache entry removed.", "success")
     return redirect(url_for("index"))
 
 

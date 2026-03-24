@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ entry.title }} · Dropper Reader</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body class="app-shell reader-shell">
+    <header class="topbar">
+      <div class="container topbar-inner">
+        <div>
+          <p class="eyebrow">Dropper Reader</p>
+          <h1>{{ entry.title }}</h1>
+        </div>
+        <div class="topbar-actions">
+          <a class="button-link ghost-button" href="{{ url_for('index') }}#reader">Back</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="container content-shell">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+      <div class="flash-stack">
+        {% for category, message in messages %}
+        <p class="flash-message {{ category }}">{{ message }}</p>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% endwith %}
+
+      <article class="card reader-frame">
+        <header class="reader-header">
+          <div>
+            <p class="eyebrow">Cached reader view</p>
+            <h1>{{ entry.title }}</h1>
+            <p class="reader-meta">
+              {{ entry.source_label }}
+              {% if entry.author %} • {{ entry.author }}{% endif %}
+              {% if entry.word_count %} • {{ entry.word_count }} words{% endif %}
+              • Updated {{ format_timestamp(entry.updated) }}
+            </p>
+          </div>
+          <div class="action-row">
+            <a class="button-link ghost-button" href="{{ entry.url }}" target="_blank" rel="noopener noreferrer">Open source</a>
+            <form method="post" action="{{ url_for('refresh_reader_entry', entry_id=entry.id) }}" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+              <button type="submit" class="secondary-button">Refresh cache</button>
+            </form>
+            <form method="post" action="{{ url_for('delete_reader_entry', entry_id=entry.id) }}" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+              <button type="submit" class="delete-button">Delete</button>
+            </form>
+          </div>
+        </header>
+
+        <section class="reader-content">
+          {{ content_html|safe }}
+        </section>
+      </article>
+    </main>
+  </body>
+</html>
