@@ -11,7 +11,7 @@ from functools import wraps
 from html import unescape
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse
 from uuid import uuid4
 
 import requests
@@ -103,6 +103,7 @@ READER_ALLOWED_TAGS = {
     "ul",
 }
 READER_ALLOWED_ATTRS = {"href", "title"}
+READER_MODES = {"auto", "html", "json"}
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
@@ -404,6 +405,35 @@ def normalize_reader_url(raw_url: str) -> str:
     return candidate
 
 
+def normalize_reader_mode(raw_mode: str) -> str:
+    mode = (raw_mode or "auto").strip().lower()
+    return mode if mode in READER_MODES else "auto"
+
+
+def is_reddit_url(url: str) -> bool:
+    host = urlparse(url).netloc.lower()
+    return "reddit.com" in host or host.endswith("redd.it")
+
+
+def reddit_html_url(url: str) -> str:
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+
+    if host.endswith("redd.it"):
+        return url
+
+    path = parsed.path
+    if path.endswith(".json"):
+        path = path[:-5]
+
+    query_items = [
+        (k, v) for k, v in parse_qsl(parsed.query, keep_blank_values=True) if k not in {"raw_json", "limit"}
+    ]
+    query = urlencode(query_items)
+
+    return parsed._replace(netloc="old.reddit.com", path=path, query=query).geturl()
+
+
 def assert_public_reader_target(url: str) -> None:
     parsed = urlparse(url)
     hostname = parsed.hostname
@@ -449,9 +479,7 @@ def fetch_url_bytes(url: str) -> Tuple[requests.Response, bytes]:
             continue
         content.extend(chunk)
         if len(content) > MAX_READER_FETCH_BYTES:
-            raise ValueError(
-                f"Reader fetch is too large. Limit: {human_size(MAX_READER_FETCH_BYTES)}."
-            )
+            raise ValueError(f"Reader fetch is too large. Limit: {human_size(MAX_READER_FETCH_BYTES)}.")
     return response, bytes(content)
 
 
@@ -708,6 +736,18 @@ def extract_reddit_reader_payload(url: str) -> Optional[Dict]:
     }
 
 
+def fetch_html_reader_payload(url: str) -> Dict:
+    response, payload = fetch_url_bytes(url)
+    content_type = response.headers.get("Content-Type", "")
+    if "html" not in content_type and "xml" not in content_type:
+        raise ValueError("Reader fetch only supports HTML pages right now.")
+
+    generic_payload = extract_generic_reader_payload(response.url, payload, response.encoding)
+    generic_payload["resolved_url"] = response.url
+    generic_payload["reader_mode_used"] = "html"
+    return generic_payload
+
+
 def write_reader_content(entry_id: str, content_html: str) -> str:
     filename = f"{entry_id}.html"
     path = READER_DIR / filename
@@ -721,27 +761,34 @@ def delete_reader_content(filename: Optional[str]) -> None:
     (READER_DIR / filename).unlink(missing_ok=True)
 
 
-def fetch_reader_payload(url: str) -> Dict:
+def fetch_reader_payload(url: str, reader_mode: str = "auto") -> Dict:
     normalized_url = normalize_reader_url(url)
     assert_public_reader_target(normalized_url)
 
-    reddit_payload = extract_reddit_reader_payload(normalized_url)
-    if reddit_payload:
-        reddit_payload["resolved_url"] = normalized_url
-        return reddit_payload
+    mode = normalize_reader_mode(reader_mode)
 
-    response, payload = fetch_url_bytes(normalized_url)
-    content_type = response.headers.get("Content-Type", "")
-    if "html" not in content_type and "xml" not in content_type:
-        raise ValueError("Reader fetch only supports HTML pages right now.")
+    if is_reddit_url(normalized_url):
+        if mode in {"auto", "json"}:
+            try:
+                reddit_payload = extract_reddit_reader_payload(normalized_url)
+            except (requests.RequestException, ValueError):
+                reddit_payload = None
 
-    generic_payload = extract_generic_reader_payload(response.url, payload, response.encoding)
-    generic_payload["resolved_url"] = response.url
-    return generic_payload
+            if reddit_payload:
+                reddit_payload["resolved_url"] = normalized_url
+                reddit_payload["reader_mode_used"] = "json"
+                return reddit_payload
+
+            if mode == "json":
+                raise ValueError("Reddit JSON fetch failed for this URL. Try HTML mode.")
+
+        return fetch_html_reader_payload(reddit_html_url(normalized_url))
+
+    return fetch_html_reader_payload(normalized_url)
 
 
-def cache_reader_entry(url: str, existing_entry: Optional[Dict] = None) -> Dict:
-    payload = fetch_reader_payload(url)
+def cache_reader_entry(url: str, reader_mode: str = "auto", existing_entry: Optional[Dict] = None) -> Dict:
+    payload = fetch_reader_payload(url, reader_mode=reader_mode)
     entry_id = existing_entry.get("id") if existing_entry else uuid4().hex
     content_filename = write_reader_content(entry_id, payload["content_html"])
     entry = {
@@ -752,6 +799,7 @@ def cache_reader_entry(url: str, existing_entry: Optional[Dict] = None) -> Dict:
         "author": payload.get("author"),
         "source_label": payload["source_label"],
         "word_count": payload["word_count"],
+        "reader_mode_used": payload.get("reader_mode_used", "html"),
         "created": existing_entry.get("created") if existing_entry else now_iso(),
         "updated": now_iso(),
         "content_filename": content_filename,
@@ -943,8 +991,9 @@ def save_latex_entry():
 def save_reader_entry():
     validate_csrf()
     url = request.form.get("url", "").strip()
+    reader_mode = normalize_reader_mode(request.form.get("reader_mode", "auto"))
     try:
-        entry = cache_reader_entry(url)
+        entry = cache_reader_entry(url, reader_mode=reader_mode)
     except (requests.RequestException, ValueError) as error:
         flash(f"Reader fetch failed: {error}", "error")
         return redirect(url_for("index"))
@@ -979,8 +1028,9 @@ def refresh_reader_entry(entry_id: str):
         raise NotFound()
 
     old_filename = entry.get("content_filename")
+    reader_mode = normalize_reader_mode(request.form.get("reader_mode", entry.get("reader_mode_used", "auto")))
     try:
-        updated_entry = cache_reader_entry(entry.get("url", ""), entry)
+        updated_entry = cache_reader_entry(entry.get("url", ""), reader_mode=reader_mode, existing_entry=entry)
     except (requests.RequestException, ValueError) as error:
         flash(f"Reader refresh failed: {error}", "error")
         return redirect(url_for("view_reader_entry", entry_id=entry_id))

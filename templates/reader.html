@@ -39,6 +39,7 @@
               {{ entry.source_label }}
               {% if entry.author %} • {{ entry.author }}{% endif %}
               {% if entry.word_count %} • {{ entry.word_count }} words{% endif %}
+              {% if entry.reader_mode_used %} • {{ entry.reader_mode_used|upper }}{% endif %}
               • Updated {{ format_timestamp(entry.updated) }}
             </p>
           </div>
@@ -46,6 +47,7 @@
             <a class="button-link ghost-button" href="{{ entry.url }}" target="_blank" rel="noopener noreferrer">Open source</a>
             <form method="post" action="{{ url_for('refresh_reader_entry', entry_id=entry.id) }}" class="inline-form">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+              <input type="hidden" name="reader_mode" value="{{ entry.reader_mode_used or 'auto' }}" />
               <button type="submit" class="secondary-button">Refresh cache</button>
             </form>
             <form method="post" action="{{ url_for('delete_reader_entry', entry_id=entry.id) }}" class="inline-form">
