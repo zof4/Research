@@ -105,11 +105,22 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
             <input type="text" name="url" placeholder="https://example.com/article" inputmode="url" autocomplete="url" required />
             <select name="reader_mode">
-              <option value="auto" selected>Auto (Reddit JSON, then HTML fallback)</option>
+              <option value="auto" selected>Auto (Reddit JSON, then HTML, then proxy fallback)</option>
               <option value="html">HTML only</option>
               <option value="json">Structured Reddit JSON only</option>
+              <option value="proxy">Proxy text mode (best for stubborn 403 pages)</option>
             </select>
             <button type="submit" class="block-button">Cache reader view</button>
+          </form>
+          <form method="get" action="{{ url_for('live_reader') }}" class="stack-form">
+            <input type="text" name="url" placeholder="https://example.com/article" inputmode="url" autocomplete="url" required />
+            <select name="reader_mode">
+              <option value="auto" selected>Live auto mode</option>
+              <option value="html">Live HTML only</option>
+              <option value="json">Live Reddit JSON only</option>
+              <option value="proxy">Live proxy text mode</option>
+            </select>
+            <button type="submit" class="secondary-button block-button">Open live viewer (uncached)</button>
           </form>
           {% else %}
           <p class="helper-text">Log in to cache a public URL.</p>

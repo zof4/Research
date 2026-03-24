@@ -57,10 +57,17 @@ READER_FETCH_TIMEOUT = int(os.environ.get("QUICKDROP_READER_FETCH_TIMEOUT", "20"
 PDFLATEX_BIN = os.environ.get("QUICKDROP_PDFLATEX_BIN", "pdflatex")
 SAFE_INLINE_MIME_PREFIXES = ("image/", "text/plain")
 SAFE_INLINE_MIME_TYPES = {"application/pdf"}
-READER_USER_AGENT = os.environ.get(
-    "QUICKDROP_READER_USER_AGENT",
-    "DropperReader/1.0 (+https://example.invalid; purpose=offline-reader-cache)",
-)
+READER_REQUEST_HEADERS = {
+    "User-Agent": os.environ.get(
+        "QUICKDROP_READER_USER_AGENT",
+        (
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 QuickDropReader/1.0"
+        ),
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
 FORBIDDEN_LATEX_TOKENS = {
     "\\write18",
     "\\input",
@@ -103,7 +110,7 @@ READER_ALLOWED_TAGS = {
     "ul",
 }
 READER_ALLOWED_ATTRS = {"href", "title"}
-READER_MODES = {"auto", "html", "json"}
+READER_MODES = {"auto", "html", "json", "proxy"}
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
@@ -465,7 +472,7 @@ def assert_public_reader_target(url: str) -> None:
 def fetch_url_bytes(url: str) -> Tuple[requests.Response, bytes]:
     response = requests.get(
         url,
-        headers={"User-Agent": READER_USER_AGENT, "Accept-Language": "en-US,en;q=0.9"},
+        headers=READER_REQUEST_HEADERS,
         timeout=READER_FETCH_TIMEOUT,
         stream=True,
         allow_redirects=True,
@@ -748,6 +755,30 @@ def fetch_html_reader_payload(url: str) -> Dict:
     return generic_payload
 
 
+def fetch_proxy_reader_payload(url: str) -> Dict:
+    """
+    Uses r.jina.ai as a fallback text proxy for pages that block direct fetches.
+    """
+    proxy_url = f"https://r.jina.ai/http://{url}"
+    response, payload = fetch_url_bytes(proxy_url)
+    text = payload.decode(response.encoding or "utf-8", errors="replace").strip()
+    if not text:
+        raise ValueError("Proxy reader returned an empty response.")
+
+    escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    source_host = urlparse(url).netloc
+    return {
+        "title": f"Proxy view · {source_host}",
+        "author": None,
+        "source_label": "r.jina.ai proxy",
+        "summary": summarize_text(text),
+        "word_count": len(text.split()),
+        "content_html": f"<pre>{escaped}</pre>",
+        "resolved_url": url,
+        "reader_mode_used": "proxy",
+    }
+
+
 def write_reader_content(entry_id: str, content_html: str) -> str:
     filename = f"{entry_id}.html"
     path = READER_DIR / filename
@@ -767,6 +798,9 @@ def fetch_reader_payload(url: str, reader_mode: str = "auto") -> Dict:
 
     mode = normalize_reader_mode(reader_mode)
 
+    if mode == "proxy":
+        return fetch_proxy_reader_payload(normalized_url)
+
     if is_reddit_url(normalized_url):
         if mode in {"auto", "json"}:
             try:
@@ -780,11 +814,17 @@ def fetch_reader_payload(url: str, reader_mode: str = "auto") -> Dict:
                 return reddit_payload
 
             if mode == "json":
-                raise ValueError("Reddit JSON fetch failed for this URL. Try HTML mode.")
+                raise ValueError("Reddit JSON fetch failed for this URL. Try HTML or proxy mode.")
 
         return fetch_html_reader_payload(reddit_html_url(normalized_url))
 
-    return fetch_html_reader_payload(normalized_url)
+    try:
+        return fetch_html_reader_payload(normalized_url)
+    except requests.HTTPError as error:
+        response = getattr(error, "response", None)
+        if mode == "auto" and response is not None and response.status_code in {401, 403, 429}:
+            return fetch_proxy_reader_payload(normalized_url)
+        raise
 
 
 def cache_reader_entry(url: str, reader_mode: str = "auto", existing_entry: Optional[Dict] = None) -> Dict:
@@ -1002,6 +1042,42 @@ def save_reader_entry():
     return redirect(url_for("view_reader_entry", entry_id=entry["id"]))
 
 
+@app.get("/reader/live")
+@login_required
+def live_reader():
+    url = request.args.get("url", "").strip()
+    reader_mode = normalize_reader_mode(request.args.get("reader_mode", "auto"))
+    if not url:
+        flash("Paste a URL first.", "error")
+        return redirect(url_for("index"))
+
+    try:
+        payload = fetch_reader_payload(url, reader_mode=reader_mode)
+    except (requests.RequestException, ValueError) as error:
+        flash(f"Live reader fetch failed: {error}", "error")
+        return redirect(url_for("index"))
+
+    entry = {
+        "id": "live",
+        "url": payload.get("resolved_url", url),
+        "title": payload.get("title", "Live Reader"),
+        "summary": payload.get("summary"),
+        "author": payload.get("author"),
+        "source_label": payload.get("source_label", "Live"),
+        "word_count": payload.get("word_count"),
+        "reader_mode_used": payload.get("reader_mode_used", reader_mode),
+        "updated": now_iso(),
+    }
+    return render_template(
+        "reader.html",
+        entry=entry,
+        content_html=payload.get("content_html", "<p>No content.</p>"),
+        is_authenticated=is_authenticated(),
+        login_configured=bool(QUICKDROP_PASSWORD),
+        is_live_view=True,
+    )
+
+
 @app.get("/reader/<entry_id>")
 @login_required
 def view_reader_entry(entry_id: str):
@@ -1016,6 +1092,7 @@ def view_reader_entry(entry_id: str):
         content_html=content_html,
         is_authenticated=is_authenticated(),
         login_configured=bool(QUICKDROP_PASSWORD),
+        is_live_view=False,
     )
 
 

@@ -10,7 +10,7 @@
     <header class="topbar">
       <div class="container topbar-inner">
         <div>
-          <p class="eyebrow">Dropper Reader</p>
+          <p class="eyebrow">Dropper Reader {% if is_live_view %}· Live{% else %}· Cached{% endif %}</p>
           <h1>{{ entry.title }}</h1>
         </div>
         <div class="topbar-actions">
@@ -45,6 +45,7 @@
           </div>
           <div class="action-row">
             <a class="button-link ghost-button" href="{{ entry.url }}" target="_blank" rel="noopener noreferrer">Open source</a>
+            {% if not is_live_view %}
             <form method="post" action="{{ url_for('refresh_reader_entry', entry_id=entry.id) }}" class="inline-form">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
               <input type="hidden" name="reader_mode" value="{{ entry.reader_mode_used or 'auto' }}" />
@@ -54,6 +55,7 @@
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
               <button type="submit" class="delete-button">Delete</button>
             </form>
+            {% endif %}
           </div>
         </header>
 
