@@ -68,6 +68,14 @@ READER_REQUEST_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
 }
+REDDIT_MIRROR_BASES = [
+    base.strip().rstrip("/")
+    for base in os.environ.get(
+        "QUICKDROP_REDDIT_MIRRORS",
+        "https://l.opnxng.com,https://redlib.kylrth.com,https://redlib.perennialte.ch",
+    ).split(",")
+    if base.strip()
+]
 FORBIDDEN_LATEX_TOKENS = {
     "\\write18",
     "\\input",
@@ -441,6 +449,27 @@ def reddit_html_url(url: str) -> str:
     return parsed._replace(netloc="old.reddit.com", path=path, query=query).geturl()
 
 
+def reddit_mirror_urls(url: str) -> List[str]:
+    parsed = urlparse(url)
+    path = parsed.path
+    if path.endswith(".json"):
+        path = path[:-5]
+
+    query_items = parse_qsl(parsed.query, keep_blank_values=True)
+    query_items.append(("limit", "500"))
+    query = urlencode(query_items)
+
+    mirror_urls = []
+    for base in REDDIT_MIRROR_BASES:
+        parsed_base = urlparse(base)
+        if not parsed_base.scheme or not parsed_base.netloc:
+            continue
+        mirror_urls.append(
+            parsed_base._replace(path=path, query=query, params="", fragment="").geturl()
+        )
+    return mirror_urls
+
+
 def assert_public_reader_target(url: str) -> None:
     parsed = urlparse(url)
     hostname = parsed.hostname
@@ -473,6 +502,27 @@ def fetch_url_bytes(url: str) -> Tuple[requests.Response, bytes]:
     response = requests.get(
         url,
         headers=READER_REQUEST_HEADERS,
+        timeout=READER_FETCH_TIMEOUT,
+        stream=True,
+        allow_redirects=True,
+    )
+    response.raise_for_status()
+    assert_public_reader_target(response.url)
+
+    content = bytearray()
+    for chunk in response.iter_content(chunk_size=65536):
+        if not chunk:
+            continue
+        content.extend(chunk)
+        if len(content) > MAX_READER_FETCH_BYTES:
+            raise ValueError(f"Reader fetch is too large. Limit: {human_size(MAX_READER_FETCH_BYTES)}.")
+    return response, bytes(content)
+
+
+def fetch_url_bytes_with_headers(url: str, headers: Dict[str, str]) -> Tuple[requests.Response, bytes]:
+    response = requests.get(
+        url,
+        headers=headers,
         timeout=READER_FETCH_TIMEOUT,
         stream=True,
         allow_redirects=True,
@@ -755,6 +805,18 @@ def fetch_html_reader_payload(url: str) -> Dict:
     return generic_payload
 
 
+def fetch_html_reader_payload_with_headers(url: str, headers: Dict[str, str]) -> Dict:
+    response, payload = fetch_url_bytes_with_headers(url, headers)
+    content_type = response.headers.get("Content-Type", "")
+    if "html" not in content_type and "xml" not in content_type:
+        raise ValueError("Reader fetch only supports HTML pages right now.")
+
+    generic_payload = extract_generic_reader_payload(response.url, payload, response.encoding)
+    generic_payload["resolved_url"] = response.url
+    generic_payload["reader_mode_used"] = "html"
+    return generic_payload
+
+
 def fetch_proxy_reader_payload(url: str) -> Dict:
     """
     Uses r.jina.ai as a fallback text proxy for pages that block direct fetches.
@@ -821,6 +883,18 @@ def fetch_reader_payload(url: str, reader_mode: str = "auto") -> Dict:
         except requests.HTTPError as error:
             response = getattr(error, "response", None)
             if mode == "auto" and response is not None and response.status_code in {401, 403, 429}:
+                for mirror_url in reddit_mirror_urls(normalized_url):
+                    try:
+                        mirror_payload = fetch_html_reader_payload_with_headers(
+                            mirror_url,
+                            {"User-Agent": "python-requests/2.31"},
+                        )
+                    except (requests.RequestException, ValueError):
+                        continue
+                    if "Making sure you're not a bot" in mirror_payload.get("title", ""):
+                        continue
+                    mirror_payload["source_label"] = f"{mirror_payload['source_label']} (Reddit mirror)"
+                    return mirror_payload
                 return fetch_proxy_reader_payload(normalized_url)
             raise
 
