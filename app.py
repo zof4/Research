@@ -4,6 +4,7 @@ import mimetypes
 import os
 import re
 import secrets
+import shutil
 import socket
 import subprocess
 import tempfile
@@ -33,15 +34,37 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data"
-USERS_DIR = BASE_DIR / "users"
-LEGACY_UPLOAD_DIR = BASE_DIR / "uploads"
-LEGACY_LATEX_DIR = BASE_DIR / "latex_outputs"
-LEGACY_READER_DIR = BASE_DIR / "reader_cache"
+STORAGE_ROOT = Path(os.environ.get("QUICKDROP_STORAGE_ROOT", str(BASE_DIR))).expanduser().resolve()
+DATA_DIR = STORAGE_ROOT / "data"
+USERS_DIR = STORAGE_ROOT / "users"
+LEGACY_UPLOAD_DIR = STORAGE_ROOT / "uploads"
+LEGACY_LATEX_DIR = STORAGE_ROOT / "latex_outputs"
+LEGACY_READER_DIR = STORAGE_ROOT / "reader_cache"
 USERS_FILE = DATA_DIR / "users.json"
 
-for directory in (DATA_DIR, USERS_DIR, LEGACY_UPLOAD_DIR, LEGACY_LATEX_DIR, LEGACY_READER_DIR):
+for directory in (STORAGE_ROOT, DATA_DIR, USERS_DIR, LEGACY_UPLOAD_DIR, LEGACY_LATEX_DIR, LEGACY_READER_DIR):
     directory.mkdir(exist_ok=True)
+
+
+def _migrate_legacy_storage_dir(dirname: str) -> None:
+    source = BASE_DIR / dirname
+    target = STORAGE_ROOT / dirname
+    if source == target or not source.exists() or not source.is_dir():
+        return
+
+    target.mkdir(parents=True, exist_ok=True)
+    for child in source.iterdir():
+        target_child = target / child.name
+        if target_child.exists():
+            continue
+        if child.is_dir():
+            shutil.copytree(child, target_child)
+        else:
+            shutil.copy2(child, target_child)
+
+
+for legacy_dirname in ("data", "users", "uploads", "latex_outputs", "reader_cache"):
+    _migrate_legacy_storage_dir(legacy_dirname)
 
 DEFAULT_MAX_UPLOAD_MB = int(os.environ.get("QUICKDROP_MAX_UPLOAD_MB", "100"))
 DEFAULT_MAX_STORAGE_MB = int(os.environ.get("QUICKDROP_MAX_STORAGE_MB", "1024"))

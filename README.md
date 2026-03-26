@@ -19,6 +19,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 export QUICKDROP_SECRET_KEY=change-me
+export QUICKDROP_STORAGE_ROOT="$(pwd)/persistent"
 export QUICKDROP_MAX_UPLOAD_MB=100
 export QUICKDROP_MAX_STORAGE_MB=1024
 export QUICKDROP_PDFLATEX_BIN=pdflatex
@@ -48,6 +49,25 @@ QuickDrop itself listens on port `8003` by default (not `3003`), so validate the
 ss -ltnp | grep ':8003'
 curl -i 127.0.0.1:8003
 ```
+
+### Keep data persistent across deploys/rebuilds
+
+If you rebuild containers or deploy from a Git checkout, **do not store runtime data only inside the app checkout path**. Use `QUICKDROP_STORAGE_ROOT` and mount that path to a persistent Docker volume or host directory.
+
+Example compose snippet:
+```yaml
+services:
+  dropper:
+    environment:
+      QUICKDROP_STORAGE_ROOT: /var/lib/quickdrop
+    volumes:
+      - quickdrop_data:/var/lib/quickdrop
+
+volumes:
+  quickdrop_data:
+```
+
+QuickDrop will automatically copy one-time legacy data from the old in-repo folders (`data/`, `users/`, `uploads/`, `latex_outputs/`, `reader_cache/`) into `QUICKDROP_STORAGE_ROOT` when needed, then continue reading/writing from the storage root.
 
 ## Exact SSH deployment steps for Oracle Linux on port 8003
 

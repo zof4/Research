@@ -6,7 +6,7 @@
     <title>Dropper</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   </head>
-  <body>
+  <body class="{% if is_authenticated and not is_admin %}non-admin-user{% endif %}">
     <header class="site-header">
       <div class="container site-header-inner">
         {% if is_authenticated %}
@@ -156,8 +156,9 @@
           <p class="helper-text">Log in to save text.</p>
           {% endif %}
 
-          <div class="item-stack">
+          <div class="item-stack section-items">
             {% if text_groups %}
+              {% if is_admin %}
               {% for group in text_groups %}
               <article class="item-card user-group-card">
                 <h3>{{ group.owner }} <span class="item-meta">({{ group['items']|length }} items)</span></h3>
@@ -211,6 +212,39 @@
                 {% endif %}
               </article>
               {% endfor %}
+              {% else %}
+              {% for group in text_groups %}
+                {% for item in group['items'] %}
+              <article class="item-card">
+                <div class="item-head">
+                  <h3>{{ item.title }}{% if item.hidden %} <span class="item-badge">Hidden</span>{% endif %}</h3>
+                  <p class="item-meta">{{ format_timestamp(item.created) }}</p>
+                </div>
+                <details class="source-details">
+                  <summary>Open text</summary>
+                  <div class="history-rich">{{ render_basic_text_markup(item.content) }}</div>
+                </details>
+                <div class="action-row">
+                  {% if item.hidden %}
+                  <form method="post" action="{{ url_for('unhide_text_entry', entry_id=item.id) }}" class="inline-form" data-async>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <button type="submit" class="secondary-button">Unhide</button>
+                  </form>
+                  {% else %}
+                  <form method="post" action="{{ url_for('hide_text_entry', entry_id=item.id) }}" class="inline-form" data-async>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <button type="submit" class="secondary-button">Hide</button>
+                  </form>
+                  {% endif %}
+                  <form method="post" action="{{ url_for('delete_text_entry', entry_id=item.id) }}" class="inline-form" data-async>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <button type="submit" class="delete-button">Delete</button>
+                  </form>
+                </div>
+              </article>
+                {% endfor %}
+              {% endfor %}
+              {% endif %}
             {% else %}
             <p class="empty-state">No text saved.</p>
             {% endif %}
@@ -479,8 +513,9 @@
           <p class="helper-text">Log in to render PDF.</p>
           {% endif %}
 
-          <div class="item-stack">
+          <div class="item-stack section-items">
             {% if latex_groups %}
+              {% if is_admin %}
               {% for group in latex_groups %}
               <article class="item-card user-group-card">
                 <h3>{{ group.owner }} <span class="item-meta">({{ group['items']|length }} items)</span></h3>
@@ -537,6 +572,42 @@
                 {% endif %}
               </article>
               {% endfor %}
+              {% else %}
+              {% for group in latex_groups %}
+                {% for item in group['items'] %}
+              <article class="item-card">
+                <div class="item-head">
+                  <div>
+                    <h3>{{ item.title }}{% if item.hidden %} <span class="item-badge">Hidden</span>{% endif %}</h3>
+                    <p class="item-meta">{{ format_timestamp(item.created) }}</p>
+                  </div>
+                </div>
+                <div class="action-row">
+                  <a class="button-link" href="{{ url_for('download_latex_pdf', filename=item.pdf_name) }}">Download PDF</a>
+                  {% if item.hidden %}
+                  <form method="post" action="{{ url_for('unhide_latex_entry', entry_id=item.id) }}" class="inline-form" data-async>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <button type="submit" class="secondary-button">Unhide</button>
+                  </form>
+                  {% else %}
+                  <form method="post" action="{{ url_for('hide_latex_entry', entry_id=item.id) }}" class="inline-form" data-async>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <button type="submit" class="secondary-button">Hide</button>
+                  </form>
+                  {% endif %}
+                  <form method="post" action="{{ url_for('delete_latex_entry', entry_id=item.id) }}" class="inline-form" data-async>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <button type="submit" class="delete-button">Delete</button>
+                  </form>
+                </div>
+                <details class="source-details">
+                  <summary>Source</summary>
+                  <pre class="history-pre">{{ item.source }}</pre>
+                </details>
+              </article>
+                {% endfor %}
+              {% endfor %}
+              {% endif %}
             {% else %}
             <p class="empty-state">No PDFs.</p>
             {% endif %}

@@ -257,6 +257,11 @@ img {
 .files-card {
   grid-column: 1 / -1;
 }
+.dashboard-grid > .section-card:only-child {
+  grid-column: 1 / -1;
+  justify-self: center;
+  width: min(980px, 100%);
+}
 
 .access-identity {
   display: flex;
@@ -342,6 +347,11 @@ img {
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: linear-gradient(160deg, rgba(255,255,255,0.9), rgba(245,248,252,0.85));
+}
+#text .composer-form,
+#latex .composer-form {
+  width: min(860px, 100%);
+  margin-inline: auto;
 }
 .composer-form .stack-form,
 .text-editor-form {
@@ -470,6 +480,10 @@ button:active {
   display: grid;
   gap: 0.9rem;
   margin-top: 1rem;
+}
+.section-items {
+  width: min(920px, 100%);
+  margin-inline: auto;
 }
 .item-card {
   display: grid;
@@ -701,10 +715,16 @@ button:active {
 }
 
 @media (max-width: 900px) {
+  .site-header {
+    transition: transform 0.2s ease, opacity 0.2s ease;
+  }
+
   .site-header-inner {
     grid-template-columns: 1fr;
     justify-items: center;
     text-align: center;
+    min-height: 54px;
+    padding: 0.45rem 0;
   }
 
   .account-chip,
@@ -717,6 +737,37 @@ button:active {
     grid-template-columns: 1fr;
     justify-items: center;
     text-align: center;
+  }
+
+  .brand {
+    font-size: 0.92rem;
+  }
+
+  .top-nav {
+    width: 100%;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    gap: 0.4rem;
+    padding-bottom: 0.1rem;
+    scrollbar-width: thin;
+  }
+  .top-nav a {
+    min-height: 2rem;
+    min-width: 4.6rem;
+    padding: 0.33rem 0.72rem;
+    font-size: 0.95rem;
+    flex: 0 0 auto;
+  }
+
+  body.header-collapsed .site-header {
+    transform: translateY(-100%);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  body.non-admin-user .account-chip {
+    display: none;
   }
 }
 
