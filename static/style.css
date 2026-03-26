@@ -201,6 +201,7 @@ img { max-width: 100%; }
 
 .dashboard-grid { display: grid; gap: 1rem; margin-top: 1rem; }
 .section-card { padding: 1rem; }
+.access-card { max-width: 100%; }
 
 .section-kicker {
   display: block;
@@ -316,6 +317,46 @@ button,
   border-radius: 12px;
   background: var(--surface-2);
   border: 1px solid var(--line);
+}
+.history-rich {
+  margin-top: 0.75rem;
+  padding: 0.85rem;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  line-height: 1.55;
+}
+.history-rich code,
+.formatted-preview code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 0.05rem 0.32rem;
+  border-radius: 6px;
+  background: #e9edf6;
+}
+.history-rich a,
+.formatted-preview a { color: var(--accent); }
+
+.text-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.toolbar-button {
+  min-height: 34px;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.86rem;
+}
+
+.formatted-preview {
+  margin-top: 0.7rem;
+  padding: 0.8rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+  min-height: 3rem;
+  line-height: 1.5;
 }
 
 .source-details { border-top: 1px solid var(--line); padding-top: 0.75rem; }
@@ -433,6 +474,7 @@ button,
 @media (min-width: 760px) {
   .dashboard-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
+  .access-card,
   .reader-card,
   .files-card { grid-column: 1 / -1; }
 

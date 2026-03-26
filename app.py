@@ -2,6 +2,7 @@ import ipaddress
 import json
 import mimetypes
 import os
+import re
 import secrets
 import socket
 import subprocess
@@ -26,6 +27,7 @@ from flask import (
     session,
     url_for,
 )
+from markupsafe import Markup
 from werkzeug.exceptions import Forbidden, NotFound, RequestEntityTooLarge
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
@@ -155,6 +157,22 @@ def summarize_text(text: str, limit: int = 180) -> str:
     if len(collapsed) <= limit:
         return collapsed
     return collapsed[: limit - 1].rstrip() + "…"
+
+
+def render_basic_text_markup(value: str) -> Markup:
+    escaped = (
+        value.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#39;")
+    )
+    escaped = re.sub(r"`([^`\n]+)`", r"<code>\1</code>", escaped)
+    escaped = re.sub(r"\*\*([^\n*][^*\n]*?)\*\*", r"<strong>\1</strong>", escaped)
+    escaped = re.sub(r"(?<!\*)\*([^\n*][^*\n]*?)\*(?!\*)", r"<em>\1</em>", escaped)
+    escaped = re.sub(r"(https?://[^\s<]+)", r'<a href="\1" target="_blank" rel="noopener noreferrer">\1</a>', escaped)
+    escaped = escaped.replace("\n", "<br>")
+    return Markup(escaped)
 
 
 def get_or_create_csrf_token() -> str:
@@ -1180,6 +1198,7 @@ def utility_processor():
         "human_size": human_size,
         "csrf_token": get_or_create_csrf_token(),
         "format_timestamp": format_timestamp,
+        "render_basic_text_markup": render_basic_text_markup,
     }
 
 

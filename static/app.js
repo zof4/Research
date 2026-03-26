@@ -1,5 +1,73 @@
 (function () {
   const shellSelectors = [".site-header", "main.page"];
+  const escapeHtml = (value) =>
+    value
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+
+  const renderRichText = (value) => {
+    let html = escapeHtml(value || "");
+    html = html.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+    html = html.replace(/\*\*([^\n*][^*\n]*?)\*\*/g, "<strong>$1</strong>");
+    html = html.replace(/(?<!\*)\*([^\n*][^*\n]*?)\*(?!\*)/g, "<em>$1</em>");
+    html = html.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+    return html.replaceAll("\n", "<br>");
+  };
+
+  const initTextFormatting = () => {
+    const forms = document.querySelectorAll(".text-editor-form");
+    forms.forEach((form) => {
+      const textarea = form.querySelector("textarea[name='content']");
+      const preview = form.querySelector("[data-text-preview]");
+      if (!(textarea instanceof HTMLTextAreaElement)) {
+        return;
+      }
+
+      const updatePreview = () => {
+        if (preview) {
+          preview.innerHTML = renderRichText(textarea.value.trim() ? textarea.value : "Start typing to preview formatting.");
+        }
+      };
+
+      if (!textarea.dataset.richInit) {
+        textarea.dataset.richInit = "1";
+        textarea.addEventListener("input", updatePreview);
+      }
+
+      form.querySelectorAll("[data-wrap], [data-prefix]").forEach((button) => {
+        if (!(button instanceof HTMLButtonElement) || button.dataset.richInit) {
+          return;
+        }
+        button.dataset.richInit = "1";
+        button.addEventListener("click", () => {
+          const start = textarea.selectionStart || 0;
+          const end = textarea.selectionEnd || 0;
+          const selected = textarea.value.slice(start, end);
+          const wrap = button.dataset.wrap;
+          const prefix = button.dataset.prefix;
+          let nextText = selected;
+          if (wrap) {
+            nextText = `${wrap}${selected || "text"}${wrap}`;
+          } else if (prefix) {
+            nextText = selected
+              ? selected
+                  .split("\n")
+                  .map((line) => `${prefix}${line}`)
+                  .join("\n")
+              : `${prefix}item`;
+          }
+          textarea.setRangeText(nextText, start, end, "end");
+          textarea.focus();
+          updatePreview();
+        });
+      });
+
+      updatePreview();
+    });
+  };
 
   const hasDashboardShell = (doc) => shellSelectors.every((selector) => doc.querySelector(selector));
 
@@ -16,6 +84,7 @@
     currentHeader.replaceWith(nextHeader);
     currentMain.replaceWith(nextMain);
     document.title = doc.title || document.title;
+    initTextFormatting();
     return true;
   };
 
@@ -131,4 +200,6 @@
   window.addEventListener("popstate", () => {
     window.location.reload();
   });
+
+  initTextFormatting();
 })();
