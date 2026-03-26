@@ -4,6 +4,7 @@ import mimetypes
 import os
 import re
 import secrets
+import shutil
 import socket
 import subprocess
 import tempfile
@@ -43,7 +44,10 @@ LEGACY_READER_DIR = BASE_DIR / "reader_cache"
 def resolve_storage_root() -> Path:
     configured = os.environ.get("QUICKDROP_STORAGE_ROOT", "").strip()
     if not configured:
-        return BASE_DIR / ".dropper_storage"
+        xdg_state_home = os.environ.get("XDG_STATE_HOME", "").strip()
+        if xdg_state_home:
+            return Path(xdg_state_home).expanduser() / "quickdrop"
+        return Path.home() / ".quickdrop_storage"
     candidate = Path(configured).expanduser()
     if not candidate.is_absolute():
         candidate = (BASE_DIR / candidate).resolve()
@@ -426,6 +430,20 @@ def save_users(users: Dict[str, str]) -> None:
     USERS_FILE.write_text(json.dumps(users, indent=2))
 
 
+def copy_missing_tree(source: Path, destination: Path) -> None:
+    if not source.exists():
+        return
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if source.is_file():
+        if not destination.exists():
+            shutil.copy2(source, destination)
+        return
+
+    destination.mkdir(parents=True, exist_ok=True)
+    for child in source.iterdir():
+        copy_missing_tree(child, destination / child.name)
+
+
 def migrate_legacy_storage_once() -> None:
     if USERS_FILE.exists() or any(USERS_DIR.iterdir()):
         return
@@ -454,6 +472,14 @@ def migrate_legacy_storage_once() -> None:
                             nested_target.write_bytes(nested.read_bytes())
                 elif child.is_file():
                     child_target.write_bytes(child.read_bytes())
+
+    previous_storage_root = BASE_DIR / ".dropper_storage"
+    if previous_storage_root.exists():
+        for source_name in ("data", "users"):
+            source = previous_storage_root / source_name
+            if not source.exists() or not source.is_dir():
+                continue
+            copy_missing_tree(source, STORAGE_ROOT / source_name)
 
 
 migrate_legacy_storage_once()

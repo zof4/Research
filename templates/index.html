@@ -24,11 +24,12 @@
         <a class="brand" href="{{ url_for('index') }}" data-async-nav>Dropper</a>
 
         <nav class="top-nav" aria-label="Sections">
-          <a href="{{ url_for('text_page') }}" data-async-nav>Text</a>
-          <a href="{{ url_for('files_page') }}" data-async-nav>Files</a>
-          <a href="{{ url_for('reader_page') }}" data-async-nav>Reader</a>
-          <a href="{{ url_for('latex_page') }}" data-async-nav>LaTeX</a>
-          <a href="{{ url_for('chat_page') }}" data-async-nav>Chat</a>
+          <a href="{{ url_for('access_page') }}" data-async-nav class="{% if active_page == 'access' %}is-active{% endif %}">Access</a>
+          <a href="{{ url_for('text_page') }}" data-async-nav class="{% if active_page in ['home', 'text'] %}is-active{% endif %}">Text</a>
+          <a href="{{ url_for('files_page') }}" data-async-nav class="{% if active_page == 'files' %}is-active{% endif %}">Files</a>
+          <a href="{{ url_for('reader_page') }}" data-async-nav class="{% if active_page == 'reader' %}is-active{% endif %}">Reader</a>
+          <a href="{{ url_for('latex_page') }}" data-async-nav class="{% if active_page == 'latex' %}is-active{% endif %}">LaTeX</a>
+          <a href="{{ url_for('chat_page') }}" data-async-nav class="{% if active_page == 'chat' %}is-active{% endif %}">Chat</a>
         </nav>
       </div>
     </header>
