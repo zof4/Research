@@ -117,27 +117,38 @@ img {
 .top-nav {
   justify-self: end;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  justify-content: center;
-  gap: 0.55rem;
+  justify-content: flex-end;
+  gap: 0.2rem;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 .top-nav a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 2.45rem;
-  min-width: 5.8rem;
-  padding: 0.45rem 0.9rem;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  background: rgba(255, 255, 255, 0.55);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 6px 14px rgba(73, 90, 127, 0.08);
+  min-height: 2rem;
+  min-width: fit-content;
+  padding: 0.35rem 0.65rem 0.45rem;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  box-shadow: none;
+  font-size: 0.92rem;
+  white-space: nowrap;
 }
 .top-nav a:hover {
-  border-color: var(--line-strong);
-  background: var(--surface);
+  border-bottom-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.45);
+}
+.top-nav a.is-active {
+  border-bottom-color: var(--accent);
+  color: #283140;
+  font-weight: 700;
 }
 
 .page {
@@ -713,6 +724,12 @@ button:active {
     justify-self: center;
   }
 
+  .top-nav {
+    justify-content: center;
+    width: 100%;
+    padding-bottom: 0.15rem;
+  }
+
   .topbar-inner {
     grid-template-columns: 1fr;
     justify-items: center;
@@ -742,8 +759,7 @@ button:active {
   }
 
   .top-nav a {
-    min-width: 5.2rem;
-    padding-inline: 0.7rem;
+    padding-inline: 0.5rem;
   }
 }
 

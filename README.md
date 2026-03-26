@@ -204,6 +204,7 @@ curl -I http://127.0.0.1:8003
 - Upload, delete, login, and logout forms use CSRF tokens tied to the Flask session, so cross-site form submission is harder.
 - The app defaults to a **100 MB per-file cap** and a **1 GB per-user storage cap** for non-admin users. Override with `QUICKDROP_MAX_UPLOAD_MB` and `QUICKDROP_MAX_STORAGE_MB`.
 - Upload/delete/text/LaTeX/reader write access uses per-user login sessions that persist for `QUICKDROP_LOGIN_DAYS` days (default `30`).
+- Persistent app data now defaults to `~/.quickdrop_storage` (or `$XDG_STATE_HOME/quickdrop`) so it survives app restarts and repo updates. You can still override the location with `QUICKDROP_STORAGE_ROOT=/path/to/storage`. Existing data in the old `./.dropper_storage` path is automatically migrated when empty.
 - Text history is stored in `data/text_history.json`. Rendered LaTeX PDFs are stored in `latex_outputs/` and indexed in `data/latex_history.json`.
 - LaTeX rendering calls `pdflatex` (or whatever `QUICKDROP_PDFLATEX_BIN` points to), so the server needs a TeX installation for that feature.
 - When a filename already exists, QuickDrop now keeps the old file and stores the new upload with a numbered suffix instead of overwriting it.
