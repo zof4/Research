@@ -718,6 +718,10 @@ button:active {
     justify-items: center;
     text-align: center;
   }
+
+  body.non-admin-user .account-chip {
+    display: none;
+  }
 }
 
 @media (max-width: 640px) {
