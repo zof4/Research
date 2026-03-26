@@ -380,6 +380,16 @@
   const hasDashboardShell = (doc) =>
     shellSelectors.every((selector) => doc.querySelector(selector));
 
+  const initHeaderCollapse = () => {
+    if (window.matchMedia("(max-width: 900px)").matches === false) {
+      document.body.classList.remove("header-collapsed");
+      return;
+    }
+
+    const shouldCollapse = window.scrollY > 36;
+    document.body.classList.toggle("header-collapsed", shouldCollapse);
+  };
+
   const replaceDashboardShell = (doc) => {
     const nextHeader = doc.querySelector(".site-header");
     const nextMain = doc.querySelector("main.page");
@@ -394,6 +404,7 @@
     currentMain.replaceWith(nextMain);
     document.title = doc.title || document.title;
     initTextFormatting();
+    initHeaderCollapse();
     return true;
   };
 
@@ -510,5 +521,8 @@
     window.location.reload();
   });
 
+  window.addEventListener("scroll", initHeaderCollapse, { passive: true });
+  window.addEventListener("resize", initHeaderCollapse);
   initTextFormatting();
+  initHeaderCollapse();
 })();

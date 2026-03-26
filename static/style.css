@@ -471,6 +471,10 @@ button:active {
   gap: 0.9rem;
   margin-top: 1rem;
 }
+.section-items {
+  width: min(920px, 100%);
+  margin-inline: auto;
+}
 .item-card {
   display: grid;
   gap: 0.9rem;
@@ -701,10 +705,16 @@ button:active {
 }
 
 @media (max-width: 900px) {
+  .site-header {
+    transition: transform 0.2s ease, opacity 0.2s ease;
+  }
+
   .site-header-inner {
     grid-template-columns: 1fr;
     justify-items: center;
     text-align: center;
+    min-height: 54px;
+    padding: 0.45rem 0;
   }
 
   .account-chip,
@@ -718,6 +728,37 @@ button:active {
     justify-items: center;
     text-align: center;
   }
+
+  .brand {
+    font-size: 0.92rem;
+  }
+
+  .top-nav {
+    width: 100%;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    gap: 0.4rem;
+    padding-bottom: 0.1rem;
+    scrollbar-width: thin;
+  }
+  .top-nav a {
+    min-height: 2rem;
+    min-width: 4.6rem;
+    padding: 0.33rem 0.72rem;
+    font-size: 0.95rem;
+    flex: 0 0 auto;
+  }
+
+  body.header-collapsed .site-header {
+    transform: translateY(-100%);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  body.non-admin-user .account-chip {
+    display: none;
+  }
 }
 
 @media (max-width: 640px) {
@@ -726,7 +767,7 @@ button:active {
   }
 
   .container {
-    width: min(var(--content-width), calc(100% - 1rem));
+    width: min(var(--content-width), calc(100% - 0.5rem));
   }
 
   .section-card,
@@ -744,5 +785,23 @@ button:active {
   .top-nav a {
     min-width: 5.2rem;
     padding-inline: 0.7rem;
+  }
+
+  #text.section-card {
+    padding: 0.75rem 0.45rem;
+  }
+
+  #text .section-items {
+    width: 100%;
+    margin-top: 0.75rem;
+  }
+
+  #text .item-card {
+    padding: 0.85rem 0.6rem;
+    border-radius: 14px;
+  }
+
+  #text .history-rich {
+    padding: 0.8rem 0.7rem;
   }
 }
