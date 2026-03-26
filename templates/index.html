@@ -9,23 +9,26 @@
   <body>
     <header class="site-header">
       <div class="container site-header-inner">
+        {% if is_authenticated %}
+        <a class="account-chip" href="{{ url_for('access_page') }}" data-async-nav aria-label="Open account panel">
+          <span class="dot" aria-hidden="true"></span>
+          {% if is_admin %}Admin{% else %}{{ current_username }}{% endif %} · {{ login_days }}d
+        </a>
+        {% else %}
+        <span class="account-chip muted" aria-label="Read only">
+          <span class="dot" aria-hidden="true"></span>
+          Read only
+        </span>
+        {% endif %}
+
         <a class="brand" href="{{ url_for('index') }}" data-async-nav>Dropper</a>
 
         <nav class="top-nav" aria-label="Sections">
-          <a href="{{ url_for('access_page') }}" data-async-nav>Access</a>
           <a href="{{ url_for('files_page') }}" data-async-nav>Files</a>
           <a href="{{ url_for('reader_page') }}" data-async-nav>Reader</a>
           <a href="{{ url_for('text_page') }}" data-async-nav>Text</a>
           <a href="{{ url_for('latex_page') }}" data-async-nav>LaTeX</a>
         </nav>
-
-        {% if is_authenticated %}
-        <span class="status-chip">
-          {% if is_admin %}Admin{% else %}{{ current_username }}{% endif %} · {{ login_days }}d
-        </span>
-        {% else %}
-        <span class="status-chip muted">Read only</span>
-        {% endif %}
       </div>
     </header>
 
@@ -41,45 +44,26 @@
       {% endwith %}
 
       {% if is_authenticated %}
-      <section class="card intro-card">
+      <section class="intro-card" aria-label="Workspace summary">
         <div class="intro-copy">
           <h1>Hello, {{ current_username }}</h1>
-          <p>Files, text, reader, PDF.</p>
+          <p>Clean workspace overview.</p>
         </div>
 
-        <div class="stats-grid">
-          <div class="stat-box">
-            <span class="stat-label">Used</span>
-            <strong>{{ human_size(storage.total_bytes) }}</strong>
+        <div class="stats-grid" aria-hidden="true">
+          <div class="storage-meter">
+            <span style="width: {{ '%.2f'|format(storage.usage_percent) }}%"></span>
           </div>
-          <div class="stat-box">
-            <span class="stat-label">Free</span>
-            <strong>{% if storage.has_limit %}{{ human_size(storage.remaining_bytes) }}{% else %}Unlimited{% endif %}</strong>
-          </div>
-          <div class="stat-box">
-            <span class="stat-label">Files</span>
-            <strong>{{ files|length }}</strong>
-          </div>
-          <div class="stat-box">
-            <span class="stat-label">Per file</span>
-            <strong>{{ human_size(storage.max_upload_bytes) }}</strong>
+          <div class="mini-metrics">
+            <span class="metric-pill">◔ {{ files|length }}</span>
+            <span class="metric-pill">◌ {% if storage.has_limit %}{{ human_size(storage.remaining_bytes) }}{% else %}∞{% endif %}</span>
+            <span class="metric-pill">⚠ {{ storage.usage_percent|round(0, 'floor')|int }}%</span>
           </div>
         </div>
-        {% if is_admin %}
-        <form method="get" action="{{ url_for(active_page ~ '_page') if active_page != 'home' else url_for('index') }}" class="stack-form owner-picker" data-async>
-          <label for="owner-select" class="section-kicker">Working in user space</label>
-          <select id="owner-select" name="owner">
-            {% for username in manageable_users %}
-            <option value="{{ username }}" {% if username == selected_owner %}selected{% endif %}>{{ username }}</option>
-            {% endfor %}
-          </select>
-          <button type="submit" class="secondary-button">Switch</button>
-        </form>
-        {% endif %}
       </section>
 
       <div class="dashboard-grid">
-        {% if active_page in ['home', 'access'] %}
+        {% if active_page == 'access' %}
         <section class="card section-card access-card">
           <div class="section-head">
             <div>
@@ -96,6 +80,15 @@
             </form>
 
             {% if is_admin %}
+            <form method="get" action="{{ url_for(active_page ~ '_page') if active_page != 'home' else url_for('index') }}" class="stack-form owner-picker" data-async>
+              <label for="owner-select" class="section-kicker">Working in user space</label>
+              <select id="owner-select" name="owner">
+                {% for username in manageable_users %}
+                <option value="{{ username }}" {% if username == selected_owner %}selected{% endif %}>{{ username }}</option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="secondary-button">Switch</button>
+            </form>
             <div class="admin-user-tools">
               <p class="helper-text">Admin controls for user logins.</p>
               <form method="post" action="{{ url_for('admin_create_user') }}" class="stack-form" data-async>
