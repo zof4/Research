@@ -29,6 +29,8 @@
     const htmlParts = [];
     let inUl = false;
     let inOl = false;
+    let inCodeBlock = false;
+    const codeLines = [];
     const closeLists = () => {
       if (inUl) {
         htmlParts.push("</ul>");
@@ -40,8 +42,33 @@
       }
     };
 
+    const flushCodeBlock = () => {
+      if (!inCodeBlock) {
+        return;
+      }
+      htmlParts.push(`<pre class="md-code-block"><code>${codeLines.join("\n")}</code></pre>`);
+      inCodeBlock = false;
+      codeLines.length = 0;
+    };
+
     lines.forEach((line) => {
       const stripped = line.trim();
+      if (stripped.startsWith("```")) {
+        closeLists();
+        if (inCodeBlock) {
+          flushCodeBlock();
+        } else {
+          inCodeBlock = true;
+          codeLines.length = 0;
+        }
+        return;
+      }
+
+      if (inCodeBlock) {
+        codeLines.push(escapeHtml(line));
+        return;
+      }
+
       if (!stripped) {
         closeLists();
         htmlParts.push("<br>");
@@ -110,6 +137,7 @@
     });
 
     closeLists();
+    flushCodeBlock();
     return htmlParts.join("");
   };
 
@@ -136,6 +164,11 @@
           return `*${content}*`;
         case "CODE":
           return `\`${content}\``;
+        case "PRE": {
+          const rawCode = node.textContent || "";
+          const normalizedCode = rawCode.replace(/\n+$/, "");
+          return `\n\`\`\`\n${normalizedCode}\n\`\`\`\n`;
+        }
         case "BR":
           return "\n";
         case "LI":

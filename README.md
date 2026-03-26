@@ -26,6 +26,29 @@ PORT=8003 python app.py
 ```
 Then open `http://YOUR_SERVER_IP:8003`.
 
+## Docker Compose troubleshooting (service names and ports)
+
+If you get `no such service: platform-caddy`, your compose command is targeting a service name that is not defined in your current compose file.
+
+Use:
+```bash
+docker compose config --services
+docker compose ps
+```
+
+Then rebuild/restart the actual app service from that list:
+```bash
+docker compose build <actual-app-service>
+docker compose up -d <actual-app-service>
+docker compose logs --tail=200 -f <actual-app-service>
+```
+
+QuickDrop itself listens on port `8003` by default (not `3003`), so validate the app first:
+```bash
+ss -ltnp | grep ':8003'
+curl -i 127.0.0.1:8003
+```
+
 ## Exact SSH deployment steps for Oracle Linux on port 8003
 
 > Replace placeholders before running:

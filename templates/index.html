@@ -160,10 +160,10 @@
             {% if text_groups %}
               {% for group in text_groups %}
               <article class="item-card user-group-card">
-                <h3>{{ group.owner }} <span class="item-meta">({{ group.items|length }} items)</span></h3>
-                {% if group.items %}
+                <h3>{{ group.owner }} <span class="item-meta">({{ group['items']|length }} items)</span></h3>
+                {% if group['items'] %}
                 <div class="item-stack">
-                  {% for item in group.items %}
+                  {% for item in group['items'] %}
               <article class="item-card">
                 <div class="item-head">
                   {% if is_authenticated %}
@@ -364,10 +364,10 @@
             {% if reader_groups %}
               {% for group in reader_groups %}
               <article class="item-card user-group-card">
-                <h3>{{ group.owner }} <span class="item-meta">({{ group.items|length }} items)</span></h3>
-                {% if group.items %}
+                <h3>{{ group.owner }} <span class="item-meta">({{ group['items']|length }} items)</span></h3>
+                {% if group['items'] %}
                 <div class="item-stack">
-                  {% for item in group.items %}
+                  {% for item in group['items'] %}
               <article class="item-card">
                 <div class="item-head">
                   <div>
@@ -483,10 +483,10 @@
             {% if latex_groups %}
               {% for group in latex_groups %}
               <article class="item-card user-group-card">
-                <h3>{{ group.owner }} <span class="item-meta">({{ group.items|length }} items)</span></h3>
-                {% if group.items %}
+                <h3>{{ group.owner }} <span class="item-meta">({{ group['items']|length }} items)</span></h3>
+                {% if group['items'] %}
                 <div class="item-stack">
-                  {% for item in group.items %}
+                  {% for item in group['items'] %}
               <article class="item-card">
                 <div class="item-head">
                   <div>
