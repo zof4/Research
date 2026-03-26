@@ -3,8 +3,9 @@
 A tiny Flask web app for quickly sharing photos/files between devices.
 
 ## Features
-- Password-protected write access saved in a long-lived browser session.
-- Public file downloads from `/files/<filename>` without logging in.
+- User accounts (username + password) with isolated per-user storage/workspaces.
+- Built-in admin account: username `admin`, password `dropper`.
+- Non-admin accounts get a 1 GB storage limit each by default.
 - A text transfer area with visible history for quick copy/paste on another device.
 - A LaTeX rendering area that saves PDFs for download from `/latex/<filename>`.
 - A reader tool with both cached and live views for remote webpages, including Reddit-aware JSON parsing and a proxy fallback mode for 403-heavy sites.
@@ -18,9 +19,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 export QUICKDROP_SECRET_KEY=change-me
-export QUICKDROP_PASSWORD=change-this-write-password
 export QUICKDROP_MAX_UPLOAD_MB=100
-export QUICKDROP_MAX_STORAGE_MB=2048
+export QUICKDROP_MAX_STORAGE_MB=1024
 export QUICKDROP_PDFLATEX_BIN=pdflatex
 PORT=8003 python app.py
 ```
@@ -65,10 +65,9 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 5) Set a strong app secret, choose a shared upload password, and quick test on 8003
+### 5) Set a strong app secret and quick test on 8003
 ```bash
 export QUICKDROP_SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
-export QUICKDROP_PASSWORD='choose-a-shared-upload-password'
 PORT=8003 python app.py
 ```
 - Verify from another terminal: `curl -I http://YOUR_SERVER_IP:8003`
@@ -89,7 +88,6 @@ WorkingDirectory=/home/YOUR_USER/quickdrop
 Environment="PATH=/home/YOUR_USER/quickdrop/.venv/bin"
 Environment="PORT=8003"
 Environment="QUICKDROP_SECRET_KEY=CHANGE_ME_TO_A_LONG_RANDOM_VALUE"
-Environment="QUICKDROP_PASSWORD=CHANGE_ME_TO_A_SHARED_WRITE_PASSWORD"
 Environment="QUICKDROP_PDFLATEX_BIN=pdflatex"
 ExecStart=/home/YOUR_USER/quickdrop/.venv/bin/python /home/YOUR_USER/quickdrop/app.py
 Restart=always
@@ -100,7 +98,7 @@ WantedBy=multi-user.target
 EOF
 ```
 
-Now set a real secret in that service file and replace `CHANGE_ME_TO_A_SHARED_WRITE_PASSWORD` with your own shared write password:
+Now set a real secret in that service file:
 ```bash
 sudo sed -i "s#CHANGE_ME_TO_A_LONG_RANDOM_VALUE#$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')#" /etc/systemd/system/quickdrop.service
 ```
@@ -162,7 +160,6 @@ WorkingDirectory=/home/YOUR_USER/quickdrop
 Environment="PATH=/home/YOUR_USER/quickdrop/.venv/bin"
 Environment="PORT=8003"
 Environment="QUICKDROP_SECRET_KEY=CHANGE_ME_TO_A_LONG_RANDOM_VALUE"
-Environment="QUICKDROP_PASSWORD=CHANGE_ME_TO_A_SHARED_WRITE_PASSWORD"
 Environment="QUICKDROP_PDFLATEX_BIN=pdflatex"
 ExecStart=/home/YOUR_USER/quickdrop/.venv/bin/python /home/YOUR_USER/quickdrop/app.py
 Restart=always
@@ -182,13 +179,13 @@ curl -I http://127.0.0.1:8003
 ## Notes
 - Uploaded files are stored in `uploads/`.
 - Upload, delete, login, and logout forms use CSRF tokens tied to the Flask session, so cross-site form submission is harder.
-- The app defaults to a **100 MB per-file cap** and a **2 GB total storage cap**. Override them with `QUICKDROP_MAX_UPLOAD_MB` and `QUICKDROP_MAX_STORAGE_MB` in your shell or `systemd` unit.
-- Upload/delete/text/LaTeX write access now uses a shared password from `QUICKDROP_PASSWORD` and stores the signed login session in the browser for `QUICKDROP_LOGIN_DAYS` days (default `30`).
+- The app defaults to a **100 MB per-file cap** and a **1 GB per-user storage cap** for non-admin users. Override with `QUICKDROP_MAX_UPLOAD_MB` and `QUICKDROP_MAX_STORAGE_MB`.
+- Upload/delete/text/LaTeX/reader write access uses per-user login sessions that persist for `QUICKDROP_LOGIN_DAYS` days (default `30`).
 - Text history is stored in `data/text_history.json`. Rendered LaTeX PDFs are stored in `latex_outputs/` and indexed in `data/latex_history.json`.
 - LaTeX rendering calls `pdflatex` (or whatever `QUICKDROP_PDFLATEX_BIN` points to), so the server needs a TeX installation for that feature.
 - When a filename already exists, QuickDrop now keeps the old file and stores the new upload with a numbered suffix instead of overwriting it.
 - Files that are not obviously safe to render inline are now sent as downloads to reduce browser-side script surprises from uploaded HTML/SVG-like content.
-- This is intentionally simple and now protects upload/delete with one shared password stored in a signed browser session, but downloads are still public. Do not expose it broadly without access controls such as a VPN, reverse-proxy auth, or firewall restrictions.
+- This is intentionally simple and now uses per-user accounts in signed browser sessions; downloads are still limited to authenticated users. Do not expose it broadly without access controls such as a VPN, reverse-proxy auth, or firewall restrictions.
 - Set `QUICKDROP_SECRET_KEY` in production so Flask sessions survive restarts and keep their CSRF protection stable.
 
 ## Security answer: can someone brick the server by uploading junk?
@@ -210,4 +207,4 @@ For a small personal transfer box, a practical setup is: set `QUICKDROP_MAX_STOR
 
 ## Password answer
 
-The app does **not** contain a built-in password in the repo. The login password is whatever you set in the `QUICKDROP_PASSWORD` environment variable on the server. If you have not set it yet, there is no password to tell you from the codebase.
+The app now has a built-in admin login (`admin` / `dropper`). Other users are created the first time they log in with a new username/password pair.

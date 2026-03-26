@@ -20,7 +20,9 @@
         </nav>
 
         {% if is_authenticated %}
-        <span class="status-chip">Trusted {{ login_days }}d</span>
+        <span class="status-chip">
+          {% if is_admin %}Admin{% else %}{{ current_username }}{% endif %} · {{ login_days }}d
+        </span>
         {% else %}
         <span class="status-chip muted">Read only</span>
         {% endif %}
@@ -51,7 +53,7 @@
           </div>
           <div class="stat-box">
             <span class="stat-label">Free</span>
-            <strong>{{ human_size(storage.remaining_bytes) }}</strong>
+            <strong>{% if storage.has_limit %}{{ human_size(storage.remaining_bytes) }}{% else %}Unlimited{% endif %}</strong>
           </div>
           <div class="stat-box">
             <span class="stat-label">Files</span>
@@ -74,24 +76,21 @@
             </div>
           </div>
 
-          {% if login_configured %}
             {% if is_authenticated %}
-            <p class="helper-text">Logged in on this device.</p>
+            <p class="helper-text">Logged in as <strong>{{ current_username }}</strong>.</p>
             <form method="post" action="{{ url_for('logout') }}" class="stack-form">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
               <button type="submit" class="secondary-button block-button">Log out</button>
             </form>
             {% else %}
-            <p class="helper-text">Login unlocks upload, save, cache, and render.</p>
+            <p class="helper-text">Sign in or create a user. Admin is <code>admin</code>/<code>dropper</code>.</p>
             <form method="post" action="{{ url_for('login') }}" class="stack-form">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-              <input type="password" name="password" placeholder="Shared password" autocomplete="current-password" required />
+              <input type="text" name="username" placeholder="Username" autocomplete="username" required />
+              <input type="password" name="password" placeholder="Password" autocomplete="current-password" required />
               <button type="submit" class="block-button">Log in</button>
             </form>
             {% endif %}
-          {% else %}
-          <p class="helper-text">Set <code>QUICKDROP_PASSWORD</code> on the server.</p>
-          {% endif %}
         </section>
         {% endif %}
 
@@ -209,7 +208,7 @@
               <p class="section-kicker">Files</p>
               <h2>Files</h2>
             </div>
-            <p class="section-note">{{ human_size(storage.remaining_bytes) }} free</p>
+            <p class="section-note">{% if storage.has_limit %}{{ human_size(storage.remaining_bytes) }} free{% else %}Admin view{% endif %}</p>
           </div>
 
           {% if is_authenticated %}
@@ -232,18 +231,30 @@
               <article class="item-card row-card">
                 <div class="row-main">
                   <h3>
-                    <a class="text-link" href="{{ url_for('download_file', filename=file.name) }}" target="_blank" rel="noopener noreferrer">
+                    <a class="text-link" href="{{ url_for('download_file', filename=file.name, owner=file.owner) }}" target="_blank" rel="noopener noreferrer">
                       {{ file.name }}
                     </a>
+                    {% if file.hidden %}<span class="item-badge">Hidden</span>{% endif %}
                   </h3>
-                  <p class="item-meta">{{ human_size(file.size) }} • {{ file.modified.strftime('%Y-%m-%d %H:%M') }}</p>
+                  <p class="item-meta">{{ human_size(file.size) }} • {{ file.modified.strftime('%Y-%m-%d %H:%M') }}{% if is_admin %} • {{ file.owner }}{% endif %}</p>
                 </div>
 
                 {% if is_authenticated %}
-                <form method="post" action="{{ url_for('delete_file', filename=file.name) }}" class="inline-form">
+                <form method="post" action="{{ url_for('delete_file', filename=file.name, owner=file.owner) }}" class="inline-form">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
                   <button type="submit" class="delete-button">Delete</button>
                 </form>
+                {% if file.hidden %}
+                <form method="post" action="{{ url_for('unhide_file', filename=file.name, owner=file.owner) }}" class="inline-form">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                  <button type="submit" class="secondary-button">Unhide</button>
+                </form>
+                {% else %}
+                <form method="post" action="{{ url_for('hide_file', filename=file.name, owner=file.owner) }}" class="inline-form">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                  <button type="submit" class="secondary-button">Hide</button>
+                </form>
+                {% endif %}
                 {% endif %}
               </article>
               {% endfor %}
