@@ -29,7 +29,7 @@
       </div>
     </header>
 
-    <main class="container page">
+    <main class="container page {% if not is_authenticated %}login-page{% endif %}">
       {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
       <div class="flash-stack">
@@ -40,9 +40,10 @@
       {% endif %}
       {% endwith %}
 
+      {% if is_authenticated %}
       <section class="card intro-card">
         <div class="intro-copy">
-          <h1>Dropper</h1>
+          <h1>Hello, {{ current_username }}</h1>
           <p>Files, text, reader, PDF.</p>
         </div>
 
@@ -87,22 +88,12 @@
             </div>
           </div>
 
-            {% if is_authenticated %}
             <p class="helper-text">Logged in as <strong>{{ current_username }}</strong>.</p>
             <form method="post" action="{{ url_for('logout') }}" class="stack-form" data-async>
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
               {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
               <button type="submit" class="secondary-button block-button">Log out</button>
             </form>
-            {% else %}
-            <p class="helper-text">Sign in with your account. Admin credentials are no longer displayed on this screen.</p>
-            <form method="post" action="{{ url_for('login') }}" class="stack-form adaptive-auth-form" data-async>
-              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-              <input type="text" name="username" placeholder="Username" autocomplete="username" required />
-              <input type="password" name="password" placeholder="Password" autocomplete="current-password" required />
-              <button type="submit" class="block-button">Log in</button>
-            </form>
-            {% endif %}
 
             {% if is_admin %}
             <div class="admin-user-tools">
@@ -498,6 +489,17 @@
         </section>
         {% endif %}
       </div>
+      {% else %}
+      <section class="card login-card">
+        <h1>Login</h1>
+        <form method="post" action="{{ url_for('login') }}" class="stack-form" data-async>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+          <input type="text" name="username" placeholder="Username" autocomplete="username" required />
+          <input type="password" name="password" placeholder="Password" autocomplete="current-password" required />
+          <button type="submit" class="block-button">Login</button>
+        </form>
+      </section>
+      {% endif %}
     </main>
       <script src="{{ url_for('static', filename='app.js') }}" defer></script>
   </body>
