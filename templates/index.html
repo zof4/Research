@@ -102,6 +102,12 @@
               <p class="section-kicker">Reader</p>
               <h2>Reader cache</h2>
             </div>
+            {% if is_authenticated and reader_history %}
+            <form method="post" action="{{ url_for('clear_reader_entries') }}" class="inline-form section-head-action">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+              <button type="submit" class="delete-button">Clear all</button>
+            </form>
+            {% endif %}
           </div>
 
           {% if is_authenticated %}
@@ -136,34 +142,55 @@
               <article class="item-card">
                 <div class="item-head">
                   <div>
-                    <h3>{{ item.title }}</h3>
+                    {% if is_authenticated %}
+                    <h3>{{ item.title }}{% if item.hidden %} <span class="item-badge">Hidden</span>{% endif %}</h3>
+                    {% else %}
+                    <h3>Locked reader item</h3>
+                    {% endif %}
                     <p class="item-meta">
+                      {% if is_authenticated %}
                       {{ item.source_label }}
                       {% if item.author %} • {{ item.author }}{% endif %}
                       {% if item.word_count %} • {{ item.word_count }} words{% endif %}
                       {% if item.reader_mode_used %} • {{ item.reader_mode_used|upper }}{% endif %}
+                      {% else %}
+                      Sign in to read this cached page.
+                      {% endif %}
                       • Updated {{ format_timestamp(item.updated) }}
                     </p>
                   </div>
                 </div>
 
-                {% if item.summary %}
+                {% if is_authenticated and item.summary %}
                 <p class="item-summary">{{ item.summary }}</p>
                 {% endif %}
 
                 <div class="action-row">
+                  {% if is_authenticated %}
                   <a class="button-link" href="{{ url_for('view_reader_entry', entry_id=item.id) }}">Open</a>
                   <a class="button-link secondary-button" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Source</a>
-                  {% if is_authenticated %}
                   <form method="post" action="{{ url_for('refresh_reader_entry', entry_id=item.id) }}" class="inline-form">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
                     <input type="hidden" name="reader_mode" value="{{ item.reader_mode_used or 'auto' }}" />
                     <button type="submit" class="secondary-button">Refresh</button>
                   </form>
+                  {% if item.hidden %}
+                  <form method="post" action="{{ url_for('unhide_reader_entry', entry_id=item.id) }}" class="inline-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <button type="submit" class="secondary-button">Unhide</button>
+                  </form>
+                  {% else %}
+                  <form method="post" action="{{ url_for('hide_reader_entry', entry_id=item.id) }}" class="inline-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <button type="submit" class="secondary-button">Hide</button>
+                  </form>
+                  {% endif %}
                   <form method="post" action="{{ url_for('delete_reader_entry', entry_id=item.id) }}" class="inline-form">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
                     <button type="submit" class="delete-button">Delete</button>
                   </form>
+                  {% else %}
+                  <span class="helper-text">Locked while logged out.</span>
                   {% endif %}
                 </div>
               </article>
@@ -234,6 +261,12 @@
               <p class="section-kicker">Text</p>
               <h2>Text</h2>
             </div>
+            {% if is_authenticated and text_history %}
+            <form method="post" action="{{ url_for('clear_text_entries') }}" class="inline-form section-head-action">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+              <button type="submit" class="delete-button">Clear all</button>
+            </form>
+            {% endif %}
           </div>
 
           {% if is_authenticated %}
@@ -252,10 +285,37 @@
               {% for item in text_history %}
               <article class="item-card">
                 <div class="item-head">
-                  <h3>{{ item.title }}</h3>
+                  {% if is_authenticated %}
+                  <h3>{{ item.title }}{% if item.hidden %} <span class="item-badge">Hidden</span>{% endif %}</h3>
+                  {% else %}
+                  <h3>Locked text item</h3>
+                  {% endif %}
                   <p class="item-meta">{{ format_timestamp(item.created) }}</p>
                 </div>
+                {% if is_authenticated %}
                 <pre class="history-pre">{{ item.content }}</pre>
+                {% else %}
+                <p class="helper-text">Sign in to read saved text.</p>
+                {% endif %}
+                {% if is_authenticated %}
+                <div class="action-row">
+                  {% if item.hidden %}
+                  <form method="post" action="{{ url_for('unhide_text_entry', entry_id=item.id) }}" class="inline-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <button type="submit" class="secondary-button">Unhide</button>
+                  </form>
+                  {% else %}
+                  <form method="post" action="{{ url_for('hide_text_entry', entry_id=item.id) }}" class="inline-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <button type="submit" class="secondary-button">Hide</button>
+                  </form>
+                  {% endif %}
+                  <form method="post" action="{{ url_for('delete_text_entry', entry_id=item.id) }}" class="inline-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <button type="submit" class="delete-button">Delete</button>
+                  </form>
+                </div>
+                {% endif %}
               </article>
               {% endfor %}
             {% else %}
@@ -272,7 +332,15 @@
               <p class="section-kicker">LaTeX</p>
               <h2>PDF</h2>
             </div>
-            <p class="section-note"><code>{{ pdflatex_bin }}</code></p>
+            <div class="section-head-meta">
+              <p class="section-note"><code>{{ pdflatex_bin }}</code></p>
+              {% if is_authenticated and latex_history %}
+              <form method="post" action="{{ url_for('clear_latex_entries') }}" class="inline-form section-head-action">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <button type="submit" class="delete-button">Clear all</button>
+              </form>
+              {% endif %}
+            </div>
           </div>
 
           {% if is_authenticated %}
@@ -292,17 +360,42 @@
               <article class="item-card">
                 <div class="item-head">
                   <div>
-                    <h3>{{ item.title }}</h3>
+                    {% if is_authenticated %}
+                    <h3>{{ item.title }}{% if item.hidden %} <span class="item-badge">Hidden</span>{% endif %}</h3>
+                    {% else %}
+                    <h3>Locked PDF item</h3>
+                    {% endif %}
                     <p class="item-meta">{{ format_timestamp(item.created) }}</p>
                   </div>
                 </div>
                 <div class="action-row">
+                  {% if is_authenticated %}
                   <a class="button-link" href="{{ url_for('download_latex_pdf', filename=item.pdf_name) }}">Download PDF</a>
+                  {% if item.hidden %}
+                  <form method="post" action="{{ url_for('unhide_latex_entry', entry_id=item.id) }}" class="inline-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <button type="submit" class="secondary-button">Unhide</button>
+                  </form>
+                  {% else %}
+                  <form method="post" action="{{ url_for('hide_latex_entry', entry_id=item.id) }}" class="inline-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <button type="submit" class="secondary-button">Hide</button>
+                  </form>
+                  {% endif %}
+                  <form method="post" action="{{ url_for('delete_latex_entry', entry_id=item.id) }}" class="inline-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <button type="submit" class="delete-button">Delete</button>
+                  </form>
+                  {% else %}
+                  <span class="helper-text">Sign in to download this PDF.</span>
+                  {% endif %}
                 </div>
+                {% if is_authenticated %}
                 <details class="source-details">
                   <summary>Source</summary>
                   <pre class="history-pre">{{ item.source }}</pre>
                 </details>
+                {% endif %}
               </article>
               {% endfor %}
             {% else %}
