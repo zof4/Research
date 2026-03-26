@@ -230,6 +230,21 @@
                     <button type="submit" class="secondary-button">Share</button>
                   </form>
                 </div>
+                {% if item.shared_with %}
+                <div class="share-list">
+                  <p class="helper-text">Shared with:</p>
+                  <div class="share-pill-list">
+                    {% for shared_user in item.shared_with %}
+                    <form method="post" action="{{ url_for('unshare_text_entry', entry_id=item.id) }}" class="inline-form share-pill-form" data-async>
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                      {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
+                      <input type="hidden" name="share_username" value="{{ shared_user }}" />
+                      <button type="submit" class="ghost-button share-pill-button">{{ shared_user }} ✕</button>
+                    </form>
+                    {% endfor %}
+                  </div>
+                </div>
+                {% endif %}
                 {% endif %}
                 {% if item.comments %}
                 <details class="source-details">
@@ -303,6 +318,20 @@
                     <button type="submit" class="secondary-button">Share</button>
                   </form>
                 </div>
+                {% if item.shared_with %}
+                <div class="share-list">
+                  <p class="helper-text">Shared with:</p>
+                  <div class="share-pill-list">
+                    {% for shared_user in item.shared_with %}
+                    <form method="post" action="{{ url_for('unshare_text_entry', entry_id=item.id) }}" class="inline-form share-pill-form" data-async>
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                      <input type="hidden" name="share_username" value="{{ shared_user }}" />
+                      <button type="submit" class="ghost-button share-pill-button">{{ shared_user }} ✕</button>
+                    </form>
+                    {% endfor %}
+                  </div>
+                </div>
+                {% endif %}
                 {% if item.comments %}
                 <details class="source-details">
                   <summary>Comments ({{ item.comments|length }})</summary>
@@ -386,6 +415,20 @@
                       </select>
                       <button type="submit" class="secondary-button">Share</button>
                     </form>
+                    {% if file.shared_with %}
+                    <div class="share-list">
+                      <p class="helper-text">Shared with:</p>
+                      <div class="share-pill-list">
+                        {% for shared_user in file.shared_with %}
+                        <form method="post" action="{{ url_for('unshare_file', filename=file.name, owner=file.owner) }}" class="inline-form share-pill-form" data-async>
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                          <input type="hidden" name="share_username" value="{{ shared_user }}" />
+                          <button type="submit" class="ghost-button share-pill-button">{{ shared_user }} ✕</button>
+                        </form>
+                        {% endfor %}
+                      </div>
+                    </div>
+                    {% endif %}
                   </article>
                   {% endfor %}
                 </div>
@@ -436,6 +479,20 @@
                   </select>
                   <button type="submit" class="secondary-button">Share</button>
                 </form>
+                {% if file.shared_with %}
+                <div class="share-list">
+                  <p class="helper-text">Shared with:</p>
+                  <div class="share-pill-list">
+                    {% for shared_user in file.shared_with %}
+                    <form method="post" action="{{ url_for('unshare_file', filename=file.name, owner=file.owner) }}" class="inline-form share-pill-form" data-async>
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                      <input type="hidden" name="share_username" value="{{ shared_user }}" />
+                      <button type="submit" class="ghost-button share-pill-button">{{ shared_user }} ✕</button>
+                    </form>
+                    {% endfor %}
+                  </div>
+                </div>
+                {% endif %}
                 {% endif %}
               </article>
               {% endfor %}
