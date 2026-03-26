@@ -79,6 +79,8 @@ MAX_LATEX_CHARS = int(os.environ.get("QUICKDROP_MAX_LATEX_CHARS", "12000"))
 MAX_READER_HISTORY_ITEMS = int(os.environ.get("QUICKDROP_MAX_READER_HISTORY", "20"))
 MAX_READER_FETCH_BYTES = int(os.environ.get("QUICKDROP_MAX_READER_FETCH_BYTES", str(2 * 1024 * 1024)))
 READER_FETCH_TIMEOUT = int(os.environ.get("QUICKDROP_READER_FETCH_TIMEOUT", "20"))
+MAX_CHAT_HISTORY_ITEMS = int(os.environ.get("QUICKDROP_MAX_CHAT_HISTORY", "200"))
+MAX_CHAT_MESSAGE_CHARS = int(os.environ.get("QUICKDROP_MAX_CHAT_MESSAGE_CHARS", "500"))
 PDFLATEX_BIN = os.environ.get("QUICKDROP_PDFLATEX_BIN", "pdflatex")
 SAFE_INLINE_MIME_PREFIXES = ("image/", "text/plain")
 SAFE_INLINE_MIME_TYPES = {"application/pdf"}
@@ -392,6 +394,7 @@ def ensure_user_paths(username: str) -> Dict[str, Path]:
         "latex_history_file": data / "latex_history.json",
         "reader_history_file": data / "reader_history.json",
         "hidden_files_file": data / "hidden_files.json",
+        "file_shares_file": data / "file_shares.json",
     }
 
 
@@ -486,6 +489,49 @@ def set_file_hidden(path: Path, filename: str, hidden: bool) -> None:
     save_hidden_files(path, list(hidden_files))
 
 
+def load_file_shares(path: Path) -> Dict[str, List[str]]:
+    if not path.exists():
+        return {}
+    try:
+        loaded = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(loaded, dict):
+        return {}
+    cleaned: Dict[str, List[str]] = {}
+    for filename, shared_with in loaded.items():
+        if not isinstance(filename, str) or not isinstance(shared_with, list):
+            continue
+        users = sorted({normalize_username(str(user)) for user in shared_with if normalize_username(str(user))})
+        cleaned[filename] = users
+    return cleaned
+
+
+def save_file_shares(path: Path, shares: Dict[str, List[str]]) -> None:
+    normalized = {key: sorted(set(value)) for key, value in shares.items()}
+    path.write_text(json.dumps(normalized, indent=2))
+
+
+def set_file_share(path: Path, filename: str, username: str, shared: bool) -> None:
+    shares = load_file_shares(path)
+    shared_with = set(shares.get(filename, []))
+    if shared:
+        shared_with.add(username)
+    else:
+        shared_with.discard(username)
+    if shared_with:
+        shares[filename] = sorted(shared_with)
+    else:
+        shares.pop(filename, None)
+    save_file_shares(path, shares)
+
+
+def clear_file_shares(path: Path, filename: str) -> None:
+    shares = load_file_shares(path)
+    shares.pop(filename, None)
+    save_file_shares(path, shares)
+
+
 def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
@@ -519,6 +565,41 @@ def add_history_item(path: Path, item: Dict, limit: int) -> None:
     items = load_history(path)
     items.insert(0, item)
     save_history(path, items[:limit])
+
+
+def append_history_item_field(path: Path, item_id: str, field: str, value: Dict) -> Optional[Dict]:
+    items = load_history(path)
+    for item in items:
+        if item.get("id") != item_id:
+            continue
+        field_items = item.get(field)
+        if not isinstance(field_items, list):
+            field_items = []
+        field_items.append(value)
+        item[field] = field_items
+        save_history(path, items)
+        return item
+    return None
+
+
+def toggle_history_share(path: Path, item_id: str, username: str, shared: bool) -> Optional[Dict]:
+    items = load_history(path)
+    for item in items:
+        if item.get("id") != item_id:
+            continue
+        shared_with = {
+            normalize_username(str(value))
+            for value in item.get("shared_with", [])
+            if normalize_username(str(value))
+        }
+        if shared:
+            shared_with.add(username)
+        else:
+            shared_with.discard(username)
+        item["shared_with"] = sorted(shared_with)
+        save_history(path, items)
+        return item
+    return None
 
 
 def replace_history_item(path: Path, item: Dict) -> None:
@@ -572,6 +653,10 @@ def find_history_item(path: Path, item_id: str) -> Optional[Dict]:
     return None
 
 
+def get_chat_history_file() -> Path:
+    return DATA_DIR / "live_chat.json"
+
+
 def iter_uploaded_files(directory: Path):
     for path in sorted(directory.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
         if path.is_file() and path.name != ".gitkeep":
@@ -582,13 +667,22 @@ def get_total_storage_bytes(directory: Path) -> int:
     return sum(path.stat().st_size for path in iter_uploaded_files(directory))
 
 
-def get_file_listing(directory: Path, owner: str, hidden_filenames: Optional[set] = None) -> Tuple[List[Dict], int]:
+def get_file_listing(
+    directory: Path,
+    owner: str,
+    hidden_filenames: Optional[set] = None,
+    shared_with_map: Optional[Dict[str, List[str]]] = None,
+    viewer: Optional[str] = None,
+) -> Tuple[List[Dict], int]:
     files = []
     total_bytes = 0
+    shared_with_map = shared_with_map or {}
+    normalized_viewer = normalize_username(viewer or "")
 
     for path in iter_uploaded_files(directory):
         stat = path.stat()
         total_bytes += stat.st_size
+        shared_with = shared_with_map.get(path.name, [])
         files.append(
             {
                 "name": path.name,
@@ -596,6 +690,10 @@ def get_file_listing(directory: Path, owner: str, hidden_filenames: Optional[set
                 "modified": datetime.fromtimestamp(stat.st_mtime),
                 "owner": owner,
                 "hidden": path.name in (hidden_filenames or set()),
+                "shared_with": shared_with,
+                "is_shared_to_viewer": bool(
+                    normalized_viewer and normalized_viewer in shared_with and owner != normalized_viewer
+                ),
             }
         )
 
@@ -1290,10 +1388,13 @@ def build_template_context(active_page: str) -> Dict:
     total_bytes = 0
     selected_owner = username or ""
     manageable_users: List[str] = []
+    available_share_users: List[str] = []
+    chat_history: List[Dict] = []
 
     if authenticated and username:
         if is_admin_user(username):
             manageable_users = managed_usernames()
+            available_share_users = [user for user in manageable_users if user != ADMIN_USERNAME]
             selected_owner = get_target_username_from_request(default=ADMIN_USERNAME)
             ensure_user_paths(ADMIN_USERNAME)
             for user_dir in sorted(USERS_DIR.iterdir()):
@@ -1302,7 +1403,13 @@ def build_template_context(active_page: str) -> Dict:
                 owner = user_dir.name
                 paths = ensure_user_paths(owner)
                 hidden_files = set(load_hidden_files(paths["hidden_files_file"]))
-                user_files, user_total = get_file_listing(paths["uploads_dir"], owner=owner, hidden_filenames=hidden_files)
+                user_file_shares = load_file_shares(paths["file_shares_file"])
+                user_files, user_total = get_file_listing(
+                    paths["uploads_dir"],
+                    owner=owner,
+                    hidden_filenames=hidden_files,
+                    shared_with_map=user_file_shares,
+                )
                 files.extend(user_files)
                 file_groups.append({"owner": owner, "files": user_files, "total_bytes": user_total})
                 text_groups.append({"owner": owner, "items": load_history(paths["text_history_file"])})
@@ -1313,6 +1420,7 @@ def build_template_context(active_page: str) -> Dict:
             text_history = load_history(selected_paths["text_history_file"])
             latex_history = load_history(selected_paths["latex_history_file"])
             reader_history = get_reader_history(selected_paths["reader_history_file"])
+            chat_history = load_history(get_chat_history_file())
             storage = {
                 "total_bytes": total_bytes,
                 "remaining_bytes": 0,
@@ -1323,17 +1431,61 @@ def build_template_context(active_page: str) -> Dict:
             }
         else:
             paths = ensure_user_paths(username)
+            available_share_users = [user for user in managed_usernames() if user != username]
             hidden_files = set(load_hidden_files(paths["hidden_files_file"]))
-            files, total_bytes = get_file_listing(paths["uploads_dir"], owner=username, hidden_filenames=hidden_files)
+            file_shares = load_file_shares(paths["file_shares_file"])
+            files, total_bytes = get_file_listing(
+                paths["uploads_dir"],
+                owner=username,
+                hidden_filenames=hidden_files,
+                shared_with_map=file_shares,
+                viewer=username,
+            )
+            shared_file_groups: List[Dict] = []
+            shared_text_groups: List[Dict] = []
+            for user_dir in sorted(USERS_DIR.iterdir()):
+                if not user_dir.is_dir() or user_dir.name == username:
+                    continue
+                owner = user_dir.name
+                owner_paths = ensure_user_paths(owner)
+                owner_hidden_files = set(load_hidden_files(owner_paths["hidden_files_file"]))
+                owner_file_shares = load_file_shares(owner_paths["file_shares_file"])
+                owner_files, _owner_total = get_file_listing(
+                    owner_paths["uploads_dir"],
+                    owner=owner,
+                    hidden_filenames=owner_hidden_files,
+                    shared_with_map=owner_file_shares,
+                    viewer=username,
+                )
+                visible_shared_files = [item for item in owner_files if item.get("is_shared_to_viewer")]
+                if visible_shared_files:
+                    shared_file_groups.append({"owner": owner, "files": visible_shared_files})
+                    files.extend(visible_shared_files)
+
+                owner_text = load_history(owner_paths["text_history_file"])
+                visible_shared_text = []
+                for item in owner_text:
+                    shared_with = {
+                        normalize_username(str(value))
+                        for value in item.get("shared_with", [])
+                        if normalize_username(str(value))
+                    }
+                    if username in shared_with:
+                        visible_shared_text.append(item)
+                if visible_shared_text:
+                    shared_text_groups.append({"owner": owner, "items": visible_shared_text})
             file_groups = [{"owner": username, "files": files, "total_bytes": total_bytes}]
+            file_groups.extend(shared_file_groups)
             storage = build_storage_summary(total_bytes)
             storage["has_limit"] = True
             text_history = load_history(paths["text_history_file"])
             latex_history = load_history(paths["latex_history_file"])
             reader_history = get_reader_history(paths["reader_history_file"])
             text_groups = [{"owner": username, "items": text_history}]
+            text_groups.extend(shared_text_groups)
             latex_groups = [{"owner": username, "items": latex_history}]
             reader_groups = [{"owner": username, "items": reader_history}]
+            chat_history = load_history(get_chat_history_file())
     else:
         storage = build_storage_summary(0)
         storage["has_limit"] = True
@@ -1359,6 +1511,9 @@ def build_template_context(active_page: str) -> Dict:
         "max_latex_chars": MAX_LATEX_CHARS,
         "pdflatex_bin": PDFLATEX_BIN,
         "active_page": active_page,
+        "available_share_users": available_share_users,
+        "chat_history": chat_history,
+        "max_chat_message_chars": MAX_CHAT_MESSAGE_CHARS,
     }
 
 
@@ -1538,6 +1693,18 @@ def latex_page():
     return render_dashboard_page("latex")
 
 
+@app.get("/chat")
+@login_required
+def chat_page():
+    return render_dashboard_page("chat")
+
+
+@app.get("/chat/messages")
+@login_required
+def chat_messages():
+    return {"messages": load_history(get_chat_history_file())}
+
+
 @app.post("/files/upload")
 @login_required
 def upload_file():
@@ -1601,6 +1768,55 @@ def save_text_entry():
     }
     add_history_item(paths["text_history_file"], item, MAX_TEXT_HISTORY_ITEMS)
     flash(f"Saved text snippet for {target_owner}.", "success")
+    return redirect(url_for("text_page", owner=target_owner))
+
+
+@app.post("/text/share/<entry_id>")
+@login_required
+def share_text_entry(entry_id: str):
+    validate_csrf()
+    paths, target_owner = get_target_user_paths()
+    target_username = normalize_username(request.form.get("share_username", ""))
+    if not target_username:
+        flash("Choose a user to share with.", "error")
+        return redirect(url_for("text_page", owner=target_owner))
+    if target_username == target_owner:
+        flash("This item is already visible to its owner.", "error")
+        return redirect(url_for("text_page", owner=target_owner))
+    if target_username not in managed_usernames():
+        flash("User does not exist.", "error")
+        return redirect(url_for("text_page", owner=target_owner))
+
+    item = toggle_history_share(paths["text_history_file"], entry_id, target_username, shared=True)
+    if item is None:
+        raise NotFound()
+    flash(f"Shared text item with {target_username}.", "success")
+    return redirect(url_for("text_page", owner=target_owner))
+
+
+@app.post("/text/comment/<entry_id>")
+@login_required
+def comment_text_entry(entry_id: str):
+    validate_csrf()
+    paths, target_owner = get_target_user_paths()
+    content = request.form.get("comment", "").strip()
+    if not content:
+        flash("Comment cannot be empty.", "error")
+        return redirect(url_for("text_page", owner=target_owner))
+    if len(content) > 500:
+        flash("Comment is too long (500 chars max).", "error")
+        return redirect(url_for("text_page", owner=target_owner))
+
+    comment = {
+        "id": uuid4().hex,
+        "author": current_username(),
+        "content": content,
+        "created": now_iso(),
+    }
+    item = append_history_item_field(paths["text_history_file"], entry_id, "comments", comment)
+    if item is None:
+        raise NotFound()
+    flash("Comment added.", "success")
     return redirect(url_for("text_page", owner=target_owner))
 
 
@@ -1910,7 +2126,36 @@ def delete_file(filename: str):
 
     target.unlink()
     set_file_hidden(paths["hidden_files_file"], safe_name, False)
+    clear_file_shares(paths["file_shares_file"], safe_name)
     flash(f"Deleted {safe_name}", "success")
+    return redirect(url_for("files_page", owner=target_owner))
+
+
+@app.post("/files/share/<path:filename>")
+@login_required
+def share_file(filename: str):
+    validate_csrf()
+    safe_name = secure_filename(filename)
+    if safe_name != filename:
+        raise NotFound()
+    paths, target_owner = get_target_user_paths()
+    target = paths["uploads_dir"] / safe_name
+    if not target.exists() or not target.is_file():
+        raise NotFound()
+
+    target_username = normalize_username(request.form.get("share_username", ""))
+    if not target_username:
+        flash("Choose a user to share with.", "error")
+        return redirect(url_for("files_page", owner=target_owner))
+    if target_username == target_owner:
+        flash("File is already visible to its owner.", "error")
+        return redirect(url_for("files_page", owner=target_owner))
+    if target_username not in managed_usernames():
+        flash("User does not exist.", "error")
+        return redirect(url_for("files_page", owner=target_owner))
+
+    set_file_share(paths["file_shares_file"], safe_name, target_username, shared=True)
+    flash(f"Shared {safe_name} with {target_username}.", "success")
     return redirect(url_for("files_page", owner=target_owner))
 
 
@@ -1952,13 +2197,36 @@ def download_file(filename: str):
     safe_name = secure_filename(filename)
     if safe_name != filename:
         raise NotFound()
+    username = current_username()
+    if not username:
+        raise Forbidden()
 
-    paths, _target_owner = get_target_user_paths()
-    target = paths["uploads_dir"] / safe_name
-    if not target.exists() or not target.is_file():
-        raise NotFound()
+    requested_owner = normalize_username(request.args.get("owner", ""))
+    candidate_owners: List[str] = []
+    if is_admin_user(username):
+        if requested_owner:
+            candidate_owners = [requested_owner]
+        else:
+            candidate_owners = managed_usernames()
+    else:
+        candidate_owners = [username]
+        if requested_owner and requested_owner != username:
+            candidate_owners.append(requested_owner)
 
-    return send_from_directory(paths["uploads_dir"], safe_name, as_attachment=should_force_download(safe_name))
+    for owner in candidate_owners:
+        if owner not in managed_usernames():
+            continue
+        owner_paths = ensure_user_paths(owner)
+        target = owner_paths["uploads_dir"] / safe_name
+        if not target.exists() or not target.is_file():
+            continue
+        if owner != username and not is_admin_user(username):
+            file_shares = load_file_shares(owner_paths["file_shares_file"])
+            if username not in file_shares.get(safe_name, []):
+                continue
+        return send_from_directory(owner_paths["uploads_dir"], safe_name, as_attachment=should_force_download(safe_name))
+
+    raise NotFound()
 
 
 @app.get("/latex/<path:filename>")
@@ -1974,6 +2242,28 @@ def download_latex_pdf(filename: str):
         raise NotFound()
 
     return send_from_directory(paths["latex_dir"], safe_name, as_attachment=True, mimetype="application/pdf")
+
+
+@app.post("/chat/send")
+@login_required
+def send_chat_message():
+    validate_csrf()
+    content = request.form.get("message", "").strip()
+    if not content:
+        flash("Chat message cannot be empty.", "error")
+        return redirect(url_for("chat_page"))
+    if len(content) > MAX_CHAT_MESSAGE_CHARS:
+        flash(f"Chat message too long ({MAX_CHAT_MESSAGE_CHARS} chars max).", "error")
+        return redirect(url_for("chat_page"))
+
+    message = {
+        "id": uuid4().hex,
+        "author": current_username(),
+        "content": content,
+        "created": now_iso(),
+    }
+    add_history_item(get_chat_history_file(), message, MAX_CHAT_HISTORY_ITEMS)
+    return redirect(url_for("chat_page"))
 
 
 if __name__ == "__main__":
