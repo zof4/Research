@@ -192,6 +192,38 @@ def is_admin_user(username: Optional[str] = None) -> bool:
     return resolved == ADMIN_USERNAME
 
 
+def normalize_username(raw_value: str) -> str:
+    return secure_filename(raw_value.strip().lower())
+
+
+def managed_usernames() -> List[str]:
+    users = set(load_users().keys())
+    for user_dir in USERS_DIR.iterdir():
+        if user_dir.is_dir():
+            users.add(user_dir.name)
+    users.add(ADMIN_USERNAME)
+    return sorted(users)
+
+
+def get_target_username_from_request(default: Optional[str] = None) -> str:
+    if not is_admin_user():
+        username = current_username()
+        if not username:
+            raise Forbidden()
+        return username
+
+    raw_owner = request.form.get("owner")
+    if raw_owner is None:
+        raw_owner = request.args.get("owner")
+    candidate = normalize_username(raw_owner or default or ADMIN_USERNAME)
+    if not candidate:
+        candidate = ADMIN_USERNAME
+
+    if candidate not in managed_usernames():
+        raise NotFound()
+    return candidate
+
+
 def ensure_user_paths(username: str) -> Dict[str, Path]:
     safe_user = secure_filename(username).strip().lower()
     if not safe_user:
@@ -220,6 +252,11 @@ def get_current_user_paths() -> Dict[str, Path]:
     if not username:
         raise Forbidden()
     return ensure_user_paths(username)
+
+
+def get_target_user_paths(default: Optional[str] = None) -> Tuple[Dict[str, Path], str]:
+    username = get_target_username_from_request(default=default)
+    return ensure_user_paths(username), username
 
 
 def load_users() -> Dict[str, str]:
@@ -1058,17 +1095,23 @@ def read_reader_content(filename: str, reader_dir: Path) -> str:
     return path.read_text()
 
 
-def build_template_context() -> Dict:
+def build_template_context(active_page: str) -> Dict:
     authenticated = is_authenticated()
     username = current_username()
     files: List[Dict] = []
+    file_groups: List[Dict] = []
     text_history: List[Dict] = []
     latex_history: List[Dict] = []
     reader_history: List[Dict] = []
     total_bytes = 0
+    selected_owner = username or ""
+    manageable_users: List[str] = []
 
     if authenticated and username:
         if is_admin_user(username):
+            manageable_users = managed_usernames()
+            selected_owner = get_target_username_from_request(default=ADMIN_USERNAME)
+            ensure_user_paths(ADMIN_USERNAME)
             for user_dir in sorted(USERS_DIR.iterdir()):
                 if not user_dir.is_dir():
                     continue
@@ -1077,7 +1120,12 @@ def build_template_context() -> Dict:
                 hidden_files = set(load_hidden_files(paths["hidden_files_file"]))
                 user_files, user_total = get_file_listing(paths["uploads_dir"], owner=owner, hidden_filenames=hidden_files)
                 files.extend(user_files)
+                file_groups.append({"owner": owner, "files": user_files, "total_bytes": user_total})
                 total_bytes += user_total
+            selected_paths = ensure_user_paths(selected_owner)
+            text_history = load_history(selected_paths["text_history_file"])
+            latex_history = load_history(selected_paths["latex_history_file"])
+            reader_history = get_reader_history(selected_paths["reader_history_file"])
             storage = {
                 "total_bytes": total_bytes,
                 "remaining_bytes": 0,
@@ -1090,6 +1138,7 @@ def build_template_context() -> Dict:
             paths = ensure_user_paths(username)
             hidden_files = set(load_hidden_files(paths["hidden_files_file"]))
             files, total_bytes = get_file_listing(paths["uploads_dir"], owner=username, hidden_filenames=hidden_files)
+            file_groups = [{"owner": username, "files": files, "total_bytes": total_bytes}]
             storage = build_storage_summary(total_bytes)
             storage["has_limit"] = True
             text_history = load_history(paths["text_history_file"])
@@ -1101,32 +1150,28 @@ def build_template_context() -> Dict:
 
     return {
         "files": files,
+        "file_groups": file_groups,
         "storage": storage,
         "text_history": text_history,
         "latex_history": latex_history,
         "reader_history": reader_history,
         "is_authenticated": authenticated,
         "current_username": username,
+        "selected_owner": selected_owner,
+        "manageable_users": manageable_users,
         "is_admin": is_admin_user(username),
         "login_configured": True,
         "login_days": LOGIN_DAYS,
         "max_text_chars": MAX_TEXT_CHARS,
         "max_latex_chars": MAX_LATEX_CHARS,
         "pdflatex_bin": PDFLATEX_BIN,
+        "active_page": active_page,
     }
 
 
 def render_dashboard_page(active_page: str):
-    context = build_template_context()
-    context["active_page"] = active_page
+    context = build_template_context(active_page)
     return render_template("index.html", **context)
-
-
-def resolve_file_owner_paths_from_request() -> Dict[str, Path]:
-    owner = request.args.get("owner", "").strip().lower()
-    if is_admin_user() and owner and owner != ADMIN_USERNAME:
-        return ensure_user_paths(owner)
-    return get_current_user_paths()
 
 
 @app.context_processor
@@ -1195,6 +1240,80 @@ def logout():
     return redirect(url_for("access_page"))
 
 
+@app.post("/admin/users/create")
+@login_required
+def admin_create_user():
+    validate_csrf()
+    if not is_admin_user():
+        raise Forbidden()
+
+    username = normalize_username(request.form.get("new_username", ""))
+    password = request.form.get("new_password", "")
+    if not username or username == ADMIN_USERNAME:
+        flash("Choose a valid non-admin username.", "error")
+        return redirect(url_for("access_page"))
+    if not password:
+        flash("Password is required for new users.", "error")
+        return redirect(url_for("access_page"))
+
+    users = load_users()
+    users[username] = generate_password_hash(password)
+    save_users(users)
+    ensure_user_paths(username)
+    flash(f"Created or reset account for {username}.", "success")
+    return redirect(url_for("access_page", owner=username))
+
+
+@app.post("/admin/users/password")
+@login_required
+def admin_update_user_password():
+    validate_csrf()
+    if not is_admin_user():
+        raise Forbidden()
+
+    username = normalize_username(request.form.get("target_username", ""))
+    password = request.form.get("target_password", "")
+    if not username or username == ADMIN_USERNAME:
+        flash("Select a valid non-admin user.", "error")
+        return redirect(url_for("access_page"))
+    if not password:
+        flash("New password is required.", "error")
+        return redirect(url_for("access_page", owner=username))
+
+    users = load_users()
+    if username not in users:
+        flash("User does not exist.", "error")
+        return redirect(url_for("access_page"))
+
+    users[username] = generate_password_hash(password)
+    save_users(users)
+    flash(f"Updated password for {username}.", "success")
+    return redirect(url_for("access_page", owner=username))
+
+
+@app.post("/admin/users/delete")
+@login_required
+def admin_delete_user():
+    validate_csrf()
+    if not is_admin_user():
+        raise Forbidden()
+
+    username = normalize_username(request.form.get("target_username", ""))
+    if not username or username == ADMIN_USERNAME:
+        flash("Admin account cannot be deleted.", "error")
+        return redirect(url_for("access_page"))
+
+    users = load_users()
+    if username not in users:
+        flash("User does not exist.", "error")
+        return redirect(url_for("access_page"))
+
+    users.pop(username, None)
+    save_users(users)
+    flash(f"Deleted login for {username}. Existing stored files/history remain on disk.", "success")
+    return redirect(url_for("access_page", owner=ADMIN_USERNAME))
+
+
 @app.get("/")
 def index():
     return render_dashboard_page("home")
@@ -1239,7 +1358,7 @@ def upload_file():
         flash("Invalid filename.", "error")
         return redirect(url_for("files_page"))
 
-    paths = get_current_user_paths()
+    paths, target_owner = get_target_user_paths()
     total_bytes = get_total_storage_bytes(paths["uploads_dir"])
     remaining_bytes = max(MAX_STORAGE_BYTES - total_bytes, 0)
     if not is_admin_user() and remaining_bytes <= 0:
@@ -1247,38 +1366,38 @@ def upload_file():
             f"Storage is full. Delete something before uploading more. Limit: {human_size(MAX_STORAGE_BYTES)}.",
             "error",
         )
-        return redirect(url_for("files_page"))
+        return redirect(url_for("files_page", owner=target_owner))
 
     if not is_admin_user() and request.content_length and request.content_length > (remaining_bytes + 4096):
         flash(
             f"Not enough remaining space. Free up room or raise QUICKDROP_MAX_STORAGE_MB. Remaining: {human_size(remaining_bytes)}.",
             "error",
         )
-        return redirect(url_for("files_page"))
+        return redirect(url_for("files_page", owner=target_owner))
 
     final_name = ensure_unique_filename(paths["uploads_dir"], filename)
     destination = paths["uploads_dir"] / final_name
     max_bytes = MAX_UPLOAD_BYTES if is_admin_user() else min(MAX_UPLOAD_BYTES, remaining_bytes)
     bytes_written = save_upload_with_limits(upload, destination, max_bytes)
     set_file_hidden(paths["hidden_files_file"], final_name, False)
-    flash(f"Uploaded {final_name} ({human_size(bytes_written)})", "success")
-    return redirect(url_for("files_page"))
+    flash(f"Uploaded {final_name} ({human_size(bytes_written)}) to {target_owner}.", "success")
+    return redirect(url_for("files_page", owner=target_owner))
 
 
 @app.post("/text")
 @login_required
 def save_text_entry():
     validate_csrf()
-    paths = get_current_user_paths()
+    paths, target_owner = get_target_user_paths()
     title = request.form.get("title", "").strip() or "Untitled note"
     content = request.form.get("content", "").strip()
 
     if not content:
         flash("Text transfer cannot be empty.", "error")
-        return redirect(url_for("text_page"))
+        return redirect(url_for("text_page", owner=target_owner))
     if len(content) > MAX_TEXT_CHARS:
         flash(f"Text transfer is too large. Limit: {MAX_TEXT_CHARS} characters.", "error")
-        return redirect(url_for("text_page"))
+        return redirect(url_for("text_page", owner=target_owner))
 
     item = {
         "id": uuid4().hex,
@@ -1287,24 +1406,24 @@ def save_text_entry():
         "created": now_iso(),
     }
     add_history_item(paths["text_history_file"], item, MAX_TEXT_HISTORY_ITEMS)
-    flash("Saved text snippet.", "success")
-    return redirect(url_for("text_page"))
+    flash(f"Saved text snippet for {target_owner}.", "success")
+    return redirect(url_for("text_page", owner=target_owner))
 
 
 @app.post("/latex")
 @login_required
 def save_latex_entry():
     validate_csrf()
-    paths = get_current_user_paths()
+    paths, target_owner = get_target_user_paths()
     title = request.form.get("title", "").strip() or "latex-document"
     source = request.form.get("source", "").strip()
 
     if not source:
         flash("LaTeX source cannot be empty.", "error")
-        return redirect(url_for("latex_page"))
+        return redirect(url_for("latex_page", owner=target_owner))
     if len(source) > MAX_LATEX_CHARS:
         flash(f"LaTeX source is too large. Limit: {MAX_LATEX_CHARS} characters.", "error")
-        return redirect(url_for("latex_page"))
+        return redirect(url_for("latex_page", owner=target_owner))
 
     try:
         pdf_name, _created = render_latex_pdf(title, source, paths["latex_dir"], paths["latex_history_file"])
@@ -1317,14 +1436,14 @@ def save_latex_entry():
     else:
         flash(f"Rendered {pdf_name}", "success")
 
-    return redirect(url_for("latex_page"))
+    return redirect(url_for("latex_page", owner=target_owner))
 
 
 @app.post("/reader")
 @login_required
 def save_reader_entry():
     validate_csrf()
-    paths = get_current_user_paths()
+    paths, target_owner = get_target_user_paths()
     url = request.form.get("url", "").strip()
     reader_mode = normalize_reader_mode(request.form.get("reader_mode", "auto"))
     try:
@@ -1336,10 +1455,10 @@ def save_reader_entry():
         )
     except (requests.RequestException, ValueError) as error:
         flash(f"Reader fetch failed: {error}", "error")
-        return redirect(url_for("reader_page"))
+        return redirect(url_for("reader_page", owner=target_owner))
 
     flash(f"Cached reader page: {entry['title']}", "success")
-    return redirect(url_for("view_reader_entry", entry_id=entry["id"]))
+    return redirect(url_for("view_reader_entry", entry_id=entry["id"], owner=target_owner))
 
 
 @app.get("/reader/live")
@@ -1375,13 +1494,15 @@ def live_reader():
         is_authenticated=is_authenticated(),
         login_configured=True,
         is_live_view=True,
+        is_admin=is_admin_user(),
+        selected_owner=get_target_username_from_request(default=current_username() or ADMIN_USERNAME),
     )
 
 
 @app.get("/reader/<entry_id>")
 @login_required
 def view_reader_entry(entry_id: str):
-    paths = get_current_user_paths()
+    paths, target_owner = get_target_user_paths()
     entry = find_history_item(paths["reader_history_file"], entry_id)
     if entry is None:
         raise NotFound()
@@ -1394,6 +1515,8 @@ def view_reader_entry(entry_id: str):
         is_authenticated=is_authenticated(),
         login_configured=True,
         is_live_view=False,
+        selected_owner=target_owner,
+        is_admin=is_admin_user(),
     )
 
 
@@ -1401,7 +1524,7 @@ def view_reader_entry(entry_id: str):
 @login_required
 def refresh_reader_entry(entry_id: str):
     validate_csrf()
-    paths = get_current_user_paths()
+    paths, target_owner = get_target_user_paths()
     entry = find_history_item(paths["reader_history_file"], entry_id)
     if entry is None:
         raise NotFound()
@@ -1418,162 +1541,162 @@ def refresh_reader_entry(entry_id: str):
         )
     except (requests.RequestException, ValueError) as error:
         flash(f"Reader refresh failed: {error}", "error")
-        return redirect(url_for("view_reader_entry", entry_id=entry_id))
+        return redirect(url_for("view_reader_entry", entry_id=entry_id, owner=target_owner))
 
     if old_filename != updated_entry.get("content_filename"):
         delete_reader_content(old_filename, paths["reader_dir"])
 
     flash("Reader cache refreshed.", "success")
-    return redirect(url_for("view_reader_entry", entry_id=entry_id))
+    return redirect(url_for("view_reader_entry", entry_id=entry_id, owner=target_owner))
 
 
 @app.post("/reader/delete/<entry_id>")
 @login_required
 def delete_reader_entry(entry_id: str):
     validate_csrf()
-    paths = get_current_user_paths()
+    paths, target_owner = get_target_user_paths()
     removed = remove_history_item(paths["reader_history_file"], entry_id)
     if removed is None:
         raise NotFound()
 
     delete_reader_content(removed.get("content_filename"), paths["reader_dir"])
     flash("Reader cache entry removed.", "success")
-    return redirect(url_for("reader_page"))
+    return redirect(url_for("reader_page", owner=target_owner))
 
 
 @app.post("/reader/hide/<entry_id>")
 @login_required
 def hide_reader_entry(entry_id: str):
     validate_csrf()
-    paths = get_current_user_paths()
+    paths, target_owner = get_target_user_paths()
     item = set_history_item_hidden(paths["reader_history_file"], entry_id, True)
     if item is None:
         raise NotFound()
     flash("Reader entry hidden from logged-out view.", "success")
-    return redirect(url_for("reader_page"))
+    return redirect(url_for("reader_page", owner=target_owner))
 
 
 @app.post("/reader/unhide/<entry_id>")
 @login_required
 def unhide_reader_entry(entry_id: str):
     validate_csrf()
-    paths = get_current_user_paths()
+    paths, target_owner = get_target_user_paths()
     item = set_history_item_hidden(paths["reader_history_file"], entry_id, False)
     if item is None:
         raise NotFound()
     flash("Reader entry visible to logged-out view.", "success")
-    return redirect(url_for("reader_page"))
+    return redirect(url_for("reader_page", owner=target_owner))
 
 
 @app.post("/reader/clear")
 @login_required
 def clear_reader_entries():
     validate_csrf()
-    paths = get_current_user_paths()
+    paths, target_owner = get_target_user_paths()
     entries = load_history(paths["reader_history_file"])
     for entry in entries:
         delete_reader_content(entry.get("content_filename"), paths["reader_dir"])
     clear_history(paths["reader_history_file"])
     flash("Cleared cached reader pages.", "success")
-    return redirect(url_for("reader_page"))
+    return redirect(url_for("reader_page", owner=target_owner))
 
 
 @app.post("/text/delete/<entry_id>")
 @login_required
 def delete_text_entry(entry_id: str):
     validate_csrf()
-    paths = get_current_user_paths()
+    paths, target_owner = get_target_user_paths()
     removed = remove_history_item(paths["text_history_file"], entry_id)
     if removed is None:
         raise NotFound()
 
     flash("Text snippet deleted.", "success")
-    return redirect(url_for("text_page"))
+    return redirect(url_for("text_page", owner=target_owner))
 
 
 @app.post("/text/hide/<entry_id>")
 @login_required
 def hide_text_entry(entry_id: str):
     validate_csrf()
-    paths = get_current_user_paths()
+    paths, target_owner = get_target_user_paths()
     item = set_history_item_hidden(paths["text_history_file"], entry_id, True)
     if item is None:
         raise NotFound()
     flash("Text snippet hidden from logged-out view.", "success")
-    return redirect(url_for("text_page"))
+    return redirect(url_for("text_page", owner=target_owner))
 
 
 @app.post("/text/unhide/<entry_id>")
 @login_required
 def unhide_text_entry(entry_id: str):
     validate_csrf()
-    paths = get_current_user_paths()
+    paths, target_owner = get_target_user_paths()
     item = set_history_item_hidden(paths["text_history_file"], entry_id, False)
     if item is None:
         raise NotFound()
     flash("Text snippet visible to logged-out view.", "success")
-    return redirect(url_for("text_page"))
+    return redirect(url_for("text_page", owner=target_owner))
 
 
 @app.post("/text/clear")
 @login_required
 def clear_text_entries():
     validate_csrf()
-    paths = get_current_user_paths()
+    paths, target_owner = get_target_user_paths()
     clear_history(paths["text_history_file"])
     flash("Cleared saved text snippets.", "success")
-    return redirect(url_for("text_page"))
+    return redirect(url_for("text_page", owner=target_owner))
 
 
 @app.post("/latex/delete/<entry_id>")
 @login_required
 def delete_latex_entry(entry_id: str):
     validate_csrf()
-    paths = get_current_user_paths()
+    paths, target_owner = get_target_user_paths()
     removed = remove_history_item(paths["latex_history_file"], entry_id)
     if removed is None:
         raise NotFound()
 
     delete_latex_content(removed.get("pdf_name"), paths["latex_dir"])
     flash("LaTeX PDF deleted.", "success")
-    return redirect(url_for("latex_page"))
+    return redirect(url_for("latex_page", owner=target_owner))
 
 
 @app.post("/latex/hide/<entry_id>")
 @login_required
 def hide_latex_entry(entry_id: str):
     validate_csrf()
-    paths = get_current_user_paths()
+    paths, target_owner = get_target_user_paths()
     item = set_history_item_hidden(paths["latex_history_file"], entry_id, True)
     if item is None:
         raise NotFound()
     flash("LaTeX PDF hidden from logged-out view.", "success")
-    return redirect(url_for("latex_page"))
+    return redirect(url_for("latex_page", owner=target_owner))
 
 
 @app.post("/latex/unhide/<entry_id>")
 @login_required
 def unhide_latex_entry(entry_id: str):
     validate_csrf()
-    paths = get_current_user_paths()
+    paths, target_owner = get_target_user_paths()
     item = set_history_item_hidden(paths["latex_history_file"], entry_id, False)
     if item is None:
         raise NotFound()
     flash("LaTeX PDF visible to logged-out view.", "success")
-    return redirect(url_for("latex_page"))
+    return redirect(url_for("latex_page", owner=target_owner))
 
 
 @app.post("/latex/clear")
 @login_required
 def clear_latex_entries():
     validate_csrf()
-    paths = get_current_user_paths()
+    paths, target_owner = get_target_user_paths()
     entries = load_history(paths["latex_history_file"])
     for entry in entries:
         delete_latex_content(entry.get("pdf_name"), paths["latex_dir"])
     clear_history(paths["latex_history_file"])
     flash("Cleared rendered PDFs.", "success")
-    return redirect(url_for("latex_page"))
+    return redirect(url_for("latex_page", owner=target_owner))
 
 
 @app.post("/delete/<path:filename>")
@@ -1585,16 +1708,16 @@ def delete_file(filename: str):
     if safe_name != filename:
         raise NotFound()
 
-    paths = resolve_file_owner_paths_from_request()
+    paths, target_owner = get_target_user_paths()
     target = paths["uploads_dir"] / safe_name
     if not target.exists() or not target.is_file():
         flash(f"{safe_name} was already gone.", "error")
-        return redirect(url_for("files_page"))
+        return redirect(url_for("files_page", owner=target_owner))
 
     target.unlink()
     set_file_hidden(paths["hidden_files_file"], safe_name, False)
     flash(f"Deleted {safe_name}", "success")
-    return redirect(url_for("files_page"))
+    return redirect(url_for("files_page", owner=target_owner))
 
 
 @app.post("/files/hide/<path:filename>")
@@ -1604,13 +1727,13 @@ def hide_file(filename: str):
     safe_name = secure_filename(filename)
     if safe_name != filename:
         raise NotFound()
-    paths = resolve_file_owner_paths_from_request()
+    paths, target_owner = get_target_user_paths()
     target = paths["uploads_dir"] / safe_name
     if not target.exists() or not target.is_file():
         raise NotFound()
     set_file_hidden(paths["hidden_files_file"], safe_name, True)
     flash(f"Hidden {safe_name}", "success")
-    return redirect(url_for("files_page"))
+    return redirect(url_for("files_page", owner=target_owner))
 
 
 @app.post("/files/unhide/<path:filename>")
@@ -1620,13 +1743,13 @@ def unhide_file(filename: str):
     safe_name = secure_filename(filename)
     if safe_name != filename:
         raise NotFound()
-    paths = resolve_file_owner_paths_from_request()
+    paths, target_owner = get_target_user_paths()
     target = paths["uploads_dir"] / safe_name
     if not target.exists() or not target.is_file():
         raise NotFound()
     set_file_hidden(paths["hidden_files_file"], safe_name, False)
     flash(f"Unhidden {safe_name}", "success")
-    return redirect(url_for("files_page"))
+    return redirect(url_for("files_page", owner=target_owner))
 
 
 @app.get("/files/<path:filename>")
@@ -1636,7 +1759,7 @@ def download_file(filename: str):
     if safe_name != filename:
         raise NotFound()
 
-    paths = resolve_file_owner_paths_from_request()
+    paths, _target_owner = get_target_user_paths()
     target = paths["uploads_dir"] / safe_name
     if not target.exists() or not target.is_file():
         raise NotFound()
@@ -1651,7 +1774,7 @@ def download_latex_pdf(filename: str):
     if safe_name != filename:
         raise NotFound()
 
-    paths = get_current_user_paths()
+    paths, _target_owner = get_target_user_paths()
     target = paths["latex_dir"] / safe_name
     if not target.exists() or not target.is_file():
         raise NotFound()

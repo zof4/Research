@@ -48,11 +48,13 @@
             {% if not is_live_view %}
             <form method="post" action="{{ url_for('refresh_reader_entry', entry_id=entry.id) }}" class="inline-form">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+              {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
               <input type="hidden" name="reader_mode" value="{{ entry.reader_mode_used or 'auto' }}" />
               <button type="submit" class="secondary-button">Refresh cache</button>
             </form>
             <form method="post" action="{{ url_for('delete_reader_entry', entry_id=entry.id) }}" class="inline-form">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+              {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
               <button type="submit" class="delete-button">Delete</button>
             </form>
             {% endif %}
