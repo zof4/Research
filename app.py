@@ -167,12 +167,95 @@ def render_basic_text_markup(value: str) -> Markup:
         .replace('"', "&quot;")
         .replace("'", "&#39;")
     )
-    escaped = re.sub(r"`([^`\n]+)`", r"<code>\1</code>", escaped)
-    escaped = re.sub(r"\*\*([^\n*][^*\n]*?)\*\*", r"<strong>\1</strong>", escaped)
-    escaped = re.sub(r"(?<!\*)\*([^\n*][^*\n]*?)\*(?!\*)", r"<em>\1</em>", escaped)
-    escaped = re.sub(r"(https?://[^\s<]+)", r'<a href="\1" target="_blank" rel="noopener noreferrer">\1</a>', escaped)
-    escaped = escaped.replace("\n", "<br>")
-    return Markup(escaped)
+
+    def render_inline(text: str) -> str:
+        text = re.sub(r"`([^`\n]+)`", r"<code>\1</code>", text)
+        text = re.sub(r"\*\*([^\n*][^*\n]*?)\*\*", r"<strong>\1</strong>", text)
+        text = re.sub(r"__([^\n_][^_\n]*?)__", r"<strong>\1</strong>", text)
+        text = re.sub(r"(?<!\*)\*([^\n*][^*\n]*?)\*(?!\*)", r"<em>\1</em>", text)
+        text = re.sub(r"(?<!_)_([^\n_][^_\n]*?)_(?!_)", r"<em>\1</em>", text)
+        text = re.sub(r"~~([^\n~][^~\n]*?)~~", r"<del>\1</del>", text)
+        text = re.sub(
+            r"\[([^\]]+)\]\((https?://[^\s)]+)\)",
+            r'<a href="\2" target="_blank" rel="noopener noreferrer">\1</a>',
+            text,
+        )
+        text = re.sub(r"(https?://[^\s<]+)", r'<a href="\1" target="_blank" rel="noopener noreferrer">\1</a>', text)
+        return text
+
+    lines = escaped.splitlines()
+    html_parts: List[str] = []
+    in_ul = False
+    in_ol = False
+
+    def close_lists() -> None:
+        nonlocal in_ul, in_ol
+        if in_ul:
+            html_parts.append("</ul>")
+            in_ul = False
+        if in_ol:
+            html_parts.append("</ol>")
+            in_ol = False
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            close_lists()
+            html_parts.append("<br>")
+            continue
+
+        heading_match = re.match(r"^(#{1,6})\s+(.+)$", stripped)
+        bullet_match = re.match(r"^[-*]\s+(.+)$", stripped)
+        ordered_match = re.match(r"^\d+\.\s+(.+)$", stripped)
+        checklist_match = re.match(r"^-\s+\[( |x|X)\]\s+(.+)$", stripped)
+        quote_match = re.match(r"^>\s+(.+)$", stripped)
+
+        if heading_match:
+            close_lists()
+            level = len(heading_match.group(1))
+            html_parts.append(f"<h{level}>{render_inline(heading_match.group(2))}</h{level}>")
+            continue
+
+        if checklist_match:
+            if in_ol:
+                html_parts.append("</ol>")
+                in_ol = False
+            if not in_ul:
+                html_parts.append("<ul>")
+                in_ul = True
+            checked = checklist_match.group(1).lower() == "x"
+            marker = "☑" if checked else "☐"
+            html_parts.append(f"<li>{marker} {render_inline(checklist_match.group(2))}</li>")
+            continue
+
+        if bullet_match:
+            if in_ol:
+                html_parts.append("</ol>")
+                in_ol = False
+            if not in_ul:
+                html_parts.append("<ul>")
+                in_ul = True
+            html_parts.append(f"<li>{render_inline(bullet_match.group(1))}</li>")
+            continue
+
+        if ordered_match:
+            if in_ul:
+                html_parts.append("</ul>")
+                in_ul = False
+            if not in_ol:
+                html_parts.append("<ol>")
+                in_ol = True
+            html_parts.append(f"<li>{render_inline(ordered_match.group(1))}</li>")
+            continue
+
+        close_lists()
+        if quote_match:
+            html_parts.append(f"<blockquote>{render_inline(quote_match.group(1))}</blockquote>")
+        else:
+            html_parts.append(render_inline(stripped))
+
+    close_lists()
+    return Markup("".join(html_parts))
 
 
 def get_or_create_csrf_token() -> str:
@@ -1121,6 +1204,9 @@ def build_template_context(active_page: str) -> Dict:
     text_history: List[Dict] = []
     latex_history: List[Dict] = []
     reader_history: List[Dict] = []
+    text_groups: List[Dict] = []
+    latex_groups: List[Dict] = []
+    reader_groups: List[Dict] = []
     total_bytes = 0
     selected_owner = username or ""
     manageable_users: List[str] = []
@@ -1139,6 +1225,9 @@ def build_template_context(active_page: str) -> Dict:
                 user_files, user_total = get_file_listing(paths["uploads_dir"], owner=owner, hidden_filenames=hidden_files)
                 files.extend(user_files)
                 file_groups.append({"owner": owner, "files": user_files, "total_bytes": user_total})
+                text_groups.append({"owner": owner, "items": load_history(paths["text_history_file"])})
+                latex_groups.append({"owner": owner, "items": load_history(paths["latex_history_file"])})
+                reader_groups.append({"owner": owner, "items": get_reader_history(paths["reader_history_file"])})
                 total_bytes += user_total
             selected_paths = ensure_user_paths(selected_owner)
             text_history = load_history(selected_paths["text_history_file"])
@@ -1162,6 +1251,9 @@ def build_template_context(active_page: str) -> Dict:
             text_history = load_history(paths["text_history_file"])
             latex_history = load_history(paths["latex_history_file"])
             reader_history = get_reader_history(paths["reader_history_file"])
+            text_groups = [{"owner": username, "items": text_history}]
+            latex_groups = [{"owner": username, "items": latex_history}]
+            reader_groups = [{"owner": username, "items": reader_history}]
     else:
         storage = build_storage_summary(0)
         storage["has_limit"] = True
@@ -1171,8 +1263,11 @@ def build_template_context(active_page: str) -> Dict:
         "file_groups": file_groups,
         "storage": storage,
         "text_history": text_history,
+        "text_groups": text_groups,
         "latex_history": latex_history,
+        "latex_groups": latex_groups,
         "reader_history": reader_history,
+        "reader_groups": reader_groups,
         "is_authenticated": authenticated,
         "current_username": username,
         "selected_owner": selected_owner,
