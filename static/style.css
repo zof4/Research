@@ -28,6 +28,7 @@ body {
   background: radial-gradient(circle at top left, #f4f4f4 0%, #e2e2e2 45%, #d5d5d5 100%);
   color: var(--text);
   overflow-x: hidden;
+  min-height: 100dvh;
 }
 
 body,
@@ -43,7 +44,7 @@ img {
 }
 
 .container {
-  width: min(1100px, calc(100% - 2rem));
+  width: min(1080px, calc(100% - 2rem));
   margin: 0 auto;
 }
 
@@ -61,9 +62,9 @@ img {
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
-  flex-wrap: wrap;
-  min-height: 72px;
-  padding: 0.75rem 0;
+  flex-wrap: nowrap;
+  min-height: 56px;
+  padding: 0.5rem 0;
 }
 
 .brand {
@@ -75,9 +76,22 @@ img {
 
 .top-nav {
   display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
+  gap: 0.4rem;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
   min-width: 0;
+}
+
+.top-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.top-nav a {
+  white-space: nowrap;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.9rem;
 }
 
 .top-nav a,
@@ -107,6 +121,26 @@ img {
 
 .page {
   padding: 1.25rem 0 2rem;
+  padding-bottom: calc(2rem + env(safe-area-inset-bottom));
+}
+
+.login-page {
+  min-height: calc(100dvh - 56px);
+  display: grid;
+  align-items: center;
+}
+
+.login-card {
+  width: min(440px, 100%);
+  margin: 0 auto;
+  padding: 1.25rem;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.login-card h1 {
+  margin: 0;
+  text-align: center;
 }
 
 .card {
@@ -410,9 +444,9 @@ button,
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
-  flex-wrap: wrap;
-  min-height: 72px;
-  padding: 0.75rem 0;
+  flex-wrap: nowrap;
+  min-height: 56px;
+  padding: 0.5rem 0;
 }
 
 .eyebrow {
@@ -497,24 +531,15 @@ button,
 }
 
 @media (max-width: 759px) {
-  .top-nav {
-    width: 100%;
-    gap: 0.5rem;
-  }
-
   .top-nav a {
-    flex: 1 1 calc(50% - 0.5rem);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0.45rem 0.65rem;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    background: var(--surface-2);
+    padding: 0.2rem 0.45rem;
+    font-size: 0.82rem;
   }
 
   .status-chip {
     margin-left: auto;
+    padding: 0.35rem 0.55rem;
+    font-size: 0.8rem;
   }
 }
 
