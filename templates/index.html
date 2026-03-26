@@ -230,6 +230,21 @@
                     <button type="submit" class="secondary-button">Share</button>
                   </form>
                 </div>
+                {% if item.shared_with %}
+                <details class="source-details">
+                  <summary>Shared with ({{ item.shared_with|length }})</summary>
+                  <div class="action-row">
+                    {% for shared_user in item.shared_with %}
+                    <form method="post" action="{{ url_for('unshare_text_entry', entry_id=item.id) }}" class="inline-form" data-async>
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                      {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
+                      <input type="hidden" name="share_username" value="{{ shared_user }}" />
+                      <button type="submit" class="secondary-button">Remove {{ shared_user }}</button>
+                    </form>
+                    {% endfor %}
+                  </div>
+                </details>
+                {% endif %}
                 {% endif %}
                 {% if item.comments %}
                 <details class="source-details">
@@ -303,6 +318,20 @@
                     <button type="submit" class="secondary-button">Share</button>
                   </form>
                 </div>
+                {% if item.shared_with %}
+                <details class="source-details">
+                  <summary>Shared with ({{ item.shared_with|length }})</summary>
+                  <div class="action-row">
+                    {% for shared_user in item.shared_with %}
+                    <form method="post" action="{{ url_for('unshare_text_entry', entry_id=item.id) }}" class="inline-form" data-async>
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                      <input type="hidden" name="share_username" value="{{ shared_user }}" />
+                      <button type="submit" class="secondary-button">Remove {{ shared_user }}</button>
+                    </form>
+                    {% endfor %}
+                  </div>
+                </details>
+                {% endif %}
                 {% if item.comments %}
                 <details class="source-details">
                   <summary>Comments ({{ item.comments|length }})</summary>
@@ -337,7 +366,7 @@
             <p class="section-note">{% if storage.has_limit %}{{ human_size(storage.remaining_bytes) }} free{% else %}Admin view{% endif %}</p>
             {% if is_authenticated %}
             <details class="composer-panel">
-              <summary class="secondary-button">＋ New file</summary>
+              <summary class="secondary-button">＋ New file / zip</summary>
               <form method="post" action="{{ url_for('upload_file') }}" enctype="multipart/form-data" class="stack-form composer-form" data-async>
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
                 {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
@@ -386,6 +415,20 @@
                       </select>
                       <button type="submit" class="secondary-button">Share</button>
                     </form>
+                    {% if file.shared_with %}
+                    <details class="source-details">
+                      <summary>Shared with ({{ file.shared_with|length }})</summary>
+                      <div class="action-row">
+                        {% for shared_user in file.shared_with %}
+                        <form method="post" action="{{ url_for('unshare_file', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                          <input type="hidden" name="share_username" value="{{ shared_user }}" />
+                          <button type="submit" class="secondary-button">Remove {{ shared_user }}</button>
+                        </form>
+                        {% endfor %}
+                      </div>
+                    </details>
+                    {% endif %}
                   </article>
                   {% endfor %}
                 </div>
@@ -436,6 +479,20 @@
                   </select>
                   <button type="submit" class="secondary-button">Share</button>
                 </form>
+                {% if file.shared_with %}
+                <details class="source-details">
+                  <summary>Shared with ({{ file.shared_with|length }})</summary>
+                  <div class="action-row">
+                    {% for shared_user in file.shared_with %}
+                    <form method="post" action="{{ url_for('unshare_file', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                      <input type="hidden" name="share_username" value="{{ shared_user }}" />
+                      <button type="submit" class="secondary-button">Remove {{ shared_user }}</button>
+                    </form>
+                    {% endfor %}
+                  </div>
+                </details>
+                {% endif %}
                 {% endif %}
               </article>
               {% endfor %}

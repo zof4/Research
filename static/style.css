@@ -12,8 +12,8 @@
   --accent: #697586;
   --danger: #c25757;
   --shadow: 0 18px 40px rgba(18, 28, 45, 0.11);
-  --button-width: 10rem;
-  --button-height: 2.8rem;
+  --button-width: 9rem;
+  --button-height: 2.55rem;
   --content-width: 1440px;
   --radius-lg: 22px;
   --radius-md: 16px;
@@ -58,8 +58,8 @@ img {
 
 .site-header-inner,
 .topbar-inner {
-  min-height: 68px;
-  padding: 0.7rem 0;
+  min-height: 62px;
+  padding: 0.45rem 0;
   align-items: center;
   gap: 0.9rem;
 }
@@ -121,7 +121,7 @@ img {
   flex-wrap: nowrap;
   align-items: center;
   justify-content: center;
-  gap: 0.2rem;
+  gap: 0.32rem;
   max-width: 100%;
   overflow-x: auto;
   scrollbar-width: thin;
@@ -131,25 +131,25 @@ img {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 2rem;
+  min-height: 2.25rem;
   min-width: fit-content;
-  padding: 0.35rem 0.65rem 0.45rem;
-  border-radius: 0;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  box-shadow: none;
-  font-size: 0.92rem;
+  padding: 0.32rem 0.68rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  font-size: 0.9rem;
   white-space: nowrap;
 }
 .top-nav a:hover {
-  border-bottom-color: var(--line-strong);
-  background: rgba(255, 255, 255, 0.45);
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.9);
 }
 .top-nav a.is-active {
-  border-bottom-color: var(--accent);
+  border-color: #bfc9db;
   color: #283140;
   font-weight: 700;
+  background: rgba(255, 255, 255, 0.95);
 }
 
 .page {
@@ -261,7 +261,7 @@ img {
   margin-top: 1rem;
 }
 .section-card {
-  padding: 1.15rem;
+  padding: 0.95rem;
   text-align: center;
 }
 .access-card,
@@ -323,13 +323,30 @@ img {
   justify-content: center;
 }
 .action-row {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.75rem, 1fr));
+  width: 100%;
+  justify-content: stretch;
   align-items: stretch;
-  gap: 0.85rem;
+  gap: 0.65rem;
 }
 .action-row > * {
+  width: 100%;
+}
+.action-row .inline-form {
+  width: 100%;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.action-row .inline-form select {
+  flex: 1 1 8.5rem;
+  width: auto;
+  min-width: 0;
+}
+.action-row .inline-form button {
   flex: 0 0 var(--button-width);
 }
 
@@ -420,7 +437,7 @@ button,
   align-items: center;
   width: var(--button-width);
   min-height: var(--button-height);
-  padding: 0.7rem 0.95rem;
+  padding: 0.52rem 0.78rem;
   border-radius: 999px;
   border: 1px solid #5f6978;
   background: linear-gradient(180deg, #8b95a4 0%, var(--accent) 70%, #5e6876 100%);
@@ -428,7 +445,7 @@ button,
   font-weight: 700;
   cursor: pointer;
   text-decoration: none;
-  box-shadow: 0 2px 0 #4e5867, 0 8px 18px rgba(35, 44, 57, 0.22), inset 0 1px 1px rgba(255, 255, 255, 0.35);
+  box-shadow: 0 1px 0 #4e5867, 0 5px 12px rgba(35, 44, 57, 0.18), inset 0 1px 1px rgba(255, 255, 255, 0.35);
   transition: transform 0.12s ease, box-shadow 0.16s ease, filter 0.16s ease;
 }
 .secondary-button,
@@ -462,7 +479,7 @@ button:active {
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.18);
 }
 .block-button {
-  width: min(100%, 22rem);
+  width: min(100%, 18rem);
 }
 
 .flash-stack {
@@ -563,6 +580,8 @@ button:active {
   border: 1px solid var(--line);
   color: var(--text);
   line-height: 1.6;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .formatted-preview {
   margin-top: 0.75rem;
@@ -586,6 +605,10 @@ button:active {
 .reader-content a {
   color: var(--accent);
 }
+.history-rich :where(p, li, a, span, code, strong, em) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 
 .text-toolbar {
   display: flex;
@@ -602,6 +625,11 @@ button:active {
 .source-details summary {
   cursor: pointer;
   text-align: center;
+  min-height: 2.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
 }
 
 .admin-user-tools {
@@ -745,8 +773,8 @@ button:active {
 
 @media (max-width: 640px) {
   :root {
-    --button-width: min(100%, 9.5rem);
-    --button-height: 2.2rem;
+    --button-width: min(100%, 8.5rem);
+    --button-height: 2.05rem;
   }
 
   .container {
@@ -762,22 +790,40 @@ button:active {
 
   .action-row > *,
   .row-card > .inline-form {
-    flex-basis: min(100%, 9.5rem);
+    flex-basis: min(100%, 8.5rem);
   }
 
   .top-nav a {
-    padding: 0.25rem 0.45rem 0.35rem;
-    font-size: 0.82rem;
+    min-height: 2rem;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.8rem;
   }
 
   button,
   .button-link {
-    font-size: 0.82rem;
-    padding: 0.45rem 0.65rem;
+    font-size: 0.79rem;
+    padding: 0.38rem 0.55rem;
   }
 
   .section-head {
     gap: 0.5rem;
+  }
+
+  .item-card {
+    gap: 0.72rem;
+    padding: 0.8rem;
+  }
+
+  .source-details {
+    padding-top: 0.65rem;
+  }
+
+  input[type="file"],
+  input[type="password"],
+  input[type="text"],
+  textarea,
+  select {
+    padding: 0.72rem 0.78rem;
   }
 }
 
