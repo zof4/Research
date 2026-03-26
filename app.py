@@ -187,6 +187,8 @@ def render_basic_text_markup(value: str) -> Markup:
     html_parts: List[str] = []
     in_ul = False
     in_ol = False
+    in_code_block = False
+    code_buffer: List[str] = []
 
     def close_lists() -> None:
         nonlocal in_ul, in_ol
@@ -197,8 +199,30 @@ def render_basic_text_markup(value: str) -> Markup:
             html_parts.append("</ol>")
             in_ol = False
 
+    def flush_code_block() -> None:
+        nonlocal in_code_block, code_buffer
+        if not in_code_block:
+            return
+        code_content = "\n".join(code_buffer)
+        html_parts.append(f"<pre><code>{code_content}</code></pre>")
+        code_buffer = []
+        in_code_block = False
+
     for line in lines:
         stripped = line.strip()
+        if stripped.startswith("```"):
+            close_lists()
+            if in_code_block:
+                flush_code_block()
+            else:
+                in_code_block = True
+                code_buffer = []
+            continue
+
+        if in_code_block:
+            code_buffer.append(line)
+            continue
+
         if not stripped:
             close_lists()
             html_parts.append("<br>")
@@ -255,6 +279,7 @@ def render_basic_text_markup(value: str) -> Markup:
             html_parts.append(render_inline(stripped))
 
     close_lists()
+    flush_code_block()
     return Markup("".join(html_parts))
 
 

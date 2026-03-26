@@ -360,12 +360,46 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.
 .history-rich code,
 .formatted-preview code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  padding: 0.05rem 0.32rem;
+  font-size: 0.9em;
+  padding: 0.08rem 0.36rem;
   border-radius: 6px;
   background: #e9edf6;
 }
 .history-rich a,
 .formatted-preview a { color: var(--accent); }
+.history-rich pre,
+.formatted-preview pre,
+.md-code-block {
+  margin: 0.6rem 0;
+  padding: 0.8rem 0.95rem;
+  border-radius: 14px;
+  border: 1px solid #d2d7e1;
+  background: #e9e9ec;
+  color: #262a31;
+  overflow-x: auto;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+.history-rich pre code,
+.formatted-preview pre code,
+.md-code-block code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+.history-rich :where(p, ul, ol, blockquote, h1, h2, h3, h4),
+.formatted-preview :where(p, ul, ol, blockquote, h1, h2, h3, h4) {
+  margin: 0.45rem 0;
+}
+.history-rich blockquote,
+.formatted-preview blockquote {
+  margin: 0.7rem 0;
+  padding: 0.6rem 0.8rem;
+  border-left: 3px solid #b8c2d8;
+  border-radius: 0 10px 10px 0;
+  background: #f3f5fa;
+}
 
 .text-toolbar {
   display: flex;
@@ -385,7 +419,7 @@ button:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.
   padding: 0.8rem;
   border-radius: 10px;
   border: 1px solid var(--line);
-  background: #fff;
+  background: #fcfcfe;
   min-height: 3rem;
   line-height: 1.5;
 }
