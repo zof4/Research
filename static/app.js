@@ -380,6 +380,41 @@
   const hasDashboardShell = (doc) =>
     shellSelectors.every((selector) => doc.querySelector(selector));
 
+  const initChatPolling = () => {
+    const feed = document.querySelector("[data-chat-feed]");
+    if (!(feed instanceof HTMLElement)) {
+      return;
+    }
+
+    const renderChat = (messages) => {
+      feed.innerHTML = (messages || [])
+        .map(
+          (message) => `
+          <article class="item-card">
+            <p class="item-meta"><strong>${escapeHtml(message.author || "unknown")}</strong> · ${escapeHtml(message.created || "")}</p>
+            <p>${escapeHtml(message.content || "")}</p>
+          </article>`,
+        )
+        .join("");
+    };
+
+    const fetchMessages = async () => {
+      try {
+        const response = await fetch("/chat/messages", { credentials: "same-origin" });
+        if (!response.ok) {
+          return;
+        }
+        const payload = await response.json();
+        renderChat(payload.messages || []);
+      } catch (_error) {
+        // ignore polling errors
+      }
+    };
+
+    fetchMessages();
+    window.setInterval(fetchMessages, 5000);
+  };
+
   const replaceDashboardShell = (doc) => {
     const nextHeader = doc.querySelector(".site-header");
     const nextMain = doc.querySelector("main.page");
@@ -394,6 +429,7 @@
     currentMain.replaceWith(nextMain);
     document.title = doc.title || document.title;
     initTextFormatting();
+    initChatPolling();
     return true;
   };
 
@@ -511,4 +547,5 @@
   });
 
   initTextFormatting();
+  initChatPolling();
 })();

@@ -28,6 +28,7 @@
           <a href="{{ url_for('files_page') }}" data-async-nav>Files</a>
           <a href="{{ url_for('reader_page') }}" data-async-nav>Reader</a>
           <a href="{{ url_for('latex_page') }}" data-async-nav>LaTeX</a>
+          <a href="{{ url_for('chat_page') }}" data-async-nav>Chat</a>
         </nav>
       </div>
     </header>
@@ -168,7 +169,7 @@
               <article class="item-card">
                 <div class="item-head">
                   {% if is_authenticated %}
-                  <h3>{{ item.title }}{% if item.hidden %} <span class="item-badge">Hidden</span>{% endif %}</h3>
+                  <h3>{{ item.title }}{% if item.hidden %} <span class="item-badge">Hidden</span>{% endif %}{% if group.owner != current_username %} <span class="item-badge">Shared</span>{% endif %}</h3>
                   {% else %}
                   <h3>Locked text item</h3>
                   {% endif %}
@@ -182,7 +183,7 @@
                 {% else %}
                 <p class="helper-text">Sign in to read saved text.</p>
                 {% endif %}
-                {% if is_authenticated %}
+                {% if is_authenticated and (is_admin or group.owner == current_username) %}
                 <div class="action-row">
                   {% if item.hidden %}
                   <form method="post" action="{{ url_for('unhide_text_entry', entry_id=item.id) }}" class="inline-form" data-async>
@@ -202,7 +203,36 @@
                     {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
                     <button type="submit" class="delete-button">Delete</button>
                   </form>
+                  <form method="post" action="{{ url_for('share_text_entry', entry_id=item.id) }}" class="inline-form" data-async>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
+                    <select name="share_username" required>
+                      <option value="">Share with…</option>
+                      {% for share_user in available_share_users %}
+                      {% if share_user != group.owner %}
+                      <option value="{{ share_user }}">{{ share_user }}</option>
+                      {% endif %}
+                      {% endfor %}
+                    </select>
+                    <button type="submit" class="secondary-button">Share</button>
+                  </form>
                 </div>
+                {% endif %}
+                {% if item.comments %}
+                <details class="source-details">
+                  <summary>Comments ({{ item.comments|length }})</summary>
+                  {% for comment in item.comments %}
+                  <p class="helper-text"><strong>{{ comment.author }}</strong> · {{ format_timestamp(comment.created) }}<br />{{ comment.content }}</p>
+                  {% endfor %}
+                </details>
+                {% endif %}
+                {% if is_authenticated and (is_admin or group.owner == current_username) %}
+                <form method="post" action="{{ url_for('comment_text_entry', entry_id=item.id) }}" class="stack-form" data-async>
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                  {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
+                  <input type="text" name="comment" maxlength="500" placeholder="Add a comment" required />
+                  <button type="submit" class="secondary-button">Comment</button>
+                </form>
                 {% endif %}
               </article>
                   {% endfor %}
@@ -240,7 +270,30 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
                     <button type="submit" class="delete-button">Delete</button>
                   </form>
+                  <form method="post" action="{{ url_for('share_text_entry', entry_id=item.id) }}" class="inline-form" data-async>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <select name="share_username" required>
+                      <option value="">Share with…</option>
+                      {% for share_user in available_share_users %}
+                      <option value="{{ share_user }}">{{ share_user }}</option>
+                      {% endfor %}
+                    </select>
+                    <button type="submit" class="secondary-button">Share</button>
+                  </form>
                 </div>
+                {% if item.comments %}
+                <details class="source-details">
+                  <summary>Comments ({{ item.comments|length }})</summary>
+                  {% for comment in item.comments %}
+                  <p class="helper-text"><strong>{{ comment.author }}</strong> · {{ format_timestamp(comment.created) }}<br />{{ comment.content }}</p>
+                  {% endfor %}
+                </details>
+                {% endif %}
+                <form method="post" action="{{ url_for('comment_text_entry', entry_id=item.id) }}" class="stack-form" data-async>
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                  <input type="text" name="comment" maxlength="500" placeholder="Add a comment" required />
+                  <button type="submit" class="secondary-button">Comment</button>
+                </form>
               </article>
                 {% endfor %}
               {% endfor %}
@@ -299,6 +352,18 @@
                       <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
                       <button type="submit" class="delete-button">Delete</button>
                     </form>
+                    <form method="post" action="{{ url_for('share_file', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                      <select name="share_username" required>
+                        <option value="">Share with…</option>
+                        {% for share_user in available_share_users %}
+                        {% if share_user != file.owner %}
+                        <option value="{{ share_user }}">{{ share_user }}</option>
+                        {% endif %}
+                        {% endfor %}
+                      </select>
+                      <button type="submit" class="secondary-button">Share</button>
+                    </form>
                   </article>
                   {% endfor %}
                 </div>
@@ -316,11 +381,12 @@
                       {{ file.name }}
                     </a>
                     {% if file.hidden %}<span class="item-badge">Hidden</span>{% endif %}
+                    {% if file.is_shared_to_viewer %}<span class="item-badge">Shared</span>{% endif %}
                   </h3>
                   <p class="item-meta">{{ human_size(file.size) }} • {{ file.modified.strftime('%Y-%m-%d %H:%M') }}{% if is_admin %} • {{ file.owner }}{% endif %}</p>
                 </div>
 
-                {% if is_authenticated %}
+                {% if is_authenticated and (is_admin or file.owner == current_username) %}
                 <form method="post" action="{{ url_for('delete_file', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
                   <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
                   <button type="submit" class="delete-button">Delete</button>
@@ -336,6 +402,18 @@
                   <button type="submit" class="secondary-button">Hide</button>
                 </form>
                 {% endif %}
+                <form method="post" action="{{ url_for('share_file', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                  <select name="share_username" required>
+                    <option value="">Share with…</option>
+                    {% for share_user in available_share_users %}
+                    {% if share_user != file.owner %}
+                    <option value="{{ share_user }}">{{ share_user }}</option>
+                    {% endif %}
+                    {% endfor %}
+                  </select>
+                  <button type="submit" class="secondary-button">Share</button>
+                </form>
                 {% endif %}
               </article>
               {% endfor %}
@@ -343,6 +421,30 @@
             <p class="empty-state">No files.</p>
             {% endif %}
           </div>
+        </section>
+        {% endif %}
+
+        {% if active_page in ['home', 'chat'] and is_authenticated %}
+        <section id="chat" class="card section-card">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">Chat</p>
+              <h2>Live chat</h2>
+            </div>
+          </div>
+          <div class="item-stack" id="chat-feed" data-chat-feed>
+            {% for message in chat_history %}
+            <article class="item-card">
+              <p class="item-meta"><strong>{{ message.author }}</strong> · {{ format_timestamp(message.created) }}</p>
+              <p>{{ message.content }}</p>
+            </article>
+            {% endfor %}
+          </div>
+          <form method="post" action="{{ url_for('send_chat_message') }}" class="stack-form" data-async>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <input type="text" name="message" maxlength="{{ max_chat_message_chars }}" placeholder="Send a message" required />
+            <button type="submit" class="block-button">Send</button>
+          </form>
         </section>
         {% endif %}
 
