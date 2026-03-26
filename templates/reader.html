@@ -14,7 +14,11 @@
           <h1>{{ entry.title }}</h1>
         </div>
         <div class="topbar-actions">
+          {% if is_admin %}
+          <a class="button-link ghost-button" href="{{ url_for('reader_page', owner=selected_owner) }}">Back</a>
+          {% else %}
           <a class="button-link ghost-button" href="{{ url_for('reader_page') }}">Back</a>
+          {% endif %}
         </div>
       </div>
     </header>
@@ -33,7 +37,7 @@
       <article class="card reader-frame">
         <header class="reader-header">
           <div>
-            <p class="eyebrow">Cached reader view</p>
+            <p class="eyebrow">{% if is_live_view %}Live reader view{% else %}Cached reader view{% endif %}</p>
             <h1>{{ entry.title }}</h1>
             <p class="reader-meta">
               {{ entry.source_label }}

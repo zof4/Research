@@ -1,12 +1,39 @@
 (function () {
   const shellSelectors = [".site-header", "main.page"];
+
   const escapeHtml = (value) =>
-    value
+    String(value || "")
       .replaceAll("&", "&amp;")
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#39;");
+
+  const wrapInlineStyle = (text, element) => {
+    if (!(element instanceof HTMLElement) || !text.trim()) {
+      return text;
+    }
+
+    let next = text;
+    const style = (element.getAttribute("style") || "").toLowerCase();
+    const fontWeight = style.match(/font-weight\s*:\s*([^;]+)/)?.[1]?.trim() || "";
+    const isBold =
+      fontWeight === "bold" ||
+      fontWeight === "bolder" ||
+      (/^\d+$/.test(fontWeight) && Number(fontWeight) >= 600);
+
+    if (isBold && !next.startsWith("**") && !next.endsWith("**")) {
+      next = `**${next}**`;
+    }
+    if (style.includes("font-style: italic") && !next.startsWith("*") && !next.endsWith("*")) {
+      next = `*${next}*`;
+    }
+    if (style.includes("text-decoration") && style.includes("line-through")) {
+      next = `~~${next}~~`;
+    }
+
+    return next;
+  };
 
   const renderInlineRichText = (value) => {
     let html = escapeHtml(value || "");
@@ -20,7 +47,10 @@
       /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
       '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
     );
-    html = html.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+    html = html.replace(
+      /(https?:\/\/[^\s<]+)/g,
+      '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>',
+    );
     return html;
   };
 
@@ -30,7 +60,8 @@
     let inUl = false;
     let inOl = false;
     let inCodeBlock = false;
-    const codeLines = [];
+    let codeBuffer = [];
+
     const closeLists = () => {
       if (inUl) {
         htmlParts.push("</ul>");
@@ -46,26 +77,27 @@
       if (!inCodeBlock) {
         return;
       }
-      htmlParts.push(`<pre class="md-code-block"><code>${codeLines.join("\n")}</code></pre>`);
+      htmlParts.push(`<pre><code>${escapeHtml(codeBuffer.join("\n"))}</code></pre>`);
+      codeBuffer = [];
       inCodeBlock = false;
-      codeLines.length = 0;
     };
 
     lines.forEach((line) => {
       const stripped = line.trim();
+
       if (stripped.startsWith("```")) {
         closeLists();
         if (inCodeBlock) {
           flushCodeBlock();
         } else {
           inCodeBlock = true;
-          codeLines.length = 0;
+          codeBuffer = [];
         }
         return;
       }
 
       if (inCodeBlock) {
-        codeLines.push(escapeHtml(line));
+        codeBuffer.push(line);
         return;
       }
 
@@ -77,8 +109,8 @@
 
       const headingMatch = stripped.match(/^(#{1,6})\s+(.+)$/);
       const bulletMatch = stripped.match(/^[-*]\s+(.+)$/);
-      const orderedMatch = stripped.match(/^\d+\.\s+(.+)$/);
-      const checklistMatch = stripped.match(/^-\s+\[( |x|X)\]\s+(.+)$/);
+      const orderedMatch = stripped.match(/^(\d+)\.\s+(.+)$/);
+      const checklistMatch = stripped.match(/^- \[( |x|X)\]\s+(.+)$/);
       const quoteMatch = stripped.match(/^>\s+(.+)$/);
 
       if (headingMatch) {
@@ -124,7 +156,7 @@
           htmlParts.push("<ol>");
           inOl = true;
         }
-        htmlParts.push(`<li>${renderInlineRichText(orderedMatch[1])}</li>`);
+        htmlParts.push(`<li>${renderInlineRichText(orderedMatch[2])}</li>`);
         return;
       }
 
@@ -141,111 +173,171 @@
     return htmlParts.join("");
   };
 
+  const prefixLines = (value, prefix) =>
+    value
+      .split("\n")
+      .map((line) => (line.trim() ? `${prefix}${line}` : prefix.trimEnd()))
+      .join("\n");
+
+  const normalizePlainTextPaste = (text) => {
+    let value = String(text || "").replace(/\r\n?/g, "\n");
+
+    value = value.replace(/^\s*[•◦▪‣·●○■]\s+/gm, "- ");
+    value = value.replace(/^\s*[–—]\s+/gm, "- ");
+    value = value.replace(/\u00a0/g, " ");
+    value = value.replace(/\n{3,}/g, "\n\n");
+
+    return value.trimEnd();
+  };
+
   const clipboardHtmlToMarkdown = (html) => {
     const doc = new DOMParser().parseFromString(html, "text/html");
+
     const walk = (node, listDepth = 0) => {
       if (node.nodeType === Node.TEXT_NODE) {
         return node.textContent || "";
       }
+
       if (!(node instanceof HTMLElement)) {
         return "";
       }
 
-      const content = Array.from(node.childNodes)
+      const childContent = Array.from(node.childNodes)
         .map((child) => walk(child, listDepth + (node.tagName === "UL" || node.tagName === "OL" ? 1 : 0)))
         .join("");
 
       switch (node.tagName) {
         case "STRONG":
         case "B":
-          return `**${content}**`;
+          return `**${childContent}**`;
         case "EM":
         case "I":
-          return `*${content}*`;
+          return `*${childContent}*`;
+        case "S":
+        case "DEL":
+        case "STRIKE":
+          return `~~${childContent}~~`;
         case "CODE":
-          return `\`${content}\``;
+          if (node.parentElement?.tagName === "PRE") {
+            return childContent;
+          }
+          return `\`${childContent}\``;
         case "PRE": {
-          const rawCode = node.textContent || "";
-          const normalizedCode = rawCode.replace(/\n+$/, "");
-          return `\n\`\`\`\n${normalizedCode}\n\`\`\`\n`;
+          const codeText = node.innerText.replace(/\n$/, "");
+          return `\n\`\`\`\n${codeText}\n\`\`\`\n`;
         }
         case "BR":
           return "\n";
-        case "LI":
-          if (node.parentElement?.tagName === "OL") {
-            const index = Array.from(node.parentElement.children).indexOf(node) + 1;
-            return `${"  ".repeat(Math.max(0, listDepth - 2))}${index}. ${content.trim()}\n`;
-          }
-          return `${"  ".repeat(Math.max(0, listDepth - 2))}- ${content.trim()}\n`;
         case "A": {
           const href = node.getAttribute("href");
           if (href && /^https?:\/\//i.test(href)) {
-            return `[${content.trim() || href}](${href})`;
+            const label = childContent.trim() || href;
+            return `[${label}](${href})`;
           }
-          return content;
+          return childContent;
         }
         case "H1":
-          return `# ${content.trim()}\n`;
+          return `# ${childContent.trim()}\n\n`;
         case "H2":
-          return `## ${content.trim()}\n`;
+          return `## ${childContent.trim()}\n\n`;
         case "H3":
-          return `### ${content.trim()}\n`;
+          return `### ${childContent.trim()}\n\n`;
         case "H4":
-          return `#### ${content.trim()}\n`;
+          return `#### ${childContent.trim()}\n\n`;
         case "H5":
-          return `##### ${content.trim()}\n`;
+          return `##### ${childContent.trim()}\n\n`;
         case "H6":
-          return `###### ${content.trim()}\n`;
-        case "BLOCKQUOTE":
-          return `> ${content.trim()}\n`;
+          return `###### ${childContent.trim()}\n\n`;
+        case "BLOCKQUOTE": {
+          const normalized = childContent.trim().replace(/\n+/g, "\n");
+          return `${prefixLines(normalized, "> ")}\n\n`;
+        }
+        case "LI": {
+          const content = childContent.trim().replace(/\n{2,}/g, "\n");
+          if (node.parentElement?.tagName === "OL") {
+            const index = Array.from(node.parentElement.children).indexOf(node) + 1;
+            return `${"  ".repeat(Math.max(0, listDepth - 2))}${index}. ${content}\n`;
+          }
+          return `${"  ".repeat(Math.max(0, listDepth - 2))}- ${content}\n`;
+        }
+        case "UL":
+        case "OL":
+          return `${childContent}\n`;
         case "P":
         case "DIV":
         case "SECTION":
         case "ARTICLE":
-          return `${content}\n`;
+        case "HEADER":
+        case "FOOTER":
+          return `${wrapInlineStyle(childContent, node)}\n\n`;
+        case "SPAN":
+          return wrapInlineStyle(childContent, node);
         default:
-          return content;
+          return wrapInlineStyle(childContent, node);
       }
     };
 
-    const raw = walk(doc.body).replace(/\n{3,}/g, "\n\n").trim();
+    const raw = walk(doc.body)
+      .replace(/\n{3,}/g, "\n\n")
+      .replace(/[ \t]+\n/g, "\n")
+      .trim();
+
     return raw;
+  };
+
+  const insertAtSelection = (textarea, value) => {
+    const start = textarea.selectionStart || 0;
+    const end = textarea.selectionEnd || 0;
+    textarea.setRangeText(value, start, end, "end");
   };
 
   const initTextFormatting = () => {
     const forms = document.querySelectorAll(".text-editor-form");
+
     forms.forEach((form) => {
       const textarea = form.querySelector("textarea[name='content']");
       const preview = form.querySelector("[data-text-preview]");
+
       if (!(textarea instanceof HTMLTextAreaElement)) {
         return;
       }
 
       const updatePreview = () => {
         if (preview) {
-          preview.innerHTML = renderRichText(textarea.value.trim() ? textarea.value : "Start typing to preview formatting.");
+          const value = textarea.value.trim()
+            ? textarea.value
+            : "Start typing to preview formatting.";
+          preview.innerHTML = renderRichText(value);
         }
       };
 
       if (!textarea.dataset.richInit) {
         textarea.dataset.richInit = "1";
+
         textarea.addEventListener("input", updatePreview);
+
         textarea.addEventListener("paste", (event) => {
           const html = event.clipboardData?.getData("text/html");
-          if (!html) {
-            return;
+          const plain = event.clipboardData?.getData("text/plain") || "";
+
+          if (html) {
+            const markdown = clipboardHtmlToMarkdown(html);
+            if (markdown) {
+              event.preventDefault();
+              insertAtSelection(textarea, markdown);
+              updatePreview();
+              return;
+            }
           }
 
-          const markdown = clipboardHtmlToMarkdown(html);
-          if (!markdown) {
-            return;
+          if (plain) {
+            const normalized = normalizePlainTextPaste(plain);
+            if (normalized && normalized !== plain) {
+              event.preventDefault();
+              insertAtSelection(textarea, normalized);
+              updatePreview();
+            }
           }
-
-          event.preventDefault();
-          const start = textarea.selectionStart || 0;
-          const end = textarea.selectionEnd || 0;
-          textarea.setRangeText(markdown, start, end, "end");
-          updatePreview();
         });
       }
 
@@ -253,7 +345,9 @@
         if (!(button instanceof HTMLButtonElement) || button.dataset.richInit) {
           return;
         }
+
         button.dataset.richInit = "1";
+
         button.addEventListener("click", () => {
           const start = textarea.selectionStart || 0;
           const end = textarea.selectionEnd || 0;
@@ -261,6 +355,7 @@
           const wrap = button.dataset.wrap;
           const prefix = button.dataset.prefix;
           let nextText = selected;
+
           if (wrap) {
             nextText = `${wrap}${selected || "text"}${wrap}`;
           } else if (prefix) {
@@ -271,6 +366,7 @@
                   .join("\n")
               : `${prefix}item`;
           }
+
           textarea.setRangeText(nextText, start, end, "end");
           textarea.focus();
           updatePreview();
@@ -281,7 +377,8 @@
     });
   };
 
-  const hasDashboardShell = (doc) => shellSelectors.every((selector) => doc.querySelector(selector));
+  const hasDashboardShell = (doc) =>
+    shellSelectors.every((selector) => doc.querySelector(selector));
 
   const replaceDashboardShell = (doc) => {
     const nextHeader = doc.querySelector(".site-header");
