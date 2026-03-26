@@ -6,7 +6,7 @@
     <title>Dropper</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   </head>
-  <body>
+  <body class="{% if is_authenticated and not is_admin %}non-admin-user{% endif %}">
     <header class="site-header">
       <div class="container site-header-inner">
         {% if is_authenticated %}
@@ -158,6 +158,7 @@
 
           <div class="item-stack">
             {% if text_groups %}
+              {% if is_admin %}
               {% for group in text_groups %}
               <article class="item-card user-group-card">
                 <h3>{{ group.owner }} <span class="item-meta">({{ group['items']|length }} items)</span></h3>
@@ -211,6 +212,39 @@
                 {% endif %}
               </article>
               {% endfor %}
+              {% else %}
+              {% for group in text_groups %}
+                {% for item in group['items'] %}
+              <article class="item-card">
+                <div class="item-head">
+                  <h3>{{ item.title }}{% if item.hidden %} <span class="item-badge">Hidden</span>{% endif %}</h3>
+                  <p class="item-meta">{{ format_timestamp(item.created) }}</p>
+                </div>
+                <details class="source-details">
+                  <summary>Open text</summary>
+                  <div class="history-rich">{{ render_basic_text_markup(item.content) }}</div>
+                </details>
+                <div class="action-row">
+                  {% if item.hidden %}
+                  <form method="post" action="{{ url_for('unhide_text_entry', entry_id=item.id) }}" class="inline-form" data-async>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <button type="submit" class="secondary-button">Unhide</button>
+                  </form>
+                  {% else %}
+                  <form method="post" action="{{ url_for('hide_text_entry', entry_id=item.id) }}" class="inline-form" data-async>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <button type="submit" class="secondary-button">Hide</button>
+                  </form>
+                  {% endif %}
+                  <form method="post" action="{{ url_for('delete_text_entry', entry_id=item.id) }}" class="inline-form" data-async>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <button type="submit" class="delete-button">Delete</button>
+                  </form>
+                </div>
+              </article>
+                {% endfor %}
+              {% endfor %}
+              {% endif %}
             {% else %}
             <p class="empty-state">No text saved.</p>
             {% endif %}
