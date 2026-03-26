@@ -718,10 +718,6 @@ button:active {
     justify-items: center;
     text-align: center;
   }
-
-  body.non-admin-user .account-chip {
-    display: none;
-  }
 }
 
 @media (max-width: 640px) {
@@ -749,4 +745,26 @@ button:active {
     min-width: 5.2rem;
     padding-inline: 0.7rem;
   }
+}
+
+/* Full-width non-admin text and PDF views, centered tab content */
+body.non-admin-user .dashboard-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body.non-admin-user #text.section-card,
+body.non-admin-user #latex.section-card {
+  width: 100%;
+  max-width: 100%;
+  margin-inline: auto;
+}
+
+body.non-admin-user #text .item-stack,
+body.non-admin-user #latex .item-stack,
+body.non-admin-user #text .item-card,
+body.non-admin-user #latex .item-card,
+#text.section-card,
+#latex.section-card {
+  width: 100%;
+  margin-inline: auto;
 }

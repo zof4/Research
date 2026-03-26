@@ -33,14 +33,36 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data"
-USERS_DIR = BASE_DIR / "users"
+LEGACY_DATA_DIR = BASE_DIR / "data"
+LEGACY_USERS_DIR = BASE_DIR / "users"
 LEGACY_UPLOAD_DIR = BASE_DIR / "uploads"
 LEGACY_LATEX_DIR = BASE_DIR / "latex_outputs"
 LEGACY_READER_DIR = BASE_DIR / "reader_cache"
+
+
+def resolve_storage_root() -> Path:
+    configured = os.environ.get("QUICKDROP_STORAGE_ROOT", "").strip()
+    if not configured:
+        return BASE_DIR / ".dropper_storage"
+    candidate = Path(configured).expanduser()
+    if not candidate.is_absolute():
+        candidate = (BASE_DIR / candidate).resolve()
+    return candidate
+
+
+STORAGE_ROOT = resolve_storage_root()
+DATA_DIR = STORAGE_ROOT / "data"
+USERS_DIR = STORAGE_ROOT / "users"
 USERS_FILE = DATA_DIR / "users.json"
 
-for directory in (DATA_DIR, USERS_DIR, LEGACY_UPLOAD_DIR, LEGACY_LATEX_DIR, LEGACY_READER_DIR):
+for directory in (
+    STORAGE_ROOT,
+    DATA_DIR,
+    USERS_DIR,
+    LEGACY_UPLOAD_DIR,
+    LEGACY_LATEX_DIR,
+    LEGACY_READER_DIR,
+):
     directory.mkdir(exist_ok=True)
 
 DEFAULT_MAX_UPLOAD_MB = int(os.environ.get("QUICKDROP_MAX_UPLOAD_MB", "100"))
@@ -399,6 +421,39 @@ def load_users() -> Dict[str, str]:
 
 def save_users(users: Dict[str, str]) -> None:
     USERS_FILE.write_text(json.dumps(users, indent=2))
+
+
+def migrate_legacy_storage_once() -> None:
+    if USERS_FILE.exists() or any(USERS_DIR.iterdir()):
+        return
+
+    if LEGACY_DATA_DIR.exists() and (LEGACY_DATA_DIR / "users.json").exists():
+        DATA_DIR.mkdir(exist_ok=True)
+        USERS_FILE.write_text((LEGACY_DATA_DIR / "users.json").read_text())
+
+    if LEGACY_USERS_DIR.exists():
+        for source in LEGACY_USERS_DIR.iterdir():
+            if not source.is_dir():
+                continue
+            target = USERS_DIR / source.name
+            if target.exists():
+                continue
+            target.mkdir(parents=True, exist_ok=True)
+            for child in source.iterdir():
+                child_target = target / child.name
+                if child_target.exists():
+                    continue
+                if child.is_dir():
+                    child_target.mkdir(parents=True, exist_ok=True)
+                    for nested in child.iterdir():
+                        nested_target = child_target / nested.name
+                        if not nested_target.exists() and nested.is_file():
+                            nested_target.write_bytes(nested.read_bytes())
+                elif child.is_file():
+                    child_target.write_bytes(child.read_bytes())
+
+
+migrate_legacy_storage_once()
 
 
 def load_hidden_files(path: Path) -> List[str]:
