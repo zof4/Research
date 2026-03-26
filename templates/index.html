@@ -185,6 +185,18 @@
                 <p class="helper-text">Sign in to read saved text.</p>
                 {% endif %}
                 {% if is_authenticated and (is_admin or group.owner == current_username) %}
+                <details class="source-details">
+                  <summary>Edit</summary>
+                  <form method="post" action="{{ url_for('edit_text_entry', entry_id=item.id) }}" class="stack-form text-editor-form" data-async>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
+                    <input type="text" name="title" maxlength="120" value="{{ item.title }}" placeholder="Title" />
+                    <textarea name="content" rows="7" maxlength="{{ max_text_chars }}" required>{{ item.content }}</textarea>
+                    <button type="submit" class="secondary-button">Save changes</button>
+                  </form>
+                </details>
+                {% endif %}
+                {% if is_authenticated and (is_admin or group.owner == current_username) %}
                 <div class="action-row">
                   {% if item.hidden %}
                   <form method="post" action="{{ url_for('unhide_text_entry', entry_id=item.id) }}" class="inline-form" data-async>
@@ -254,6 +266,15 @@
                 <details class="source-details">
                   <summary>Open text</summary>
                   <div class="history-rich">{{ render_basic_text_markup(item.content) }}</div>
+                </details>
+                <details class="source-details">
+                  <summary>Edit</summary>
+                  <form method="post" action="{{ url_for('edit_text_entry', entry_id=item.id) }}" class="stack-form text-editor-form" data-async>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <input type="text" name="title" maxlength="120" value="{{ item.title }}" placeholder="Title" />
+                    <textarea name="content" rows="7" maxlength="{{ max_text_chars }}" required>{{ item.content }}</textarea>
+                    <button type="submit" class="secondary-button">Save changes</button>
+                  </form>
                 </details>
                 <div class="action-row">
                   {% if item.hidden %}
@@ -472,7 +493,7 @@
                   </select>
                   <button type="submit" class="block-button">Cache reader view</button>
                 </form>
-                <form method="get" action="{{ url_for('live_reader') }}" class="stack-form" data-async>
+                <form method="get" action="{{ url_for('live_reader') }}" class="stack-form">
                   <input type="text" name="url" placeholder="https://example.com/article" inputmode="url" autocomplete="url" required />
                   <select name="reader_mode">
                     <option value="auto" selected>Live auto mode</option>
