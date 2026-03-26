@@ -8,13 +8,175 @@
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#39;");
 
-  const renderRichText = (value) => {
+  const renderInlineRichText = (value) => {
     let html = escapeHtml(value || "");
     html = html.replace(/`([^`\n]+)`/g, "<code>$1</code>");
     html = html.replace(/\*\*([^\n*][^*\n]*?)\*\*/g, "<strong>$1</strong>");
+    html = html.replace(/__([^\n_][^_\n]*?)__/g, "<strong>$1</strong>");
     html = html.replace(/(?<!\*)\*([^\n*][^*\n]*?)\*(?!\*)/g, "<em>$1</em>");
+    html = html.replace(/(?<!_)_([^\n_][^_\n]*?)_(?!_)/g, "<em>$1</em>");
+    html = html.replace(/~~([^\n~][^~\n]*?)~~/g, "<del>$1</del>");
+    html = html.replace(
+      /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
+    );
     html = html.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
-    return html.replaceAll("\n", "<br>");
+    return html;
+  };
+
+  const renderRichText = (value) => {
+    const lines = (value || "").split("\n");
+    const htmlParts = [];
+    let inUl = false;
+    let inOl = false;
+    const closeLists = () => {
+      if (inUl) {
+        htmlParts.push("</ul>");
+        inUl = false;
+      }
+      if (inOl) {
+        htmlParts.push("</ol>");
+        inOl = false;
+      }
+    };
+
+    lines.forEach((line) => {
+      const stripped = line.trim();
+      if (!stripped) {
+        closeLists();
+        htmlParts.push("<br>");
+        return;
+      }
+
+      const headingMatch = stripped.match(/^(#{1,6})\s+(.+)$/);
+      const bulletMatch = stripped.match(/^[-*]\s+(.+)$/);
+      const orderedMatch = stripped.match(/^\d+\.\s+(.+)$/);
+      const checklistMatch = stripped.match(/^-\s+\[( |x|X)\]\s+(.+)$/);
+      const quoteMatch = stripped.match(/^>\s+(.+)$/);
+
+      if (headingMatch) {
+        closeLists();
+        const level = headingMatch[1].length;
+        htmlParts.push(`<h${level}>${renderInlineRichText(headingMatch[2])}</h${level}>`);
+        return;
+      }
+
+      if (checklistMatch) {
+        if (inOl) {
+          htmlParts.push("</ol>");
+          inOl = false;
+        }
+        if (!inUl) {
+          htmlParts.push("<ul>");
+          inUl = true;
+        }
+        const marker = checklistMatch[1].toLowerCase() === "x" ? "☑" : "☐";
+        htmlParts.push(`<li>${marker} ${renderInlineRichText(checklistMatch[2])}</li>`);
+        return;
+      }
+
+      if (bulletMatch) {
+        if (inOl) {
+          htmlParts.push("</ol>");
+          inOl = false;
+        }
+        if (!inUl) {
+          htmlParts.push("<ul>");
+          inUl = true;
+        }
+        htmlParts.push(`<li>${renderInlineRichText(bulletMatch[1])}</li>`);
+        return;
+      }
+
+      if (orderedMatch) {
+        if (inUl) {
+          htmlParts.push("</ul>");
+          inUl = false;
+        }
+        if (!inOl) {
+          htmlParts.push("<ol>");
+          inOl = true;
+        }
+        htmlParts.push(`<li>${renderInlineRichText(orderedMatch[1])}</li>`);
+        return;
+      }
+
+      closeLists();
+      if (quoteMatch) {
+        htmlParts.push(`<blockquote>${renderInlineRichText(quoteMatch[1])}</blockquote>`);
+      } else {
+        htmlParts.push(renderInlineRichText(stripped));
+      }
+    });
+
+    closeLists();
+    return htmlParts.join("");
+  };
+
+  const clipboardHtmlToMarkdown = (html) => {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const walk = (node, listDepth = 0) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        return node.textContent || "";
+      }
+      if (!(node instanceof HTMLElement)) {
+        return "";
+      }
+
+      const content = Array.from(node.childNodes)
+        .map((child) => walk(child, listDepth + (node.tagName === "UL" || node.tagName === "OL" ? 1 : 0)))
+        .join("");
+
+      switch (node.tagName) {
+        case "STRONG":
+        case "B":
+          return `**${content}**`;
+        case "EM":
+        case "I":
+          return `*${content}*`;
+        case "CODE":
+          return `\`${content}\``;
+        case "BR":
+          return "\n";
+        case "LI":
+          if (node.parentElement?.tagName === "OL") {
+            const index = Array.from(node.parentElement.children).indexOf(node) + 1;
+            return `${"  ".repeat(Math.max(0, listDepth - 2))}${index}. ${content.trim()}\n`;
+          }
+          return `${"  ".repeat(Math.max(0, listDepth - 2))}- ${content.trim()}\n`;
+        case "A": {
+          const href = node.getAttribute("href");
+          if (href && /^https?:\/\//i.test(href)) {
+            return `[${content.trim() || href}](${href})`;
+          }
+          return content;
+        }
+        case "H1":
+          return `# ${content.trim()}\n`;
+        case "H2":
+          return `## ${content.trim()}\n`;
+        case "H3":
+          return `### ${content.trim()}\n`;
+        case "H4":
+          return `#### ${content.trim()}\n`;
+        case "H5":
+          return `##### ${content.trim()}\n`;
+        case "H6":
+          return `###### ${content.trim()}\n`;
+        case "BLOCKQUOTE":
+          return `> ${content.trim()}\n`;
+        case "P":
+        case "DIV":
+        case "SECTION":
+        case "ARTICLE":
+          return `${content}\n`;
+        default:
+          return content;
+      }
+    };
+
+    const raw = walk(doc.body).replace(/\n{3,}/g, "\n\n").trim();
+    return raw;
   };
 
   const initTextFormatting = () => {
@@ -35,6 +197,23 @@
       if (!textarea.dataset.richInit) {
         textarea.dataset.richInit = "1";
         textarea.addEventListener("input", updatePreview);
+        textarea.addEventListener("paste", (event) => {
+          const html = event.clipboardData?.getData("text/html");
+          if (!html) {
+            return;
+          }
+
+          const markdown = clipboardHtmlToMarkdown(html);
+          if (!markdown) {
+            return;
+          }
+
+          event.preventDefault();
+          const start = textarea.selectionStart || 0;
+          const end = textarea.selectionEnd || 0;
+          textarea.setRangeText(markdown, start, end, "end");
+          updatePreview();
+        });
       }
 
       form.querySelectorAll("[data-wrap], [data-prefix]").forEach((button) => {

@@ -47,7 +47,7 @@
       <section class="intro-card" aria-label="Workspace summary">
         <div class="intro-copy">
           <h1>Hello, {{ current_username }}</h1>
-          <p>Workspace overview.</p>
+          <p>Workspace overview.{% if is_admin %} Managing <strong>{{ selected_owner }}</strong> for new saves/uploads.{% endif %}</p>
         </div>
 
         <div class="stats-grid" aria-hidden="true">
@@ -55,9 +55,9 @@
             <span style="width: {{ '%.2f'|format(storage.usage_percent) }}%"></span>
           </div>
           <div class="mini-metrics">
-            <span class="metric-pill">◔ {{ files|length }}</span>
-            <span class="metric-pill">◌ {% if storage.has_limit %}{{ human_size(storage.remaining_bytes) }}{% else %}∞{% endif %}</span>
-            <span class="metric-pill">⚠ {{ storage.usage_percent|round(0, 'floor')|int }}%</span>
+            <span class="metric-pill" title="Total files visible in this view" aria-label="Visible files">◔ {{ files|length }}</span>
+            <span class="metric-pill" title="Storage remaining in current space" aria-label="Remaining storage">◌ {% if storage.has_limit %}{{ human_size(storage.remaining_bytes) }}{% else %}∞{% endif %}</span>
+            <span class="metric-pill" title="Overall storage utilization" aria-label="Storage usage">⚠ {{ storage.usage_percent|round(0, 'floor')|int }}%</span>
           </div>
         </div>
       </section>
@@ -72,12 +72,14 @@
             </div>
           </div>
 
-            <p class="helper-text">Logged in as <strong>{{ current_username }}</strong>.</p>
-            <form method="post" action="{{ url_for('logout') }}" class="stack-form" data-async>
-              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-              {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
-              <button type="submit" class="secondary-button block-button">Log out</button>
-            </form>
+            <div class="access-identity">
+              <p class="helper-text">Logged in as <strong>{{ current_username }}</strong>.</p>
+              <form method="post" action="{{ url_for('logout') }}" class="inline-form" data-async>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
+                <button type="submit" class="secondary-button">Log out</button>
+              </form>
+            </div>
 
             {% if is_admin %}
             <form method="get" action="{{ url_for(active_page ~ '_page') if active_page != 'home' else url_for('index') }}" class="stack-form owner-picker" data-async>
@@ -120,6 +122,28 @@
               <p class="section-kicker">Text</p>
               <h2>Text</h2>
             </div>
+            {% if is_authenticated %}
+            <details class="composer-panel">
+              <summary class="secondary-button">＋ New text item</summary>
+              <form method="post" action="{{ url_for('save_text_entry') }}" class="stack-form text-editor-form composer-form" data-async>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
+                <input type="text" name="title" maxlength="120" placeholder="Title" />
+                <div class="text-toolbar" data-text-toolbar>
+                  <button type="button" class="secondary-button toolbar-button" data-wrap="**" title="Bold">Bold</button>
+                  <button type="button" class="secondary-button toolbar-button" data-wrap="*" title="Italic">Italic</button>
+                  <button type="button" class="secondary-button toolbar-button" data-wrap="`" title="Code">Code</button>
+                  <button type="button" class="secondary-button toolbar-button" data-prefix="- " title="Bullet list">Bullet</button>
+                </div>
+                <textarea name="content" rows="7" maxlength="{{ max_text_chars }}" placeholder="Paste text here. Markdown-style formatting supported." required></textarea>
+                <details class="source-details">
+                  <summary>Preview</summary>
+                  <div class="formatted-preview" data-text-preview>Start typing to preview formatting.</div>
+                </details>
+                <button type="submit" class="block-button">Save text</button>
+              </form>
+            </details>
+            {% endif %}
             {% if is_authenticated and text_history %}
             <form method="post" action="{{ url_for('clear_text_entries') }}" class="inline-form section-head-action" data-async>
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
@@ -128,31 +152,18 @@
             {% endif %}
           </div>
 
-          {% if is_authenticated %}
-          <form method="post" action="{{ url_for('save_text_entry') }}" class="stack-form text-editor-form" data-async>
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-            {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
-            <input type="text" name="title" maxlength="120" placeholder="Title" />
-            <div class="text-toolbar" data-text-toolbar>
-              <button type="button" class="secondary-button toolbar-button" data-wrap="**" title="Bold">Bold</button>
-              <button type="button" class="secondary-button toolbar-button" data-wrap="*" title="Italic">Italic</button>
-              <button type="button" class="secondary-button toolbar-button" data-wrap="`" title="Code">Code</button>
-              <button type="button" class="secondary-button toolbar-button" data-prefix="- " title="Bullet list">Bullet</button>
-            </div>
-            <textarea name="content" rows="7" maxlength="{{ max_text_chars }}" placeholder="Paste text here. Markdown-style formatting supported." required></textarea>
-            <details class="source-details">
-              <summary>Preview</summary>
-              <div class="formatted-preview" data-text-preview>Start typing to preview formatting.</div>
-            </details>
-            <button type="submit" class="block-button">Save text</button>
-          </form>
-          {% else %}
+          {% if not is_authenticated %}
           <p class="helper-text">Log in to save text.</p>
           {% endif %}
 
           <div class="item-stack">
-            {% if text_history %}
-              {% for item in text_history %}
+            {% if text_groups %}
+              {% for group in text_groups %}
+              <article class="item-card user-group-card">
+                <h3>{{ group.owner }} <span class="item-meta">({{ group.items|length }} items)</span></h3>
+                {% if group.items %}
+                <div class="item-stack">
+                  {% for item in group.items %}
               <article class="item-card">
                 <div class="item-head">
                   {% if is_authenticated %}
@@ -175,22 +186,28 @@
                   {% if item.hidden %}
                   <form method="post" action="{{ url_for('unhide_text_entry', entry_id=item.id) }}" class="inline-form" data-async>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-                    {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
+                    {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
                     <button type="submit" class="secondary-button">Unhide</button>
                   </form>
                   {% else %}
                   <form method="post" action="{{ url_for('hide_text_entry', entry_id=item.id) }}" class="inline-form" data-async>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-                    {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
+                    {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
                     <button type="submit" class="secondary-button">Hide</button>
                   </form>
                   {% endif %}
                   <form method="post" action="{{ url_for('delete_text_entry', entry_id=item.id) }}" class="inline-form" data-async>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-                    {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
+                    {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
                     <button type="submit" class="delete-button">Delete</button>
                   </form>
                 </div>
+                {% endif %}
+              </article>
+                  {% endfor %}
+                </div>
+                {% else %}
+                <p class="empty-state">No text saved.</p>
                 {% endif %}
               </article>
               {% endfor %}
@@ -209,22 +226,22 @@
               <h2>Files</h2>
             </div>
             <p class="section-note">{% if storage.has_limit %}{{ human_size(storage.remaining_bytes) }} free{% else %}Admin view{% endif %}</p>
+            {% if is_authenticated %}
+            <details class="composer-panel">
+              <summary class="secondary-button">＋ New file</summary>
+              <form method="post" action="{{ url_for('upload_file') }}" enctype="multipart/form-data" class="stack-form composer-form" data-async>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
+                <input type="file" name="file" required />
+                <button type="submit" class="block-button">Upload file</button>
+              </form>
+            </details>
+            {% endif %}
           </div>
 
-          {% if is_authenticated %}
-          <form method="post" action="{{ url_for('upload_file') }}" enctype="multipart/form-data" class="stack-form" data-async>
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-            {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
-            <input type="file" name="file" required />
-            <button type="submit" class="block-button">Upload file</button>
-          </form>
-          {% else %}
+          {% if not is_authenticated %}
           <p class="helper-text">Log in to upload or delete files.</p>
           {% endif %}
-
-          <div class="storage-meter" aria-hidden="true">
-            <span style="width: {{ '%.2f'|format(storage.usage_percent) }}%"></span>
-          </div>
 
           <div class="item-stack">
             {% if is_admin %}
@@ -302,6 +319,35 @@
               <p class="section-kicker">Reader</p>
               <h2>Reader cache</h2>
             </div>
+            {% if is_authenticated %}
+            <details class="composer-panel">
+              <summary class="secondary-button">＋ New reader item</summary>
+              <div class="stack-form composer-form">
+                <form method="post" action="{{ url_for('save_reader_entry') }}" class="stack-form" data-async>
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                  {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
+                  <input type="text" name="url" placeholder="https://example.com/article" inputmode="url" autocomplete="url" required />
+                  <select name="reader_mode">
+                    <option value="auto" selected>Auto (Reddit JSON, then HTML, then proxy fallback)</option>
+                    <option value="html">HTML only</option>
+                    <option value="json">Structured Reddit JSON only</option>
+                    <option value="proxy">Proxy text mode (best for stubborn 403 pages)</option>
+                  </select>
+                  <button type="submit" class="block-button">Cache reader view</button>
+                </form>
+                <form method="get" action="{{ url_for('live_reader') }}" class="stack-form" data-async>
+                  <input type="text" name="url" placeholder="https://example.com/article" inputmode="url" autocomplete="url" required />
+                  <select name="reader_mode">
+                    <option value="auto" selected>Live auto mode</option>
+                    <option value="html">Live HTML only</option>
+                    <option value="json">Live Reddit JSON only</option>
+                    <option value="proxy">Live proxy text mode</option>
+                  </select>
+                  <button type="submit" class="secondary-button block-button">Open live viewer (uncached)</button>
+                </form>
+              </div>
+            </details>
+            {% endif %}
             {% if is_authenticated and reader_history %}
             <form method="post" action="{{ url_for('clear_reader_entries') }}" class="inline-form section-head-action" data-async>
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
@@ -310,36 +356,18 @@
             {% endif %}
           </div>
 
-          {% if is_authenticated %}
-          <form method="post" action="{{ url_for('save_reader_entry') }}" class="stack-form" data-async>
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-            {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
-            <input type="text" name="url" placeholder="https://example.com/article" inputmode="url" autocomplete="url" required />
-            <select name="reader_mode">
-              <option value="auto" selected>Auto (Reddit JSON, then HTML, then proxy fallback)</option>
-              <option value="html">HTML only</option>
-              <option value="json">Structured Reddit JSON only</option>
-              <option value="proxy">Proxy text mode (best for stubborn 403 pages)</option>
-            </select>
-            <button type="submit" class="block-button">Cache reader view</button>
-          </form>
-          <form method="get" action="{{ url_for('live_reader') }}" class="stack-form" data-async>
-            <input type="text" name="url" placeholder="https://example.com/article" inputmode="url" autocomplete="url" required />
-            <select name="reader_mode">
-              <option value="auto" selected>Live auto mode</option>
-              <option value="html">Live HTML only</option>
-              <option value="json">Live Reddit JSON only</option>
-              <option value="proxy">Live proxy text mode</option>
-            </select>
-            <button type="submit" class="secondary-button block-button">Open live viewer (uncached)</button>
-          </form>
-          {% else %}
+          {% if not is_authenticated %}
           <p class="helper-text">Log in to cache a public URL.</p>
           {% endif %}
 
           <div class="item-stack">
-            {% if reader_history %}
-              {% for item in reader_history %}
+            {% if reader_groups %}
+              {% for group in reader_groups %}
+              <article class="item-card user-group-card">
+                <h3>{{ group.owner }} <span class="item-meta">({{ group.items|length }} items)</span></h3>
+                {% if group.items %}
+                <div class="item-stack">
+                  {% for item in group.items %}
               <article class="item-card">
                 <div class="item-head">
                   <div>
@@ -369,39 +397,45 @@
                 <div class="action-row">
                   {% if is_authenticated %}
                   {% if is_admin %}
-                  <a class="button-link" href="{{ url_for('view_reader_entry', entry_id=item.id, owner=selected_owner) }}">Open</a>
+                  <a class="button-link" href="{{ url_for('view_reader_entry', entry_id=item.id, owner=group.owner) }}">Open</a>
                   {% else %}
                   <a class="button-link" href="{{ url_for('view_reader_entry', entry_id=item.id) }}">Open</a>
                   {% endif %}
                   <a class="button-link secondary-button" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Source</a>
                   <form method="post" action="{{ url_for('refresh_reader_entry', entry_id=item.id) }}" class="inline-form" data-async>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-                    {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
+                    {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
                     <input type="hidden" name="reader_mode" value="{{ item.reader_mode_used or 'auto' }}" />
                     <button type="submit" class="secondary-button">Refresh</button>
                   </form>
                   {% if item.hidden %}
                   <form method="post" action="{{ url_for('unhide_reader_entry', entry_id=item.id) }}" class="inline-form" data-async>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-                    {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
+                    {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
                     <button type="submit" class="secondary-button">Unhide</button>
                   </form>
                   {% else %}
                   <form method="post" action="{{ url_for('hide_reader_entry', entry_id=item.id) }}" class="inline-form" data-async>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-                    {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
+                    {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
                     <button type="submit" class="secondary-button">Hide</button>
                   </form>
                   {% endif %}
                   <form method="post" action="{{ url_for('delete_reader_entry', entry_id=item.id) }}" class="inline-form" data-async>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-                    {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
+                    {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
                     <button type="submit" class="delete-button">Delete</button>
                   </form>
                   {% else %}
                   <span class="helper-text">Locked while logged out.</span>
                   {% endif %}
                 </div>
+              </article>
+                  {% endfor %}
+                </div>
+                {% else %}
+                <p class="empty-state">No cached pages.</p>
+                {% endif %}
               </article>
               {% endfor %}
             {% else %}
@@ -418,6 +452,18 @@
               <p class="section-kicker">LaTeX</p>
               <h2>PDF</h2>
             </div>
+            {% if is_authenticated %}
+            <details class="composer-panel">
+              <summary class="secondary-button">＋ New PDF item</summary>
+              <form method="post" action="{{ url_for('save_latex_entry') }}" class="stack-form composer-form" data-async>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
+                <input type="text" name="title" maxlength="120" placeholder="PDF title" />
+                <textarea name="source" rows="8" maxlength="{{ max_latex_chars }}" placeholder="Example: \section*{Hello} $E=mc^2$" required></textarea>
+                <button type="submit" class="block-button">Render PDF</button>
+              </form>
+            </details>
+            {% endif %}
             <div class="section-head-meta">
               <p class="section-note"><code>{{ pdflatex_bin }}</code></p>
               {% if is_authenticated and latex_history %}
@@ -429,21 +475,18 @@
             </div>
           </div>
 
-          {% if is_authenticated %}
-          <form method="post" action="{{ url_for('save_latex_entry') }}" class="stack-form" data-async>
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-            {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
-            <input type="text" name="title" maxlength="120" placeholder="PDF title" />
-            <textarea name="source" rows="8" maxlength="{{ max_latex_chars }}" placeholder="Example: \section*{Hello} $E=mc^2$" required></textarea>
-            <button type="submit" class="block-button">Render PDF</button>
-          </form>
-          {% else %}
+          {% if not is_authenticated %}
           <p class="helper-text">Log in to render PDF.</p>
           {% endif %}
 
           <div class="item-stack">
-            {% if latex_history %}
-              {% for item in latex_history %}
+            {% if latex_groups %}
+              {% for group in latex_groups %}
+              <article class="item-card user-group-card">
+                <h3>{{ group.owner }} <span class="item-meta">({{ group.items|length }} items)</span></h3>
+                {% if group.items %}
+                <div class="item-stack">
+                  {% for item in group.items %}
               <article class="item-card">
                 <div class="item-head">
                   <div>
@@ -461,19 +504,19 @@
                   {% if item.hidden %}
                   <form method="post" action="{{ url_for('unhide_latex_entry', entry_id=item.id) }}" class="inline-form" data-async>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-                    {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
+                    {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
                     <button type="submit" class="secondary-button">Unhide</button>
                   </form>
                   {% else %}
                   <form method="post" action="{{ url_for('hide_latex_entry', entry_id=item.id) }}" class="inline-form" data-async>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-                    {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
+                    {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
                     <button type="submit" class="secondary-button">Hide</button>
                   </form>
                   {% endif %}
                   <form method="post" action="{{ url_for('delete_latex_entry', entry_id=item.id) }}" class="inline-form" data-async>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-                    {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
+                    {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
                     <button type="submit" class="delete-button">Delete</button>
                   </form>
                   {% else %}
@@ -485,6 +528,12 @@
                   <summary>Source</summary>
                   <pre class="history-pre">{{ item.source }}</pre>
                 </details>
+                {% endif %}
+              </article>
+                  {% endfor %}
+                </div>
+                {% else %}
+                <p class="empty-state">No PDFs.</p>
                 {% endif %}
               </article>
               {% endfor %}
