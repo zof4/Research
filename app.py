@@ -244,6 +244,23 @@ def remove_history_item(path: Path, item_id: str) -> Optional[Dict]:
     return removed
 
 
+def clear_history(path: Path) -> None:
+    save_history(path, [])
+
+
+def set_history_item_hidden(path: Path, item_id: str, hidden: bool) -> Optional[Dict]:
+    items = load_history(path)
+    updated_item = None
+    for item in items:
+        if item.get("id") == item_id:
+            item["hidden"] = hidden
+            updated_item = item
+            break
+    if updated_item is not None:
+        save_history(path, items)
+    return updated_item
+
+
 def find_history_item(path: Path, item_id: str) -> Optional[Dict]:
     for item in load_history(path):
         if item.get("id") == item_id:
@@ -854,6 +871,12 @@ def delete_reader_content(filename: Optional[str]) -> None:
     (READER_DIR / filename).unlink(missing_ok=True)
 
 
+def delete_latex_content(filename: Optional[str]) -> None:
+    if not filename:
+        return
+    (LATEX_DIR / filename).unlink(missing_ok=True)
+
+
 def fetch_reader_payload(url: str, reader_mode: str = "auto") -> Dict:
     normalized_url = normalize_reader_url(url)
     assert_public_reader_target(normalized_url)
@@ -940,15 +963,25 @@ def read_reader_content(filename: str) -> str:
 
 
 def build_template_context() -> Dict:
+    authenticated = is_authenticated()
     files, total_bytes = get_file_listing()
     storage = build_storage_summary(total_bytes)
+    text_history = load_history(TEXT_HISTORY_FILE)
+    latex_history = load_history(LATEX_HISTORY_FILE)
+    reader_history = get_reader_history()
+
+    if not authenticated:
+        text_history = [item for item in text_history if not item.get("hidden")]
+        latex_history = [item for item in latex_history if not item.get("hidden")]
+        reader_history = [item for item in reader_history if not item.get("hidden")]
+
     return {
         "files": files,
         "storage": storage,
-        "text_history": load_history(TEXT_HISTORY_FILE),
-        "latex_history": load_history(LATEX_HISTORY_FILE),
-        "reader_history": get_reader_history(),
-        "is_authenticated": is_authenticated(),
+        "text_history": text_history,
+        "latex_history": latex_history,
+        "reader_history": reader_history,
+        "is_authenticated": authenticated,
         "login_configured": bool(QUICKDROP_PASSWORD),
         "login_days": LOGIN_DAYS,
         "max_text_chars": MAX_TEXT_CHARS,
@@ -1238,6 +1271,130 @@ def delete_reader_entry(entry_id: str):
     return redirect(url_for("reader_page"))
 
 
+@app.post("/reader/hide/<entry_id>")
+@login_required
+def hide_reader_entry(entry_id: str):
+    validate_csrf()
+    item = set_history_item_hidden(READER_HISTORY_FILE, entry_id, True)
+    if item is None:
+        raise NotFound()
+    flash("Reader entry hidden from logged-out view.", "success")
+    return redirect(url_for("reader_page"))
+
+
+@app.post("/reader/unhide/<entry_id>")
+@login_required
+def unhide_reader_entry(entry_id: str):
+    validate_csrf()
+    item = set_history_item_hidden(READER_HISTORY_FILE, entry_id, False)
+    if item is None:
+        raise NotFound()
+    flash("Reader entry visible to logged-out view.", "success")
+    return redirect(url_for("reader_page"))
+
+
+@app.post("/reader/clear")
+@login_required
+def clear_reader_entries():
+    validate_csrf()
+    entries = load_history(READER_HISTORY_FILE)
+    for entry in entries:
+        delete_reader_content(entry.get("content_filename"))
+    clear_history(READER_HISTORY_FILE)
+    flash("Cleared cached reader pages.", "success")
+    return redirect(url_for("reader_page"))
+
+
+@app.post("/text/delete/<entry_id>")
+@login_required
+def delete_text_entry(entry_id: str):
+    validate_csrf()
+    removed = remove_history_item(TEXT_HISTORY_FILE, entry_id)
+    if removed is None:
+        raise NotFound()
+
+    flash("Text snippet deleted.", "success")
+    return redirect(url_for("text_page"))
+
+
+@app.post("/text/hide/<entry_id>")
+@login_required
+def hide_text_entry(entry_id: str):
+    validate_csrf()
+    item = set_history_item_hidden(TEXT_HISTORY_FILE, entry_id, True)
+    if item is None:
+        raise NotFound()
+    flash("Text snippet hidden from logged-out view.", "success")
+    return redirect(url_for("text_page"))
+
+
+@app.post("/text/unhide/<entry_id>")
+@login_required
+def unhide_text_entry(entry_id: str):
+    validate_csrf()
+    item = set_history_item_hidden(TEXT_HISTORY_FILE, entry_id, False)
+    if item is None:
+        raise NotFound()
+    flash("Text snippet visible to logged-out view.", "success")
+    return redirect(url_for("text_page"))
+
+
+@app.post("/text/clear")
+@login_required
+def clear_text_entries():
+    validate_csrf()
+    clear_history(TEXT_HISTORY_FILE)
+    flash("Cleared saved text snippets.", "success")
+    return redirect(url_for("text_page"))
+
+
+@app.post("/latex/delete/<entry_id>")
+@login_required
+def delete_latex_entry(entry_id: str):
+    validate_csrf()
+    removed = remove_history_item(LATEX_HISTORY_FILE, entry_id)
+    if removed is None:
+        raise NotFound()
+
+    delete_latex_content(removed.get("pdf_name"))
+    flash("LaTeX PDF deleted.", "success")
+    return redirect(url_for("latex_page"))
+
+
+@app.post("/latex/hide/<entry_id>")
+@login_required
+def hide_latex_entry(entry_id: str):
+    validate_csrf()
+    item = set_history_item_hidden(LATEX_HISTORY_FILE, entry_id, True)
+    if item is None:
+        raise NotFound()
+    flash("LaTeX PDF hidden from logged-out view.", "success")
+    return redirect(url_for("latex_page"))
+
+
+@app.post("/latex/unhide/<entry_id>")
+@login_required
+def unhide_latex_entry(entry_id: str):
+    validate_csrf()
+    item = set_history_item_hidden(LATEX_HISTORY_FILE, entry_id, False)
+    if item is None:
+        raise NotFound()
+    flash("LaTeX PDF visible to logged-out view.", "success")
+    return redirect(url_for("latex_page"))
+
+
+@app.post("/latex/clear")
+@login_required
+def clear_latex_entries():
+    validate_csrf()
+    entries = load_history(LATEX_HISTORY_FILE)
+    for entry in entries:
+        delete_latex_content(entry.get("pdf_name"))
+    clear_history(LATEX_HISTORY_FILE)
+    flash("Cleared rendered PDFs.", "success")
+    return redirect(url_for("latex_page"))
+
+
 @app.post("/delete/<path:filename>")
 @login_required
 def delete_file(filename: str):
@@ -1258,6 +1415,7 @@ def delete_file(filename: str):
 
 
 @app.get("/files/<path:filename>")
+@login_required
 def download_file(filename: str):
     safe_name = secure_filename(filename)
     if safe_name != filename:
@@ -1271,6 +1429,7 @@ def download_file(filename: str):
 
 
 @app.get("/latex/<path:filename>")
+@login_required
 def download_latex_pdf(filename: str):
     safe_name = secure_filename(filename)
     if safe_name != filename:
