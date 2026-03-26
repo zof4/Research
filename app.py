@@ -196,6 +196,25 @@ def render_basic_text_markup(value: str) -> Markup:
         .replace("'", "&#39;")
     )
 
+    def _trim_trailing_url_punctuation(url: str) -> Tuple[str, str]:
+        trailing = ""
+        while url and url[-1] in ".,!?;:]":
+            trailing = url[-1] + trailing
+            url = url[:-1]
+        if url.endswith(")"):
+            opens = url.count("(")
+            closes = url.count(")")
+            while url.endswith(")") and closes > opens:
+                trailing = ")" + trailing
+                url = url[:-1]
+                closes -= 1
+        return url, trailing
+
+    def _replace_raw_url(match: re.Match) -> str:
+        raw_url = match.group(1)
+        clean_url, trailing = _trim_trailing_url_punctuation(raw_url)
+        return f'<a href="{clean_url}" target="_blank" rel="noopener noreferrer">{clean_url}</a>{trailing}'
+
     def render_inline(text: str) -> str:
         text = re.sub(r"`([^`\n]+)`", r"<code>\1</code>", text)
         text = re.sub(r"\*\*([^\n*][^*\n]*?)\*\*", r"<strong>\1</strong>", text)
@@ -208,7 +227,7 @@ def render_basic_text_markup(value: str) -> Markup:
             r'<a href="\2" target="_blank" rel="noopener noreferrer">\1</a>',
             text,
         )
-        text = re.sub(r"(https?://[^\s<]+)", r'<a href="\1" target="_blank" rel="noopener noreferrer">\1</a>', text)
+        text = re.sub(r"(https?://[^\s<]+)", _replace_raw_url, text)
         return text
 
     lines = escaped.splitlines()
@@ -667,6 +686,20 @@ def set_history_item_hidden(path: Path, item_id: str, hidden: bool) -> Optional[
             item["hidden"] = hidden
             updated_item = item
             break
+    if updated_item is not None:
+        save_history(path, items)
+    return updated_item
+
+
+def update_history_item(path: Path, item_id: str, updates: Dict) -> Optional[Dict]:
+    items = load_history(path)
+    updated_item = None
+    for item in items:
+        if item.get("id") != item_id:
+            continue
+        item.update(updates)
+        updated_item = item
+        break
     if updated_item is not None:
         save_history(path, items)
     return updated_item
@@ -1282,7 +1315,7 @@ def fetch_proxy_reader_payload(url: str) -> Dict:
         "source_label": "r.jina.ai proxy",
         "summary": summarize_text(text),
         "word_count": len(text.split()),
-        "content_html": f"<pre>{escaped}</pre>",
+        "content_html": f"<pre class='proxy-reader-pre'>{escaped}</pre>",
         "resolved_url": url,
         "reader_mode_used": "proxy",
     }
@@ -1794,6 +1827,36 @@ def save_text_entry():
     }
     add_history_item(paths["text_history_file"], item, MAX_TEXT_HISTORY_ITEMS)
     flash(f"Saved text snippet for {target_owner}.", "success")
+    return redirect(url_for("text_page", owner=target_owner))
+
+
+@app.post("/text/edit/<entry_id>")
+@login_required
+def edit_text_entry(entry_id: str):
+    validate_csrf()
+    paths, target_owner = get_target_user_paths()
+    title = request.form.get("title", "").strip() or "Untitled note"
+    content = request.form.get("content", "").strip()
+
+    if not content:
+        flash("Text transfer cannot be empty.", "error")
+        return redirect(url_for("text_page", owner=target_owner))
+    if len(content) > MAX_TEXT_CHARS:
+        flash(f"Text transfer is too large. Limit: {MAX_TEXT_CHARS} characters.", "error")
+        return redirect(url_for("text_page", owner=target_owner))
+
+    item = update_history_item(
+        paths["text_history_file"],
+        entry_id,
+        {
+            "title": title[:120],
+            "content": content,
+            "updated": now_iso(),
+        },
+    )
+    if item is None:
+        raise NotFound()
+    flash("Text snippet updated.", "success")
     return redirect(url_for("text_page", owner=target_owner))
 
 

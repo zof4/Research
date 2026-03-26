@@ -36,6 +36,21 @@
   };
 
   const renderInlineRichText = (value) => {
+    const trimTrailingUrlPunctuation = (url) => {
+      let next = url;
+      let trailing = "";
+
+      while (/[.,!?;:\]]$/.test(next)) {
+        trailing = next.slice(-1) + trailing;
+        next = next.slice(0, -1);
+      }
+      while (next.endsWith(")") && (next.match(/\(/g) || []).length < (next.match(/\)/g) || []).length) {
+        trailing = ")" + trailing;
+        next = next.slice(0, -1);
+      }
+      return { next, trailing };
+    };
+
     let html = escapeHtml(value || "");
     html = html.replace(/`([^`\n]+)`/g, "<code>$1</code>");
     html = html.replace(/\*\*([^\n*][^*\n]*?)\*\*/g, "<strong>$1</strong>");
@@ -47,10 +62,10 @@
       /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
       '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
     );
-    html = html.replace(
-      /(https?:\/\/[^\s<]+)/g,
-      '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>',
-    );
+    html = html.replace(/(https?:\/\/[^\s<]+)/g, (match) => {
+      const { next, trailing } = trimTrailingUrlPunctuation(match);
+      return `<a href="${next}" target="_blank" rel="noopener noreferrer">${next}</a>${trailing}`;
+    });
     return html;
   };
 
@@ -377,6 +392,36 @@
     });
   };
 
+  const initFilePaste = () => {
+    if (document.body?.dataset.filePasteInit) {
+      return;
+    }
+    document.body.dataset.filePasteInit = "1";
+
+    document.addEventListener("paste", (event) => {
+      const files = Array.from(event.clipboardData?.files || []);
+      if (!files.length) {
+        return;
+      }
+
+      const activeElement = document.activeElement;
+      let fileInput =
+        activeElement instanceof HTMLInputElement && activeElement.type === "file"
+          ? activeElement
+          : document.querySelector("input[type='file'][name='file']");
+
+      if (!(fileInput instanceof HTMLInputElement)) {
+        return;
+      }
+
+      const transfer = new DataTransfer();
+      files.forEach((file) => transfer.items.add(file));
+      fileInput.files = transfer.files;
+      event.preventDefault();
+      fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  };
+
   const hasDashboardShell = (doc) =>
     shellSelectors.every((selector) => doc.querySelector(selector));
 
@@ -548,4 +593,5 @@
 
   initTextFormatting();
   initChatPolling();
+  initFilePaste();
 })();

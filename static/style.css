@@ -12,9 +12,9 @@
   --accent: #697586;
   --danger: #c25757;
   --shadow: 0 18px 40px rgba(18, 28, 45, 0.11);
-  --button-width: 11rem;
-  --button-height: 3.1rem;
-  --content-width: 1120px;
+  --button-width: 10rem;
+  --button-height: 2.8rem;
+  --content-width: 1440px;
   --radius-lg: 22px;
   --radius-md: 16px;
   --radius-sm: 12px;
@@ -66,7 +66,8 @@ img {
 
 .site-header-inner {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: auto auto auto;
+  justify-content: center;
 }
 
 .topbar-inner {
@@ -115,11 +116,11 @@ img {
 }
 
 .top-nav {
-  justify-self: end;
+  justify-self: center;
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 0.2rem;
   max-width: 100%;
   overflow-x: auto;
@@ -669,6 +670,11 @@ button:active {
   background: var(--surface-2);
   border: 1px solid var(--line);
 }
+.reader-content pre.proxy-reader-pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
 .reader-content :where(p, li, blockquote, h1, h2, h3, h4, code, pre, a),
 .item-card :where(h3, p, span, a, code),
 .topbar h1,
@@ -739,7 +745,8 @@ button:active {
 
 @media (max-width: 640px) {
   :root {
-    --button-width: min(100%, 18rem);
+    --button-width: min(100%, 9.5rem);
+    --button-height: 2.2rem;
   }
 
   .container {
@@ -755,11 +762,22 @@ button:active {
 
   .action-row > *,
   .row-card > .inline-form {
-    flex-basis: min(100%, 18rem);
+    flex-basis: min(100%, 9.5rem);
   }
 
   .top-nav a {
-    padding-inline: 0.5rem;
+    padding: 0.25rem 0.45rem 0.35rem;
+    font-size: 0.82rem;
+  }
+
+  button,
+  .button-link {
+    font-size: 0.82rem;
+    padding: 0.45rem 0.65rem;
+  }
+
+  .section-head {
+    gap: 0.5rem;
   }
 }
 
