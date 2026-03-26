@@ -211,6 +211,7 @@ def ensure_user_paths(username: str) -> Dict[str, Path]:
         "text_history_file": data / "text_history.json",
         "latex_history_file": data / "latex_history.json",
         "reader_history_file": data / "reader_history.json",
+        "hidden_files_file": data / "hidden_files.json",
     }
 
 
@@ -235,6 +236,36 @@ def load_users() -> Dict[str, str]:
 
 def save_users(users: Dict[str, str]) -> None:
     USERS_FILE.write_text(json.dumps(users, indent=2))
+
+
+def load_hidden_files(path: Path) -> List[str]:
+    if not path.exists():
+        return []
+    try:
+        loaded = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(loaded, list):
+        return []
+    cleaned = []
+    for item in loaded:
+        if isinstance(item, str) and item:
+            cleaned.append(item)
+    return cleaned
+
+
+def save_hidden_files(path: Path, hidden_files: List[str]) -> None:
+    deduped = sorted(set(hidden_files))
+    path.write_text(json.dumps(deduped, indent=2))
+
+
+def set_file_hidden(path: Path, filename: str, hidden: bool) -> None:
+    hidden_files = set(load_hidden_files(path))
+    if hidden:
+        hidden_files.add(filename)
+    else:
+        hidden_files.discard(filename)
+    save_hidden_files(path, list(hidden_files))
 
 
 def login_required(view):
@@ -325,7 +356,7 @@ def find_history_item(path: Path, item_id: str) -> Optional[Dict]:
 
 def iter_uploaded_files(directory: Path):
     for path in sorted(directory.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
-        if path.is_file():
+        if path.is_file() and path.name != ".gitkeep":
             yield path
 
 
@@ -333,7 +364,7 @@ def get_total_storage_bytes(directory: Path) -> int:
     return sum(path.stat().st_size for path in iter_uploaded_files(directory))
 
 
-def get_file_listing(directory: Path, owner: str) -> Tuple[List[Dict], int]:
+def get_file_listing(directory: Path, owner: str, hidden_filenames: Optional[set] = None) -> Tuple[List[Dict], int]:
     files = []
     total_bytes = 0
 
@@ -346,6 +377,7 @@ def get_file_listing(directory: Path, owner: str) -> Tuple[List[Dict], int]:
                 "size": stat.st_size,
                 "modified": datetime.fromtimestamp(stat.st_mtime),
                 "owner": owner,
+                "hidden": path.name in (hidden_filenames or set()),
             }
         )
 
@@ -1042,7 +1074,8 @@ def build_template_context() -> Dict:
                     continue
                 owner = user_dir.name
                 paths = ensure_user_paths(owner)
-                user_files, user_total = get_file_listing(paths["uploads_dir"], owner=owner)
+                hidden_files = set(load_hidden_files(paths["hidden_files_file"]))
+                user_files, user_total = get_file_listing(paths["uploads_dir"], owner=owner, hidden_filenames=hidden_files)
                 files.extend(user_files)
                 total_bytes += user_total
             storage = {
@@ -1055,7 +1088,8 @@ def build_template_context() -> Dict:
             }
         else:
             paths = ensure_user_paths(username)
-            files, total_bytes = get_file_listing(paths["uploads_dir"], owner=username)
+            hidden_files = set(load_hidden_files(paths["hidden_files_file"]))
+            files, total_bytes = get_file_listing(paths["uploads_dir"], owner=username, hidden_filenames=hidden_files)
             storage = build_storage_summary(total_bytes)
             storage["has_limit"] = True
             text_history = load_history(paths["text_history_file"])
@@ -1086,6 +1120,13 @@ def render_dashboard_page(active_page: str):
     context = build_template_context()
     context["active_page"] = active_page
     return render_template("index.html", **context)
+
+
+def resolve_file_owner_paths_from_request() -> Dict[str, Path]:
+    owner = request.args.get("owner", "").strip().lower()
+    if is_admin_user() and owner and owner != ADMIN_USERNAME:
+        return ensure_user_paths(owner)
+    return get_current_user_paths()
 
 
 @app.context_processor
@@ -1219,6 +1260,7 @@ def upload_file():
     destination = paths["uploads_dir"] / final_name
     max_bytes = MAX_UPLOAD_BYTES if is_admin_user() else min(MAX_UPLOAD_BYTES, remaining_bytes)
     bytes_written = save_upload_with_limits(upload, destination, max_bytes)
+    set_file_hidden(paths["hidden_files_file"], final_name, False)
     flash(f"Uploaded {final_name} ({human_size(bytes_written)})", "success")
     return redirect(url_for("files_page"))
 
@@ -1543,18 +1585,47 @@ def delete_file(filename: str):
     if safe_name != filename:
         raise NotFound()
 
-    owner = request.args.get("owner", "").strip().lower()
-    if is_admin_user() and owner and owner != ADMIN_USERNAME:
-        paths = ensure_user_paths(owner)
-    else:
-        paths = get_current_user_paths()
+    paths = resolve_file_owner_paths_from_request()
     target = paths["uploads_dir"] / safe_name
     if not target.exists() or not target.is_file():
         flash(f"{safe_name} was already gone.", "error")
         return redirect(url_for("files_page"))
 
     target.unlink()
+    set_file_hidden(paths["hidden_files_file"], safe_name, False)
     flash(f"Deleted {safe_name}", "success")
+    return redirect(url_for("files_page"))
+
+
+@app.post("/files/hide/<path:filename>")
+@login_required
+def hide_file(filename: str):
+    validate_csrf()
+    safe_name = secure_filename(filename)
+    if safe_name != filename:
+        raise NotFound()
+    paths = resolve_file_owner_paths_from_request()
+    target = paths["uploads_dir"] / safe_name
+    if not target.exists() or not target.is_file():
+        raise NotFound()
+    set_file_hidden(paths["hidden_files_file"], safe_name, True)
+    flash(f"Hidden {safe_name}", "success")
+    return redirect(url_for("files_page"))
+
+
+@app.post("/files/unhide/<path:filename>")
+@login_required
+def unhide_file(filename: str):
+    validate_csrf()
+    safe_name = secure_filename(filename)
+    if safe_name != filename:
+        raise NotFound()
+    paths = resolve_file_owner_paths_from_request()
+    target = paths["uploads_dir"] / safe_name
+    if not target.exists() or not target.is_file():
+        raise NotFound()
+    set_file_hidden(paths["hidden_files_file"], safe_name, False)
+    flash(f"Unhidden {safe_name}", "success")
     return redirect(url_for("files_page"))
 
 
@@ -1565,11 +1636,7 @@ def download_file(filename: str):
     if safe_name != filename:
         raise NotFound()
 
-    owner = request.args.get("owner", "").strip().lower()
-    if is_admin_user() and owner and owner != ADMIN_USERNAME:
-        paths = ensure_user_paths(owner)
-    else:
-        paths = get_current_user_paths()
+    paths = resolve_file_owner_paths_from_request()
     target = paths["uploads_dir"] / safe_name
     if not target.exists() or not target.is_file():
         raise NotFound()
