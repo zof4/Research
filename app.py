@@ -8,6 +8,7 @@ import shutil
 import socket
 import subprocess
 import tempfile
+import zipfile
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from html import unescape
@@ -807,6 +808,77 @@ def save_upload_with_limits(upload, destination: Path, max_bytes: int) -> int:
 
     temp_path.replace(destination)
     return bytes_written
+
+
+def _safe_zip_member_name(member_name: str) -> str:
+    raw = member_name.replace("\\", "/").strip()
+    if not raw:
+        return ""
+    parts = [part for part in raw.split("/") if part not in {"", ".", ".."}]
+    if not parts:
+        return ""
+    safe_parts = [secure_filename(part) for part in parts]
+    safe_parts = [part for part in safe_parts if part]
+    if not safe_parts:
+        return ""
+    return "__".join(safe_parts)
+
+
+def extract_zip_upload_with_limits(upload, destination_dir: Path, max_bytes: int) -> Tuple[int, int]:
+    upload.stream.seek(0)
+    zip_bytes = upload.stream.read()
+    if len(zip_bytes) > MAX_UPLOAD_BYTES:
+        raise RequestEntityTooLarge()
+
+    written_bytes = 0
+    extracted_files = 0
+    max_files = 500
+
+    with tempfile.NamedTemporaryFile(dir=destination_dir.parent, delete=False) as tmp:
+        temp_zip_path = Path(tmp.name)
+        tmp.write(zip_bytes)
+
+    try:
+        with zipfile.ZipFile(temp_zip_path) as archive:
+            for info in archive.infolist():
+                if info.is_dir():
+                    continue
+                if extracted_files >= max_files:
+                    break
+                safe_name = _safe_zip_member_name(info.filename)
+                if not safe_name:
+                    continue
+
+                final_name = ensure_unique_filename(destination_dir, safe_name)
+                destination = destination_dir / final_name
+                with archive.open(info) as source, tempfile.NamedTemporaryFile(
+                    dir=destination_dir.parent,
+                    delete=False,
+                ) as tmp_member:
+                    temp_member_path = Path(tmp_member.name)
+                    member_size = 0
+                    try:
+                        while True:
+                            chunk = source.read(1024 * 1024)
+                            if not chunk:
+                                break
+                            member_size += len(chunk)
+                            written_bytes += len(chunk)
+                            if member_size > MAX_UPLOAD_BYTES or written_bytes > max_bytes:
+                                raise RequestEntityTooLarge()
+                            tmp_member.write(chunk)
+                    except Exception:
+                        temp_member_path.unlink(missing_ok=True)
+                        raise
+
+                temp_member_path.replace(destination)
+                extracted_files += 1
+    except zipfile.BadZipFile as error:
+        raise ValueError("Invalid ZIP archive.") from error
+    finally:
+        temp_zip_path.unlink(missing_ok=True)
+
+    return extracted_files, written_bytes
 
 
 def should_force_download(filename: str) -> bool:
@@ -1795,9 +1867,25 @@ def upload_file():
         )
         return redirect(url_for("files_page", owner=target_owner))
 
+    max_bytes = MAX_UPLOAD_BYTES if is_admin_user() else min(MAX_UPLOAD_BYTES, remaining_bytes)
+    if filename.lower().endswith(".zip"):
+        try:
+            extracted_files, bytes_written = extract_zip_upload_with_limits(upload, paths["uploads_dir"], max_bytes)
+        except ValueError as error:
+            flash(str(error), "error")
+            return redirect(url_for("files_page", owner=target_owner))
+
+        if extracted_files == 0:
+            flash("ZIP upload had no valid files to import.", "error")
+            return redirect(url_for("files_page", owner=target_owner))
+        flash(
+            f"Imported {extracted_files} files from ZIP for {target_owner} ({human_size(bytes_written)} total).",
+            "success",
+        )
+        return redirect(url_for("files_page", owner=target_owner))
+
     final_name = ensure_unique_filename(paths["uploads_dir"], filename)
     destination = paths["uploads_dir"] / final_name
-    max_bytes = MAX_UPLOAD_BYTES if is_admin_user() else min(MAX_UPLOAD_BYTES, remaining_bytes)
     bytes_written = save_upload_with_limits(upload, destination, max_bytes)
     set_file_hidden(paths["hidden_files_file"], final_name, False)
     flash(f"Uploaded {final_name} ({human_size(bytes_written)}) to {target_owner}.", "success")
@@ -1880,6 +1968,26 @@ def share_text_entry(entry_id: str):
     if item is None:
         raise NotFound()
     flash(f"Shared text item with {target_username}.", "success")
+    return redirect(url_for("text_page", owner=target_owner))
+
+
+@app.post("/text/unshare/<entry_id>")
+@login_required
+def unshare_text_entry(entry_id: str):
+    validate_csrf()
+    paths, target_owner = get_target_user_paths()
+    target_username = normalize_username(request.form.get("share_username", ""))
+    if not target_username:
+        flash("Choose a user to remove.", "error")
+        return redirect(url_for("text_page", owner=target_owner))
+    if target_username == target_owner:
+        flash("Owner access cannot be removed.", "error")
+        return redirect(url_for("text_page", owner=target_owner))
+
+    item = toggle_history_share(paths["text_history_file"], entry_id, target_username, shared=False)
+    if item is None:
+        raise NotFound()
+    flash(f"Removed {target_username} from text item sharing.", "success")
     return redirect(url_for("text_page", owner=target_owner))
 
 
@@ -2245,6 +2353,31 @@ def share_file(filename: str):
 
     set_file_share(paths["file_shares_file"], safe_name, target_username, shared=True)
     flash(f"Shared {safe_name} with {target_username}.", "success")
+    return redirect(url_for("files_page", owner=target_owner))
+
+
+@app.post("/files/unshare/<path:filename>")
+@login_required
+def unshare_file(filename: str):
+    validate_csrf()
+    safe_name = secure_filename(filename)
+    if safe_name != filename:
+        raise NotFound()
+    paths, target_owner = get_target_user_paths()
+    target = paths["uploads_dir"] / safe_name
+    if not target.exists() or not target.is_file():
+        raise NotFound()
+
+    target_username = normalize_username(request.form.get("share_username", ""))
+    if not target_username:
+        flash("Choose a user to remove.", "error")
+        return redirect(url_for("files_page", owner=target_owner))
+    if target_username == target_owner:
+        flash("Owner access cannot be removed.", "error")
+        return redirect(url_for("files_page", owner=target_owner))
+
+    set_file_share(paths["file_shares_file"], safe_name, target_username, shared=False)
+    flash(f"Removed {target_username} from {safe_name} sharing.", "success")
     return redirect(url_for("files_page", owner=target_owner))
 
 
