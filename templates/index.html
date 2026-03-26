@@ -9,14 +9,14 @@
   <body>
     <header class="site-header">
       <div class="container site-header-inner">
-        <a class="brand" href="{{ url_for('index') }}">Dropper</a>
+        <a class="brand" href="{{ url_for('index') }}" data-async-nav>Dropper</a>
 
         <nav class="top-nav" aria-label="Sections">
-          <a href="{{ url_for('access_page') }}">Access</a>
-          <a href="{{ url_for('files_page') }}">Files</a>
-          <a href="{{ url_for('reader_page') }}">Reader</a>
-          <a href="{{ url_for('text_page') }}">Text</a>
-          <a href="{{ url_for('latex_page') }}">LaTeX</a>
+          <a href="{{ url_for('access_page') }}" data-async-nav>Access</a>
+          <a href="{{ url_for('files_page') }}" data-async-nav>Files</a>
+          <a href="{{ url_for('reader_page') }}" data-async-nav>Reader</a>
+          <a href="{{ url_for('text_page') }}" data-async-nav>Text</a>
+          <a href="{{ url_for('latex_page') }}" data-async-nav>LaTeX</a>
         </nav>
 
         {% if is_authenticated %}
@@ -64,6 +64,17 @@
             <strong>{{ human_size(storage.max_upload_bytes) }}</strong>
           </div>
         </div>
+        {% if is_admin %}
+        <form method="get" action="{{ url_for(active_page ~ '_page') if active_page != 'home' else url_for('index') }}" class="stack-form owner-picker" data-async>
+          <label for="owner-select" class="section-kicker">Working in user space</label>
+          <select id="owner-select" name="owner">
+            {% for username in manageable_users %}
+            <option value="{{ username }}" {% if username == selected_owner %}selected{% endif %}>{{ username }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="secondary-button">Switch</button>
+        </form>
+        {% endif %}
       </section>
 
       <div class="dashboard-grid">
@@ -78,18 +89,42 @@
 
             {% if is_authenticated %}
             <p class="helper-text">Logged in as <strong>{{ current_username }}</strong>.</p>
-            <form method="post" action="{{ url_for('logout') }}" class="stack-form">
+            <form method="post" action="{{ url_for('logout') }}" class="stack-form" data-async>
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+              {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
               <button type="submit" class="secondary-button block-button">Log out</button>
             </form>
             {% else %}
-            <p class="helper-text">Sign in or create a user. Admin is <code>admin</code>/<code>dropper</code>.</p>
-            <form method="post" action="{{ url_for('login') }}" class="stack-form">
+            <p class="helper-text">Sign in with your account. Admin credentials are no longer displayed on this screen.</p>
+            <form method="post" action="{{ url_for('login') }}" class="stack-form adaptive-auth-form" data-async>
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
               <input type="text" name="username" placeholder="Username" autocomplete="username" required />
               <input type="password" name="password" placeholder="Password" autocomplete="current-password" required />
               <button type="submit" class="block-button">Log in</button>
             </form>
+            {% endif %}
+
+            {% if is_admin %}
+            <div class="admin-user-tools">
+              <p class="helper-text">Admin controls for user logins.</p>
+              <form method="post" action="{{ url_for('admin_create_user') }}" class="stack-form" data-async>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <input type="text" name="new_username" placeholder="New username" required />
+                <input type="password" name="new_password" placeholder="Initial password" required />
+                <button type="submit" class="secondary-button">Create / reset user</button>
+              </form>
+              <form method="post" action="{{ url_for('admin_update_user_password') }}" class="stack-form" data-async>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <input type="text" name="target_username" value="{{ selected_owner if selected_owner != 'admin' else '' }}" placeholder="Username" required />
+                <input type="password" name="target_password" placeholder="New password" required />
+                <button type="submit" class="secondary-button">Update password</button>
+              </form>
+              <form method="post" action="{{ url_for('admin_delete_user') }}" class="stack-form" data-async>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <input type="text" name="target_username" value="{{ selected_owner if selected_owner != 'admin' else '' }}" placeholder="Username to delete" required />
+                <button type="submit" class="delete-button">Delete user login</button>
+              </form>
+            </div>
             {% endif %}
         </section>
         {% endif %}
@@ -102,7 +137,7 @@
               <h2>Reader cache</h2>
             </div>
             {% if is_authenticated and reader_history %}
-            <form method="post" action="{{ url_for('clear_reader_entries') }}" class="inline-form section-head-action">
+            <form method="post" action="{{ url_for('clear_reader_entries') }}" class="inline-form section-head-action" data-async>
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
               <button type="submit" class="delete-button">Clear all</button>
             </form>
@@ -110,8 +145,9 @@
           </div>
 
           {% if is_authenticated %}
-          <form method="post" action="{{ url_for('save_reader_entry') }}" class="stack-form">
+          <form method="post" action="{{ url_for('save_reader_entry') }}" class="stack-form" data-async>
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
             <input type="text" name="url" placeholder="https://example.com/article" inputmode="url" autocomplete="url" required />
             <select name="reader_mode">
               <option value="auto" selected>Auto (Reddit JSON, then HTML, then proxy fallback)</option>
@@ -121,7 +157,7 @@
             </select>
             <button type="submit" class="block-button">Cache reader view</button>
           </form>
-          <form method="get" action="{{ url_for('live_reader') }}" class="stack-form">
+          <form method="get" action="{{ url_for('live_reader') }}" class="stack-form" data-async>
             <input type="text" name="url" placeholder="https://example.com/article" inputmode="url" autocomplete="url" required />
             <select name="reader_mode">
               <option value="auto" selected>Live auto mode</option>
@@ -166,26 +202,34 @@
 
                 <div class="action-row">
                   {% if is_authenticated %}
+                  {% if is_admin %}
+                  <a class="button-link" href="{{ url_for('view_reader_entry', entry_id=item.id, owner=selected_owner) }}">Open</a>
+                  {% else %}
                   <a class="button-link" href="{{ url_for('view_reader_entry', entry_id=item.id) }}">Open</a>
+                  {% endif %}
                   <a class="button-link secondary-button" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Source</a>
-                  <form method="post" action="{{ url_for('refresh_reader_entry', entry_id=item.id) }}" class="inline-form">
+                  <form method="post" action="{{ url_for('refresh_reader_entry', entry_id=item.id) }}" class="inline-form" data-async>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
                     <input type="hidden" name="reader_mode" value="{{ item.reader_mode_used or 'auto' }}" />
                     <button type="submit" class="secondary-button">Refresh</button>
                   </form>
                   {% if item.hidden %}
-                  <form method="post" action="{{ url_for('unhide_reader_entry', entry_id=item.id) }}" class="inline-form">
+                  <form method="post" action="{{ url_for('unhide_reader_entry', entry_id=item.id) }}" class="inline-form" data-async>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
                     <button type="submit" class="secondary-button">Unhide</button>
                   </form>
                   {% else %}
-                  <form method="post" action="{{ url_for('hide_reader_entry', entry_id=item.id) }}" class="inline-form">
+                  <form method="post" action="{{ url_for('hide_reader_entry', entry_id=item.id) }}" class="inline-form" data-async>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
                     <button type="submit" class="secondary-button">Hide</button>
                   </form>
                   {% endif %}
-                  <form method="post" action="{{ url_for('delete_reader_entry', entry_id=item.id) }}" class="inline-form">
+                  <form method="post" action="{{ url_for('delete_reader_entry', entry_id=item.id) }}" class="inline-form" data-async>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
                     <button type="submit" class="delete-button">Delete</button>
                   </form>
                   {% else %}
@@ -212,8 +256,9 @@
           </div>
 
           {% if is_authenticated %}
-          <form method="post" action="{{ url_for('upload_file') }}" enctype="multipart/form-data" class="stack-form">
+          <form method="post" action="{{ url_for('upload_file') }}" enctype="multipart/form-data" class="stack-form" data-async>
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
             <input type="file" name="file" required />
             <button type="submit" class="block-button">Upload file</button>
           </form>
@@ -226,7 +271,36 @@
           </div>
 
           <div class="item-stack">
-            {% if files %}
+            {% if is_admin %}
+              {% for group in file_groups %}
+              <article class="item-card">
+                <h3>{{ group.owner }} <span class="item-meta">({{ group.files|length }} files, {{ human_size(group.total_bytes) }})</span></h3>
+                {% if group.files %}
+                <div class="item-stack">
+                  {% for file in group.files %}
+                  <article class="item-card row-card">
+                    <div class="row-main">
+                      <h3>
+                        <a class="text-link" href="{{ url_for('download_file', filename=file.name, owner=file.owner) }}" target="_blank" rel="noopener noreferrer">
+                          {{ file.name }}
+                        </a>
+                        {% if file.hidden %}<span class="item-badge">Hidden</span>{% endif %}
+                      </h3>
+                      <p class="item-meta">{{ human_size(file.size) }} • {{ file.modified.strftime('%Y-%m-%d %H:%M') }}</p>
+                    </div>
+                    <form method="post" action="{{ url_for('delete_file', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                      <button type="submit" class="delete-button">Delete</button>
+                    </form>
+                  </article>
+                  {% endfor %}
+                </div>
+                {% else %}
+                <p class="empty-state">No files for this user.</p>
+                {% endif %}
+              </article>
+              {% endfor %}
+            {% elif files %}
               {% for file in files %}
               <article class="item-card row-card">
                 <div class="row-main">
@@ -240,17 +314,17 @@
                 </div>
 
                 {% if is_authenticated %}
-                <form method="post" action="{{ url_for('delete_file', filename=file.name, owner=file.owner) }}" class="inline-form">
+                <form method="post" action="{{ url_for('delete_file', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
                   <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
                   <button type="submit" class="delete-button">Delete</button>
                 </form>
                 {% if file.hidden %}
-                <form method="post" action="{{ url_for('unhide_file', filename=file.name, owner=file.owner) }}" class="inline-form">
+                <form method="post" action="{{ url_for('unhide_file', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
                   <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
                   <button type="submit" class="secondary-button">Unhide</button>
                 </form>
                 {% else %}
-                <form method="post" action="{{ url_for('hide_file', filename=file.name, owner=file.owner) }}" class="inline-form">
+                <form method="post" action="{{ url_for('hide_file', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
                   <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
                   <button type="submit" class="secondary-button">Hide</button>
                 </form>
@@ -273,7 +347,7 @@
               <h2>Text</h2>
             </div>
             {% if is_authenticated and text_history %}
-            <form method="post" action="{{ url_for('clear_text_entries') }}" class="inline-form section-head-action">
+            <form method="post" action="{{ url_for('clear_text_entries') }}" class="inline-form section-head-action" data-async>
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
               <button type="submit" class="delete-button">Clear all</button>
             </form>
@@ -281,8 +355,9 @@
           </div>
 
           {% if is_authenticated %}
-          <form method="post" action="{{ url_for('save_text_entry') }}" class="stack-form">
+          <form method="post" action="{{ url_for('save_text_entry') }}" class="stack-form" data-async>
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
             <input type="text" name="title" maxlength="120" placeholder="Title" />
             <textarea name="content" rows="7" maxlength="{{ max_text_chars }}" placeholder="Paste text here." required></textarea>
             <button type="submit" class="block-button">Save text</button>
@@ -311,18 +386,21 @@
                 {% if is_authenticated %}
                 <div class="action-row">
                   {% if item.hidden %}
-                  <form method="post" action="{{ url_for('unhide_text_entry', entry_id=item.id) }}" class="inline-form">
+                  <form method="post" action="{{ url_for('unhide_text_entry', entry_id=item.id) }}" class="inline-form" data-async>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
                     <button type="submit" class="secondary-button">Unhide</button>
                   </form>
                   {% else %}
-                  <form method="post" action="{{ url_for('hide_text_entry', entry_id=item.id) }}" class="inline-form">
+                  <form method="post" action="{{ url_for('hide_text_entry', entry_id=item.id) }}" class="inline-form" data-async>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
                     <button type="submit" class="secondary-button">Hide</button>
                   </form>
                   {% endif %}
-                  <form method="post" action="{{ url_for('delete_text_entry', entry_id=item.id) }}" class="inline-form">
+                  <form method="post" action="{{ url_for('delete_text_entry', entry_id=item.id) }}" class="inline-form" data-async>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
                     <button type="submit" class="delete-button">Delete</button>
                   </form>
                 </div>
@@ -346,7 +424,7 @@
             <div class="section-head-meta">
               <p class="section-note"><code>{{ pdflatex_bin }}</code></p>
               {% if is_authenticated and latex_history %}
-              <form method="post" action="{{ url_for('clear_latex_entries') }}" class="inline-form section-head-action">
+              <form method="post" action="{{ url_for('clear_latex_entries') }}" class="inline-form section-head-action" data-async>
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
                 <button type="submit" class="delete-button">Clear all</button>
               </form>
@@ -355,8 +433,9 @@
           </div>
 
           {% if is_authenticated %}
-          <form method="post" action="{{ url_for('save_latex_entry') }}" class="stack-form">
+          <form method="post" action="{{ url_for('save_latex_entry') }}" class="stack-form" data-async>
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
             <input type="text" name="title" maxlength="120" placeholder="PDF title" />
             <textarea name="source" rows="8" maxlength="{{ max_latex_chars }}" placeholder="Example: \section*{Hello} $E=mc^2$" required></textarea>
             <button type="submit" class="block-button">Render PDF</button>
@@ -383,18 +462,21 @@
                   {% if is_authenticated %}
                   <a class="button-link" href="{{ url_for('download_latex_pdf', filename=item.pdf_name) }}">Download PDF</a>
                   {% if item.hidden %}
-                  <form method="post" action="{{ url_for('unhide_latex_entry', entry_id=item.id) }}" class="inline-form">
+                  <form method="post" action="{{ url_for('unhide_latex_entry', entry_id=item.id) }}" class="inline-form" data-async>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
                     <button type="submit" class="secondary-button">Unhide</button>
                   </form>
                   {% else %}
-                  <form method="post" action="{{ url_for('hide_latex_entry', entry_id=item.id) }}" class="inline-form">
+                  <form method="post" action="{{ url_for('hide_latex_entry', entry_id=item.id) }}" class="inline-form" data-async>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
                     <button type="submit" class="secondary-button">Hide</button>
                   </form>
                   {% endif %}
-                  <form method="post" action="{{ url_for('delete_latex_entry', entry_id=item.id) }}" class="inline-form">
+                  <form method="post" action="{{ url_for('delete_latex_entry', entry_id=item.id) }}" class="inline-form" data-async>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
                     <button type="submit" class="delete-button">Delete</button>
                   </form>
                   {% else %}
@@ -417,5 +499,6 @@
         {% endif %}
       </div>
     </main>
+      <script src="{{ url_for('static', filename='app.js') }}" defer></script>
   </body>
 </html>
