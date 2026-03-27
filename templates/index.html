@@ -52,6 +52,7 @@
           {{ ui.nav_link('index', 'Overview', 'home', active_page, is_admin, selected_owner) }}
           {{ ui.nav_link('files_page', 'Files', 'files', active_page, is_admin, selected_owner) }}
           {{ ui.nav_link('text_page', 'Notes', 'text', active_page, is_admin, selected_owner) }}
+          {{ ui.nav_link('chat_page', 'Board', 'chat', active_page, is_admin, selected_owner) }}
           {{ ui.nav_link('reader_page', 'Reader', 'reader', active_page, is_admin, selected_owner) }}
           {{ ui.nav_link('latex_page', 'PDF', 'latex', active_page, is_admin, selected_owner) }}
           {{ ui.nav_link('access_page', 'Access', 'access', active_page, is_admin, selected_owner) }}
@@ -62,11 +63,20 @@
           {% if is_authenticated %}
           <label class="field">
             <span>Search</span>
-            <input type="search" data-global-search placeholder="Search current page items" />
+            <input type="search" data-global-search value="{{ global_search_query }}" placeholder="Search across files, notes, reader, PDFs, and board" />
           </label>
           {% endif %}
         </div>
       </header>
+      {% if is_authenticated %}
+      <section class="global-search-panel is-hidden" data-global-search-panel>
+        <div class="global-search-inner">
+          <p class="eyebrow">Workspace results</p>
+          <div class="global-search-results" data-global-search-results></div>
+        </div>
+      </section>
+      <script id="global-search-index" type="application/json">{{ global_search_items|tojson }}</script>
+      {% endif %}
 
       <div class="app-layout">
         {% if is_authenticated %}
@@ -89,6 +99,7 @@
             {{ ui.nav_link('text_page', 'Notes', 'text', active_page, is_admin, selected_owner) }}
             {{ ui.nav_link('reader_page', 'Reader', 'reader', active_page, is_admin, selected_owner) }}
             {{ ui.nav_link('latex_page', 'PDF', 'latex', active_page, is_admin, selected_owner) }}
+            {{ ui.nav_link('chat_page', 'Board', 'chat', active_page, is_admin, selected_owner) }}
             {{ ui.nav_link('access_page', 'Access', 'access', active_page, is_admin, selected_owner) }}
           </nav>
 
@@ -281,7 +292,7 @@
           </section>
 
           <section class="workspace-grid">
-            <aside class="workspace-sidebar">
+            <aside class="workspace-sidebar is-compact">
               <article class="panel">
                 <div class="section-heading">
                   <div>
@@ -538,7 +549,7 @@
           </section>
 
           <section class="workspace-grid">
-            <aside class="workspace-sidebar">
+            <aside class="workspace-sidebar is-compact">
               <article class="panel">
                 <div class="section-heading">
                   <div>
@@ -558,6 +569,8 @@
                     <button type="button" class="button button-secondary toolbar-button" data-wrap="*">Italic</button>
                     <button type="button" class="button button-secondary toolbar-button" data-wrap="`">Code</button>
                     <button type="button" class="button button-secondary toolbar-button" data-prefix="- ">List</button>
+                    <button type="button" class="button button-secondary toolbar-button" data-insert-template="reference">Ref block</button>
+                    <button type="button" class="button button-secondary toolbar-button" data-insert-template="whiteboard">Whiteboard</button>
                   </div>
                   <label class="field">
                     <span>Content</span>
@@ -677,6 +690,27 @@
                                 </label>
                                 <button type="submit" class="button button-secondary">Save comment</button>
                               </form>
+                              <form method="post" action="{{ url_for('add_text_entry_reference', entry_id=item.id) }}" class="stack-form" data-async>
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                                {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
+                                <label class="field">
+                                  <span>Document label</span>
+                                  <input type="text" name="reference_label" maxlength="140" placeholder="Spec, contract, memo..." />
+                                </label>
+                                <label class="field">
+                                  <span>Document URL</span>
+                                  <input type="url" name="reference_url" placeholder="https://..." />
+                                </label>
+                                <label class="field">
+                                  <span>Section citation</span>
+                                  <input type="text" name="reference_citation" maxlength="180" placeholder="Section 3.2, page 19" />
+                                </label>
+                                <label class="field">
+                                  <span>Why this matters</span>
+                                  <input type="text" name="reference_comment" maxlength="500" placeholder="Short annotation for this note" />
+                                </label>
+                                <button type="submit" class="button button-secondary">Link reference</button>
+                              </form>
                               <div class="button-row">
                                 {% if item.hidden %}
                                 <form method="post" action="{{ url_for('unhide_text_entry', entry_id=item.id) }}" class="inline-form" data-async>
@@ -714,6 +748,22 @@
                           </div>
                         </details>
                         {% endif %}
+                        {% if item.references %}
+                        <details class="inline-details">
+                          <summary class="button button-secondary">References ({{ item.references|length }})</summary>
+                          <div class="detail-panel reference-list">
+                            {% for reference in item.references %}
+                            <article class="compact-row is-static">
+                              <span class="compact-main">
+                                <strong>{% if reference.url %}<a href="{{ reference.url }}" target="_blank" rel="noopener noreferrer">{{ reference.label or reference.url }}</a>{% else %}{{ reference.label or "Reference" }}{% endif %}</strong>
+                                <span>{% if reference.citation %}{{ reference.citation }}{% endif %}{% if reference.comment %} · {{ reference.comment }}{% endif %}</span>
+                              </span>
+                              <span class="compact-value">{{ reference.author }} · {{ format_timestamp(reference.created) }}</span>
+                            </article>
+                            {% endfor %}
+                          </div>
+                        </details>
+                        {% endif %}
                       </div>
                     </article>
                     {% endfor %}
@@ -746,7 +796,7 @@
           </section>
 
           <section class="workspace-grid">
-            <aside class="workspace-sidebar">
+            <aside class="workspace-sidebar is-compact">
               <article class="panel">
                 <div class="section-heading">
                   <div>
@@ -916,7 +966,7 @@
           </section>
 
           <section class="workspace-grid">
-            <aside class="workspace-sidebar">
+            <aside class="workspace-sidebar is-compact">
               <article class="panel">
                 <div class="section-heading">
                   <div>
@@ -1194,8 +1244,8 @@
         {{ ui.nav_link('index', 'Overview', 'home', active_page, is_admin, selected_owner, True) }}
         {{ ui.nav_link('files_page', 'Files', 'files', active_page, is_admin, selected_owner, True) }}
         {{ ui.nav_link('text_page', 'Notes', 'text', active_page, is_admin, selected_owner, True) }}
+        {{ ui.nav_link('chat_page', 'Board', 'chat', active_page, is_admin, selected_owner, True) }}
         {{ ui.nav_link('reader_page', 'Reader', 'reader', active_page, is_admin, selected_owner, True) }}
-        {{ ui.nav_link('latex_page', 'PDF', 'latex', active_page, is_admin, selected_owner, True) }}
         {{ ui.nav_link('access_page', 'Access', 'access', active_page, is_admin, selected_owner, True) }}
       </nav>
       {% endif %}

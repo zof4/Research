@@ -307,6 +307,13 @@
   };
 
   const initTextFormatting = () => {
+    const templateInserts = {
+      reference:
+        "\n- Reference: [Document title](https://example.com)\n  - Citation: Section/page\n  - Comment: Why this matters\n",
+      whiteboard:
+        "\n## Whiteboard\n- Node:\n- Linked doc:\n- Citation:\n- Open question:\n",
+    };
+
     const forms = document.querySelectorAll(".text-editor-form");
 
     forms.forEach((form) => {
@@ -356,7 +363,7 @@
         });
       }
 
-      form.querySelectorAll("[data-wrap], [data-prefix]").forEach((button) => {
+      form.querySelectorAll("[data-wrap], [data-prefix], [data-insert-template]").forEach((button) => {
         if (!(button instanceof HTMLButtonElement) || button.dataset.richInit) {
           return;
         }
@@ -369,6 +376,7 @@
           const selected = textarea.value.slice(start, end);
           const wrap = button.dataset.wrap;
           const prefix = button.dataset.prefix;
+          const insertTemplate = button.dataset.insertTemplate;
           let nextText = selected;
 
           if (wrap) {
@@ -380,6 +388,8 @@
                   .map((line) => `${prefix}${line}`)
                   .join("\n")
               : `${prefix}item`;
+          } else if (insertTemplate && templateInserts[insertTemplate]) {
+            nextText = templateInserts[insertTemplate];
           }
 
           textarea.setRangeText(nextText, start, end, "end");
@@ -546,6 +556,17 @@
       return;
     }
     input.dataset.globalSearchInit = "1";
+    const searchPanel = document.querySelector("[data-global-search-panel]");
+    const resultsRoot = document.querySelector("[data-global-search-results]");
+    const indexNode = document.querySelector("#global-search-index");
+    let searchIndex = [];
+    if (indexNode?.textContent) {
+      try {
+        searchIndex = JSON.parse(indexNode.textContent);
+      } catch (_error) {
+        searchIndex = [];
+      }
+    }
 
     const applySearch = () => {
       const query = input.value || "";
@@ -557,9 +578,42 @@
         filterInput.value = query;
         filterInput.dispatchEvent(new Event("input", { bubbles: true }));
       });
+
+      if (!(searchPanel instanceof HTMLElement) || !(resultsRoot instanceof HTMLElement)) {
+        return;
+      }
+
+      const normalized = query.trim().toLowerCase();
+      if (!normalized) {
+        searchPanel.classList.add("is-hidden");
+        resultsRoot.innerHTML = "";
+        return;
+      }
+
+      const matches = searchIndex
+        .filter((item) => {
+          const haystack = `${item.title || ""} ${item.meta || ""} ${item.snippet || ""} ${item.page || ""} ${item.kind || ""}`.toLowerCase();
+          return haystack.includes(normalized);
+        })
+        .slice(0, 25);
+
+      searchPanel.classList.remove("is-hidden");
+      resultsRoot.innerHTML = matches.length
+        ? matches
+            .map(
+              (item) => `
+              <a class="global-search-item" href="${escapeHtml(item.url || "#")}" ${String(item.url || "").startsWith("/files/download") ? 'target="_blank" rel="noopener noreferrer"' : ""}>
+                <strong>${escapeHtml(item.title || "Untitled")}</strong>
+                <span class="global-search-meta">${escapeHtml(item.page || "")} · ${escapeHtml(item.kind || "")} · ${escapeHtml(item.meta || "")}</span>
+                ${item.snippet ? `<span class="global-search-snippet">${escapeHtml(item.snippet)}</span>` : ""}
+              </a>`,
+            )
+            .join("")
+        : '<p class="filter-empty-state">No workspace results match this query.</p>';
     };
 
     input.addEventListener("input", applySearch);
+    applySearch();
   };
 
   const initCompactHeaderOnScroll = () => {
