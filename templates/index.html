@@ -7,32 +7,62 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   </head>
   <body class="{% if is_authenticated and not is_admin %}non-admin-user{% endif %}">
-    <header class="site-header">
-      <div class="container site-header-inner">
-        {% if is_authenticated %}
-        <a class="account-chip" href="{{ url_for('access_page') }}" data-async-nav aria-label="Open account panel">
-          <span class="dot" aria-hidden="true"></span>
-          {% if is_admin %}Admin{% else %}{{ current_username }}{% endif %} · {{ login_days }}d
-        </a>
-        {% else %}
-        <span class="account-chip muted" aria-label="Read only">
-          <span class="dot" aria-hidden="true"></span>
-          Read only
-        </span>
-        {% endif %}
+    <div class="app-shell">
+      <header class="site-header">
+        <div class="site-header-inner">
+          <a class="brand" href="{{ url_for('index') }}" data-async-nav>VAULT.</a>
+          <nav class="top-nav" aria-label="Sections">
+            <a href="{{ url_for('files_page') }}" data-async-nav class="{% if active_page in ['home', 'files'] %}is-active{% endif %}">Storage</a>
+            <a href="{{ url_for('text_page') }}" data-async-nav class="{% if active_page == 'text' %}is-active{% endif %}">Text Lab</a>
+            <a href="{{ url_for('reader_page') }}" data-async-nav class="{% if active_page == 'reader' %}is-active{% endif %}">Proxy Node</a>
+            <a href="{{ url_for('latex_page') }}" data-async-nav class="{% if active_page == 'latex' %}is-active{% endif %}">LaTeX Forge</a>
+            <a href="{{ url_for('chat_page') }}" data-async-nav class="{% if active_page == 'chat' %}is-active{% endif %}">Board</a>
+            <a href="{{ url_for('access_page') }}" data-async-nav class="{% if active_page == 'access' %}is-active{% endif %}">Settings</a>
+          </nav>
+          {% if is_authenticated %}
+          <a class="account-chip" href="{{ url_for('access_page') }}" data-async-nav aria-label="Open account panel">
+            <span class="dot" aria-hidden="true"></span>
+            {% if is_admin %}Admin{% else %}{{ current_username }}{% endif %}
+          </a>
+          {% else %}
+          <span class="account-chip muted" aria-label="Read only">
+            <span class="dot" aria-hidden="true"></span>
+            Read only
+          </span>
+          {% endif %}
+        </div>
+      </header>
 
-        <a class="brand" href="{{ url_for('index') }}" data-async-nav>Dropper</a>
-
-        <nav class="top-nav" aria-label="Sections">
-          <a href="{{ url_for('access_page') }}" data-async-nav class="{% if active_page == 'access' %}is-active{% endif %}">Access</a>
-          <a href="{{ url_for('text_page') }}" data-async-nav class="{% if active_page in ['home', 'text'] %}is-active{% endif %}">Text</a>
-          <a href="{{ url_for('files_page') }}" data-async-nav class="{% if active_page == 'files' %}is-active{% endif %}">Files</a>
-          <a href="{{ url_for('reader_page') }}" data-async-nav class="{% if active_page == 'reader' %}is-active{% endif %}">Reader</a>
-          <a href="{{ url_for('latex_page') }}" data-async-nav class="{% if active_page == 'latex' %}is-active{% endif %}">LaTeX</a>
-          <a href="{{ url_for('chat_page') }}" data-async-nav class="{% if active_page == 'chat' %}is-active{% endif %}">Chat</a>
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <a class="brand" href="{{ url_for('index') }}" data-async-nav>VAULT.</a>
+        </div>
+        <nav class="sidebar-nav" aria-label="Sections">
+          <a href="{{ url_for('files_page') }}" data-async-nav class="{% if active_page in ['home', 'files'] %}is-active{% endif %}">Storage</a>
+          <a href="{{ url_for('text_page') }}" data-async-nav class="{% if active_page == 'text' %}is-active{% endif %}">Text Lab</a>
+          <a href="{{ url_for('reader_page') }}" data-async-nav class="{% if active_page == 'reader' %}is-active{% endif %}">Proxy Node</a>
+          <a href="{{ url_for('latex_page') }}" data-async-nav class="{% if active_page == 'latex' %}is-active{% endif %}">LaTeX Forge</a>
+          <a href="{{ url_for('chat_page') }}" data-async-nav class="{% if active_page == 'chat' %}is-active{% endif %}">Board</a>
+          <a href="{{ url_for('access_page') }}" data-async-nav class="{% if active_page == 'access' %}is-active{% endif %}">Settings</a>
         </nav>
-      </div>
-    </header>
+        <section class="node-status card">
+          <p class="section-kicker">Node status</p>
+          <div class="storage-meter"><span style="width: {{ '%.2f'|format(storage.usage_percent) }}%"></span></div>
+          <p class="helper-text">Uplink: {{ human_size(storage.total_bytes) }} used</p>
+        </section>
+      </aside>
+
+      <div class="page-shell">
+        <div class="topbar">
+          <div class="topbar-inner">
+            <div class="search-shell">
+              <input type="search" placeholder="Deep search..." aria-label="Search workspace" />
+            </div>
+            <div class="user-orbs">
+              <span>U1</span><span>U2</span><span>U3</span>
+            </div>
+          </div>
+        </div>
 
     <main class="container page {% if not is_authenticated %}login-page{% endif %}">
       {% with messages = get_flashed_messages(with_categories=true) %}
@@ -69,8 +99,8 @@
         <section class="card section-card access-card">
           <div class="section-head">
             <div>
-              <p class="section-kicker">Access</p>
-              <h2>Write access</h2>
+              <p class="section-kicker">Settings</p>
+              <h2>Workspace settings</h2>
             </div>
           </div>
 
@@ -121,8 +151,8 @@
         <section id="text" class="card section-card">
           <div class="section-head">
             <div>
-              <p class="section-kicker">Text</p>
-              <h2>Text</h2>
+              <p class="section-kicker">Text Lab</p>
+              <h2>Paragraph lab</h2>
             </div>
             {% if is_authenticated %}
             <details class="composer-panel">
@@ -360,8 +390,8 @@
         <section id="files" class="card section-card files-card">
           <div class="section-head">
             <div>
-              <p class="section-kicker">Files</p>
-              <h2>Files</h2>
+              <p class="section-kicker">Storage</p>
+              <h2>File vault</h2>
             </div>
             <p class="section-note">{% if storage.has_limit %}{{ human_size(storage.remaining_bytes) }} free{% else %}Admin view{% endif %}</p>
             {% if is_authenticated %}
@@ -507,8 +537,8 @@
         <section id="chat" class="card section-card">
           <div class="section-head">
             <div>
-              <p class="section-kicker">Chat</p>
-              <h2>Live chat</h2>
+              <p class="section-kicker">Board</p>
+              <h2>Communication board</h2>
             </div>
           </div>
           <div class="item-stack" id="chat-feed" data-chat-feed>
@@ -531,8 +561,8 @@
         <section id="reader" class="card section-card reader-card">
           <div class="section-head">
             <div>
-              <p class="section-kicker">Reader</p>
-              <h2>Reader cache</h2>
+              <p class="section-kicker">Proxy Node</p>
+              <h2>Proxy stream cache</h2>
             </div>
             {% if is_authenticated %}
             <details class="composer-panel">
@@ -664,7 +694,7 @@
         <section id="latex" class="card section-card">
           <div class="section-head">
             <div>
-              <p class="section-kicker">LaTeX</p>
+              <p class="section-kicker">LaTeX Forge</p>
               <h2>PDF</h2>
             </div>
             {% if is_authenticated %}
@@ -761,16 +791,18 @@
       </div>
       {% else %}
       <section class="card login-card">
-        <h1>Login</h1>
+        <h1>Vault login</h1>
         <form method="post" action="{{ url_for('login') }}" class="stack-form" data-async>
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
           <input type="text" name="username" placeholder="Username" autocomplete="username" required />
           <input type="password" name="password" placeholder="Password" autocomplete="current-password" required />
-          <button type="submit" class="block-button">Login</button>
+          <button type="submit" class="block-button">Enter vault</button>
         </form>
       </section>
       {% endif %}
     </main>
+      </div>
+    </div>
       <script src="{{ url_for('static', filename='app.js') }}" defer></script>
   </body>
 </html>
