@@ -1521,6 +1521,8 @@ def build_template_context(active_page: str) -> Dict:
     manageable_users: List[str] = []
     available_share_users: List[str] = []
     chat_history: List[Dict] = []
+    global_search_items: List[Dict] = []
+    global_search_query = request.args.get("q", "").strip()
     workspace_counts = {
         "files": 0,
         "text": 0,
@@ -1638,6 +1640,73 @@ def build_template_context(active_page: str) -> Dict:
         storage = build_storage_summary(0)
         storage["has_limit"] = True
 
+    if authenticated:
+        for file in files:
+            global_search_items.append(
+                {
+                    "kind": "File",
+                    "page": "Files",
+                    "title": file.get("name", "Untitled file"),
+                    "meta": f"{file.get('owner', '')} · {human_size(int(file.get('size', 0) or 0))}",
+                    "snippet": "",
+                    "url": url_for("download_file", filename=file.get("name", ""), owner=file.get("owner", "")),
+                }
+            )
+
+        for group in text_groups:
+            owner = group.get("owner", "")
+            for item in group.get("items", []):
+                global_search_items.append(
+                    {
+                        "kind": "Note",
+                        "page": "Notes",
+                        "title": item.get("title") or "Untitled note",
+                        "meta": f"{owner} · {format_timestamp(item.get('updated') or item.get('created') or '')}",
+                        "snippet": summarize_text(item.get("content", ""), 120),
+                        "url": url_for("view_text_entry", entry_id=item.get("id", ""), owner=owner),
+                    }
+                )
+
+        for group in reader_groups:
+            owner = group.get("owner", "")
+            for item in group.get("items", []):
+                global_search_items.append(
+                    {
+                        "kind": "Reader",
+                        "page": "Reader",
+                        "title": item.get("title") or "Untitled page",
+                        "meta": f"{owner} · {item.get('source_label') or 'source'}",
+                        "snippet": item.get("summary", ""),
+                        "url": url_for("view_reader_entry", entry_id=item.get("id", ""), owner=owner),
+                    }
+                )
+
+        for group in latex_groups:
+            owner = group.get("owner", "")
+            for item in group.get("items", []):
+                global_search_items.append(
+                    {
+                        "kind": "PDF",
+                        "page": "PDF",
+                        "title": item.get("title") or "Untitled PDF",
+                        "meta": f"{owner} · {format_timestamp(item.get('created') or '')}",
+                        "snippet": summarize_text(item.get("source", ""), 120),
+                        "url": url_for("download_latex_pdf", filename=item.get("pdf_name", ""), owner=owner),
+                    }
+                )
+
+        for message in chat_history:
+            global_search_items.append(
+                {
+                    "kind": "Board",
+                    "page": "Board",
+                    "title": summarize_text(message.get("content", ""), 56),
+                    "meta": f"{message.get('author', 'unknown')} · {format_timestamp(message.get('created', ''))}",
+                    "snippet": "",
+                    "url": url_for("chat_page"),
+                }
+            )
+
     return {
         "files": files,
         "file_groups": file_groups,
@@ -1663,6 +1732,8 @@ def build_template_context(active_page: str) -> Dict:
         "chat_history": chat_history,
         "max_chat_message_chars": MAX_CHAT_MESSAGE_CHARS,
         "workspace_counts": workspace_counts,
+        "global_search_items": global_search_items[:400],
+        "global_search_query": global_search_query,
     }
 
 
@@ -2070,6 +2141,40 @@ def comment_text_entry(entry_id: str):
     if item is None:
         raise NotFound()
     flash("Comment added.", "success")
+    return redirect(url_for("text_page", owner=target_owner))
+
+
+@app.post("/text/reference/<entry_id>")
+@login_required
+def add_text_entry_reference(entry_id: str):
+    validate_csrf()
+    paths, target_owner = get_target_user_paths()
+    label = request.form.get("reference_label", "").strip()
+    url = request.form.get("reference_url", "").strip()
+    citation = request.form.get("reference_citation", "").strip()
+    comment = request.form.get("reference_comment", "").strip()
+
+    if not (label or url):
+        flash("Reference needs a label or URL.", "error")
+        return redirect(url_for("text_page", owner=target_owner))
+    if url and not re.match(r"^https?://", url, flags=re.IGNORECASE):
+        flash("Reference URL must start with http:// or https://.", "error")
+        return redirect(url_for("text_page", owner=target_owner))
+
+    reference = {
+        "id": uuid4().hex,
+        "author": current_username(),
+        "label": label[:140],
+        "url": url[:500],
+        "citation": citation[:180],
+        "comment": comment[:500],
+        "created": now_iso(),
+    }
+    item = append_history_item_field(paths["text_history_file"], entry_id, "references", reference)
+    if item is None:
+        raise NotFound()
+
+    flash("Reference linked to note.", "success")
     return redirect(url_for("text_page", owner=target_owner))
 
 
