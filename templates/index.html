@@ -6,18 +6,16 @@
     <title>Dropper</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   </head>
-  <body class="{% if is_authenticated and not is_admin %}non-admin-user{% endif %}">
+  <body class="{% if is_authenticated and not is_admin %}non-admin-user{% endif %} {% if active_page in ['home', 'files'] %}vault-ui{% endif %}">
     <div class="app-shell">
       <header class="site-header">
         <div class="site-header-inner">
-          <a class="brand" href="{{ url_for('index') }}" data-async-nav>VAULT.</a>
+          <a class="brand" href="{{ url_for('index') }}" data-async-nav><span class="brand-emblem">🛡</span><span>VAULT.</span></a>
           <nav class="top-nav" aria-label="Sections">
-            <a href="{{ url_for('files_page') }}" data-async-nav class="{% if active_page in ['home', 'files'] %}is-active{% endif %}">Files</a>
-            <a href="{{ url_for('text_page') }}" data-async-nav class="{% if active_page == 'text' %}is-active{% endif %}">Text</a>
-            <a href="{{ url_for('reader_page') }}" data-async-nav class="{% if active_page == 'reader' %}is-active{% endif %}">Web Archive</a>
-            <a href="{{ url_for('latex_page') }}" data-async-nav class="{% if active_page == 'latex' %}is-active{% endif %}">LaTeX PDF</a>
-            <a href="{{ url_for('chat_page') }}" data-async-nav class="{% if active_page == 'chat' %}is-active{% endif %}">Messages</a>
-            <a href="{{ url_for('access_page') }}" data-async-nav class="{% if active_page == 'access' %}is-active{% endif %}">Settings</a>
+            <a href="{{ url_for('files_page') }}" data-async-nav class="{% if active_page in ['home', 'files'] %}is-active{% endif %}"><span class="nav-icon">📁</span><span>files</span></a>
+            <a href="{{ url_for('text_page') }}" data-async-nav class="{% if active_page == 'text' %}is-active{% endif %}"><span class="nav-icon">📄</span><span>text</span></a>
+            <a href="{{ url_for('reader_page') }}" data-async-nav class="{% if active_page == 'reader' %}is-active{% endif %}"><span class="nav-icon">◍</span><span>proxy</span></a>
+            <a href="{{ url_for('latex_page') }}" data-async-nav class="{% if active_page == 'latex' %}is-active{% endif %}"><span class="nav-icon">&lt;/&gt;</span><span>latex</span></a>
           </nav>
           {% if is_authenticated %}
           <a class="account-chip" href="{{ url_for('access_page') }}" data-async-nav aria-label="Open account panel">
@@ -35,15 +33,13 @@
 
       <aside class="sidebar">
         <div class="sidebar-brand">
-          <a class="brand" href="{{ url_for('index') }}" data-async-nav>VAULT.</a>
+          <a class="brand" href="{{ url_for('index') }}" data-async-nav><span class="brand-emblem">🛡</span><span>VAULT.</span></a>
         </div>
         <nav class="sidebar-nav" aria-label="Sections">
-          <a href="{{ url_for('files_page') }}" data-async-nav class="{% if active_page in ['home', 'files'] %}is-active{% endif %}">Files</a>
-          <a href="{{ url_for('text_page') }}" data-async-nav class="{% if active_page == 'text' %}is-active{% endif %}">Text</a>
-          <a href="{{ url_for('reader_page') }}" data-async-nav class="{% if active_page == 'reader' %}is-active{% endif %}">Web Archive</a>
-          <a href="{{ url_for('latex_page') }}" data-async-nav class="{% if active_page == 'latex' %}is-active{% endif %}">LaTeX PDF</a>
-          <a href="{{ url_for('chat_page') }}" data-async-nav class="{% if active_page == 'chat' %}is-active{% endif %}">Messages</a>
-          <a href="{{ url_for('access_page') }}" data-async-nav class="{% if active_page == 'access' %}is-active{% endif %}">Settings</a>
+          <a href="{{ url_for('files_page') }}" data-async-nav class="{% if active_page in ['home', 'files'] %}is-active{% endif %}"><span class="nav-icon">📁</span><span>files</span></a>
+          <a href="{{ url_for('text_page') }}" data-async-nav class="{% if active_page == 'text' %}is-active{% endif %}"><span class="nav-icon">📄</span><span>text</span></a>
+          <a href="{{ url_for('reader_page') }}" data-async-nav class="{% if active_page == 'reader' %}is-active{% endif %}"><span class="nav-icon">◍</span><span>proxy</span></a>
+          <a href="{{ url_for('latex_page') }}" data-async-nav class="{% if active_page == 'latex' %}is-active{% endif %}"><span class="nav-icon">&lt;/&gt;</span><span>latex</span></a>
         </nav>
         <section class="node-status card">
           <p class="section-kicker">Uplink status</p>
@@ -56,11 +52,12 @@
         <div class="topbar">
           <div class="topbar-inner">
             <div class="search-shell">
-              <input type="search" placeholder="Deep search logic across vault..." aria-label="Search workspace" />
+              <input type="search" placeholder="Deep search..." aria-label="Search workspace" />
             </div>
             <div class="user-orbs">
               <span>U1</span><span>U2</span><span>U3</span>
             </div>
+            <button type="button" class="theme-toggle" data-theme-toggle aria-label="Toggle theme">◐</button>
           </div>
         </div>
 
@@ -398,12 +395,13 @@
           <div class="section-head">
             <div>
               <p class="section-kicker">Storage</p>
-              <h2>File vault</h2>
+              <h2>FILE VAULT</h2>
+              <p class="vault-subtitle">Encrypted asset management and distribution.</p>
             </div>
             <p class="section-note">{% if storage.has_limit %}{{ human_size(storage.remaining_bytes) }} free{% else %}Admin view{% endif %}</p>
             {% if is_authenticated %}
             <details class="composer-panel">
-              <summary class="secondary-button">＋ New file</summary>
+              <summary class="block-button upload-button">↥&nbsp;&nbsp;NEW UPLOAD</summary>
               <form method="post" action="{{ url_for('upload_file') }}" enctype="multipart/form-data" class="stack-form composer-form" data-async>
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
                 {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}

@@ -304,3 +304,280 @@ button, .button-link { cursor: pointer; text-decoration: none; display: inline-f
   .file-size { font-size: .92rem; }
   .file-actions { justify-self: start; }
 }
+
+/* ---- Vault visual refresh ---- */
+.vault-ui {
+  --line: rgba(255, 255, 255, 0.14);
+  --line-soft: rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(1000px 640px at 84% 16%, rgba(24, 26, 34, 0.6), rgba(5, 6, 8, 0) 62%),
+    linear-gradient(90deg, #05060a 0 27%, #05070b 27% 100%);
+}
+
+.vault-ui .app-shell { grid-template-columns: 350px 1fr; }
+.vault-ui .sidebar {
+  border-right: 1px solid rgba(255, 255, 255, 0.09);
+  background: linear-gradient(180deg, rgba(6, 7, 11, 0.98), rgba(4, 5, 8, 0.96));
+  padding: 1.4rem 0 1.1rem;
+  gap: 1.4rem;
+}
+.vault-ui .sidebar-brand { padding: 0 2.2rem 1rem; }
+.vault-ui .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: .8rem;
+  font-size: 2.55rem;
+  letter-spacing: .01em;
+}
+.vault-ui .brand-emblem {
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
+  background: #f2f4f6;
+  color: #171a22;
+  display: grid;
+  place-items: center;
+  font-size: 1.45rem;
+}
+.vault-ui .brand span:last-child { font-size: 2.65rem; font-style: italic; }
+
+.vault-ui .sidebar-nav { gap: .55rem; }
+.vault-ui .sidebar-nav a {
+  border-radius: 0;
+  border: 0;
+  padding: 1rem 2rem;
+  letter-spacing: .03em;
+  font-size: 2.04rem;
+  text-transform: uppercase;
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+}
+.vault-ui .nav-icon {
+  width: 38px;
+  text-align: center;
+  opacity: .75;
+  font-style: normal;
+  font-size: 1.5rem;
+}
+.vault-ui .sidebar-nav a.is-active {
+  background: linear-gradient(90deg, rgba(255,255,255,.13), rgba(255,255,255,.04));
+  position: relative;
+}
+.vault-ui .sidebar-nav a.is-active::after {
+  content: "";
+  position: absolute;
+  right: 2.1rem;
+  width: 8px;
+  height: 34px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff, #8c92a6);
+}
+.vault-ui .node-status.card {
+  margin: auto 1.8rem 1.2rem;
+  border-radius: 24px;
+  background: rgba(19, 20, 28, 0.75);
+  padding: 1.2rem 1.4rem;
+}
+.vault-ui .node-status .section-kicker { font-size: 1.35rem; letter-spacing: .18em; }
+.vault-ui .node-status .storage-meter { margin: .9rem 0 .8rem; height: 7px; }
+.vault-ui .node-status .helper-text { font-size: 1.9rem; }
+
+.vault-ui .topbar-inner {
+  max-width: none;
+  margin: 0;
+  padding: 1.4rem 1.6rem;
+}
+.vault-ui .search-shell input {
+  width: 520px;
+  border-radius: 40px;
+  background: rgba(10, 12, 17, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.17);
+  padding: .95rem 1.3rem;
+  font-size: 2rem;
+}
+.vault-ui .user-orbs span { width: 42px; height: 42px; font-size: .85rem; }
+
+.vault-ui .container { width: min(1240px, calc(100% - 5.5rem)); margin: 0 auto 0 3.2rem; }
+.vault-ui .intro-card { display: none; }
+.vault-ui .section-card {
+  border-radius: 26px;
+  background: rgba(10, 12, 18, 0.54);
+  border-color: rgba(255,255,255,.15);
+  padding: 1.4rem 1.5rem 1.55rem;
+}
+.vault-ui .files-card {
+  background: linear-gradient(180deg, rgba(13,15,22,.7), rgba(6,8,12,.7));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+}
+.vault-ui .section-head {
+  margin-bottom: 1.6rem;
+  align-items: flex-start;
+}
+.vault-ui .section-kicker { font-size: 0.85rem; }
+.vault-ui .section-head h2 {
+  font-size: clamp(3.6rem, 6.4vw, 5.7rem);
+  font-weight: 420;
+  margin-top: .3rem;
+}
+.vault-ui .vault-subtitle {
+  margin: .4rem 0 0;
+  color: #7d8294;
+  font-size: 2.75rem;
+  font-style: italic;
+}
+.vault-ui .section-note { display: none; }
+.vault-ui .upload-button {
+  border-radius: 22px;
+  font-size: 1.65rem;
+  letter-spacing: .14em;
+  padding: 1.12rem 1.8rem;
+  font-weight: 800;
+}
+
+.vault-ui .file-table-head {
+  margin: 0;
+  padding: 1rem 1.3rem;
+  border-top: 1px solid rgba(255, 255, 255, .1);
+  border-bottom: 1px solid rgba(255, 255, 255, .1);
+  font-size: 1.22rem;
+  letter-spacing: .42em;
+  color: #7f8597;
+}
+.vault-ui .file-stack { gap: 0; border-radius: 0 0 22px 22px; overflow: hidden; }
+.vault-ui .file-tile {
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid rgba(255,255,255,.1);
+  background: rgba(0,0,0,0.14);
+  padding: 1.3rem 1.1rem;
+}
+.vault-ui .file-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 13px;
+  font-size: 1.55rem;
+  background: rgba(255,255,255,.05);
+}
+.vault-ui .file-tile h3 { font-size: 2.5rem; margin-bottom: .2rem; }
+.vault-ui .item-meta { font-size: 1.5rem; font-style: italic; color: #7d8497; }
+.vault-ui .share-avatar { width: 40px; height: 40px; font-size: .75rem; }
+.vault-ui .private-pill { font-size: 1.45rem; letter-spacing: .2em; }
+.vault-ui .file-size { font-size: 3rem; color: #9fa6b8; letter-spacing: .04em; }
+.vault-ui .file-action-button { font-size: .85rem; padding: .45rem .65rem; }
+
+@media (max-width: 980px) {
+  .vault-ui .app-shell { grid-template-columns: 1fr; }
+  .vault-ui .container { width: calc(100% - 1rem); margin: 0 auto; }
+  .vault-ui .section-head h2 { font-size: clamp(2rem, 10vw, 2.8rem); }
+  .vault-ui .vault-subtitle { font-size: 1rem; }
+  .vault-ui .file-tile h3 { font-size: 1.05rem; }
+  .vault-ui .file-size { font-size: 1.05rem; }
+}
+
+/* Compact + light variant refinements */
+.vault-ui .sidebar-nav a {
+  font-size: 1.35rem;
+  padding: .82rem 1.3rem;
+  letter-spacing: .05em;
+}
+.vault-ui .node-status.card {
+  margin: auto 1.1rem .9rem;
+  padding: .8rem .95rem;
+}
+.vault-ui .node-status .section-kicker { font-size: .75rem; }
+.vault-ui .node-status .helper-text { font-size: .88rem; }
+.vault-ui .search-shell input {
+  width: min(420px, 54vw);
+  font-size: 1.1rem;
+  padding: .7rem 1rem;
+}
+.vault-ui .section-head h2 { font-size: clamp(2rem, 4.2vw, 3rem); }
+.vault-ui .vault-subtitle { font-size: 1.05rem; }
+.vault-ui .file-table-head { font-size: .72rem; letter-spacing: .24em; }
+.vault-ui .file-tile h3 { font-size: 1.12rem; }
+.vault-ui .item-meta { font-size: .86rem; }
+.vault-ui .file-size { font-size: 1.25rem; }
+.vault-ui .share-avatar { width: 32px; height: 32px; font-size: .62rem; }
+.vault-ui .private-pill { font-size: .72rem; }
+.vault-ui .upload-button {
+  border-radius: 16px;
+  font-size: .78rem;
+  padding: .72rem 1rem;
+  letter-spacing: .18em;
+}
+.vault-ui .files-card { border-radius: 20px; }
+.vault-ui .section-card { padding: 1rem 1rem 1.1rem; }
+.vault-ui .file-icon { width: 44px; height: 44px; font-size: 1.2rem; }
+.vault-ui .topbar-inner { gap: .65rem; }
+.vault-ui .theme-toggle {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.2);
+  background: rgba(255,255,255,.08);
+  color: #fff;
+  padding: 0;
+  font-size: 1.05rem;
+}
+
+.vault-ui.vault-light {
+  --text: #11131a;
+  --muted: #5a6276;
+  --line: rgba(20, 24, 37, 0.16);
+  --line-soft: rgba(20, 24, 37, 0.08);
+  background:
+    radial-gradient(1100px 740px at 86% 16%, rgba(201, 210, 231, 0.45), rgba(241, 244, 251, 0) 60%),
+    linear-gradient(90deg, #f4f6fb 0 27%, #f7f8fc 27% 100%);
+}
+.vault-ui.vault-light .sidebar {
+  background: linear-gradient(180deg, rgba(243, 245, 251, 0.95), rgba(238, 241, 249, 0.95));
+  border-right-color: rgba(20, 24, 37, .12);
+}
+.vault-ui.vault-light .sidebar-nav a { color: #525a70; }
+.vault-ui.vault-light .sidebar-nav a:hover { color: #151925; background: rgba(20,24,37,.05); }
+.vault-ui.vault-light .sidebar-nav a.is-active {
+  color: #121724;
+  background: linear-gradient(90deg, rgba(20,24,37,.11), rgba(20,24,37,.03));
+}
+.vault-ui.vault-light .topbar { background: rgba(245,247,252,.85); border-bottom-color: rgba(20,24,37,.12); }
+.vault-ui.vault-light .search-shell input {
+  background: #ffffff;
+  color: #1a1f2d;
+  border-color: rgba(20,24,37,.16);
+}
+.vault-ui.vault-light .user-orbs span,
+.vault-ui.vault-light .theme-toggle {
+  background: #fff;
+  color: #1a1f2d;
+  border-color: rgba(20,24,37,.2);
+}
+.vault-ui.vault-light .section-card,
+.vault-ui.vault-light .files-card,
+.vault-ui.vault-light .file-tile {
+  background: rgba(255,255,255,.82);
+  box-shadow: none;
+}
+.vault-ui.vault-light .file-size,
+.vault-ui.vault-light .item-meta,
+.vault-ui.vault-light .private-pill,
+.vault-ui.vault-light .file-table-head { color: #5b6274; }
+.vault-ui.vault-light .block-button,
+.vault-ui.vault-light .upload-button { background: #111624; color: #fff; }
+.vault-ui.vault-light .text-link { color: #101422; }
+.vault-ui.vault-light .node-status.card { background: rgba(255,255,255,.7); }
+
+@media (max-width: 980px) {
+  .vault-ui .topbar { position: static; }
+  .vault-ui .topbar-inner { padding: .7rem .55rem; flex-wrap: wrap; }
+  .vault-ui .search-shell { order: 2; width: 100%; }
+  .vault-ui .search-shell input { width: 100%; }
+  .vault-ui .user-orbs { order: 1; }
+  .vault-ui .theme-toggle { order: 1; margin-left: auto; width: 34px; height: 34px; }
+  .vault-ui .files-card { border-radius: 16px; }
+  .vault-ui .section-card { padding: .72rem .72rem .82rem; }
+  .vault-ui .section-head { margin-bottom: .8rem; }
+  .vault-ui .file-tile { padding: .7rem; }
+  .vault-ui .file-actions, .vault-ui .file-actions-secondary { gap: .25rem; }
+}

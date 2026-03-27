@@ -422,6 +422,29 @@
     });
   };
 
+
+  const applyStoredTheme = () => {
+    const savedTheme = window.localStorage.getItem("vaultTheme");
+    document.body.classList.toggle("vault-light", savedTheme === "light");
+  };
+
+  const initThemeToggle = () => {
+    if (document.body?.dataset.themeToggleInit) {
+      return;
+    }
+    document.body.dataset.themeToggleInit = "1";
+
+    document.addEventListener("click", (event) => {
+      const toggle = event.target.closest("[data-theme-toggle]");
+      if (!(toggle instanceof HTMLElement)) {
+        return;
+      }
+      const nextLight = !document.body.classList.contains("vault-light");
+      document.body.classList.toggle("vault-light", nextLight);
+      window.localStorage.setItem("vaultTheme", nextLight ? "light" : "dark");
+    });
+  };
+
   const hasDashboardShell = (doc) =>
     shellSelectors.every((selector) => doc.querySelector(selector));
 
@@ -569,6 +592,10 @@
       return;
     }
 
+    if (link.closest(".sidebar-nav") || link.closest(".top-nav")) {
+      return;
+    }
+
     const url = link.href;
     if (!url || new URL(url, window.location.origin).origin !== window.location.origin) {
       return;
@@ -591,6 +618,8 @@
     window.location.reload();
   });
 
+  applyStoredTheme();
+  initThemeToggle();
   initTextFormatting();
   initChatPolling();
   initFilePaste();
