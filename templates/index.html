@@ -15,7 +15,7 @@
   "reader": "Cache public pages and reopen them in a readable format.",
   "latex": "Render source into downloadable PDFs.",
   "access": "Manage your account and, if needed, admin workspace access.",
-  "chat": "Shared messages for quick coordination.",
+  "chat": "Interactive whiteboard with draggable cards, section links, and comments.",
 } %}
 <!doctype html>
 <html lang="en">
@@ -59,22 +59,25 @@
         </nav>
         {% endif %}
 
-        <div class="header-search">
+        <div class="header-search" data-header-search>
           {% if is_authenticated %}
+          <button type="button" class="button button-secondary header-search-toggle" data-global-search-toggle aria-expanded="false" aria-controls="global-search-panel">
+            Search
+          </button>
           <label class="field">
             <span>Search</span>
             <input type="search" data-global-search value="{{ global_search_query }}" placeholder="Search across files, notes, reader, PDFs, and board" />
           </label>
+          <section id="global-search-panel" class="global-search-panel is-hidden" data-global-search-panel>
+            <div class="global-search-inner">
+              <p class="eyebrow">Workspace results</p>
+              <div class="global-search-results" data-global-search-results></div>
+            </div>
+          </section>
           {% endif %}
         </div>
       </header>
       {% if is_authenticated %}
-      <section class="global-search-panel is-hidden" data-global-search-panel>
-        <div class="global-search-inner">
-          <p class="eyebrow">Workspace results</p>
-          <div class="global-search-results" data-global-search-results></div>
-        </div>
-      </section>
       <script id="global-search-index" type="application/json">{{ global_search_items|tojson }}</script>
       {% endif %}
 
@@ -572,6 +575,22 @@
                     <button type="button" class="button button-secondary toolbar-button" data-insert-template="reference">Ref block</button>
                     <button type="button" class="button button-secondary toolbar-button" data-insert-template="whiteboard">Whiteboard</button>
                   </div>
+                  <details class="inline-details">
+                    <summary class="button button-secondary">How whiteboard works</summary>
+                    <div class="detail-panel prose-block">
+                      <p>The whiteboard button inserts a structured markdown template inside your note.</p>
+                      <ul>
+                        <li><strong>Node:</strong> the idea or section you are mapping.</li>
+                        <li><strong>Linked doc:</strong> file, URL, or note tied to that node.</li>
+                        <li><strong>Citation:</strong> page/section evidence for traceability.</li>
+                        <li><strong>Open question:</strong> unresolved item to revisit.</li>
+                      </ul>
+                      <p>
+                        For a full drag-and-link canvas, the next step is a dedicated Board panel with movable cards, connection lines,
+                        and inline comments that sync back to notes.
+                      </p>
+                    </div>
+                  </details>
                   <label class="field">
                     <span>Content</span>
                     <textarea name="content" rows="10" maxlength="{{ max_text_chars }}" placeholder="Write or paste text here." required></textarea>
@@ -1095,38 +1114,84 @@
               <h1>{{ page_titles.get(active_page) }}</h1>
               <p class="lead">{{ page_descriptions.get(active_page) }}</p>
             </div>
+            <div class="page-intro-note">
+              <span>
+                {% if whiteboard_state.updated %}
+                Last saved {{ format_timestamp(whiteboard_state.updated) }} by {{ whiteboard_state.updated_by or "unknown" }}
+                {% else %}
+                No board saved yet
+                {% endif %}
+              </span>
+            </div>
           </section>
 
-          <section class="overview-grid">
-            <article class="panel panel-wide">
+          <section class="whiteboard-layout" data-whiteboard-root>
+            <aside class="panel whiteboard-controls">
               <div class="section-heading">
                 <div>
-                  <p class="eyebrow">Messages</p>
-                  <h2>Shared board</h2>
+                  <p class="eyebrow">Cards</p>
+                  <h2>Build the board</h2>
                 </div>
-                <p class="section-meta">{{ workspace_counts.chat }} total</p>
               </div>
-              <div class="message-feed" id="chat-feed" data-chat-feed>
-                {% for message in chat_history %}
-                <article class="message-card">
-                  <p class="message-meta"><strong>{{ message.author }}</strong> · {{ format_timestamp(message.created) }}</p>
-                  <p>{{ message.content }}</p>
-                </article>
-                {% endfor %}
-                {% if not chat_history %}
-                <p class="empty-state">No messages yet.</p>
-                {% endif %}
+              <p class="panel-note">Drag cards on the canvas. Select a card to edit section + comments. Use “Start link” then click another card to connect.</p>
+              <div class="stack-form">
+                <label class="field">
+                  <span>Add from files/notes/reader/pdf</span>
+                  <select data-whiteboard-seed>
+                    <option value="">Choose an item</option>
+                    {% for item in whiteboard_seed_items %}
+                    <option value="{{ item.id }}">{{ item.type|upper }} · {{ item.title }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <button type="button" class="button button-secondary" data-whiteboard-add-seed>Add selected item</button>
+                <button type="button" class="button button-secondary" data-whiteboard-add-custom>Add custom card</button>
+                <button type="button" class="button button-secondary" data-whiteboard-link>Start link</button>
+                <button type="button" class="button button-danger" data-whiteboard-delete>Delete selected</button>
               </div>
-              <form method="post" action="{{ url_for('send_chat_message') }}" class="stack-form" data-async>
+
+              <form class="stack-form" data-whiteboard-editor>
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
                 <label class="field">
-                  <span>New message</span>
-                  <input type="text" name="message" maxlength="{{ max_chat_message_chars }}" required />
+                  <span>Card title</span>
+                  <input type="text" name="title" maxlength="160" />
                 </label>
-                <button type="submit" class="button button-primary">Send message</button>
+                <label class="field">
+                  <span>Section reference (page / heading / paragraph)</span>
+                  <input type="text" name="section" maxlength="240" />
+                </label>
+                <label class="field">
+                  <span>Comment</span>
+                  <textarea name="comment" rows="4" maxlength="1200"></textarea>
+                </label>
+                <label class="field">
+                  <span>Type</span>
+                  <select name="type">
+                    <option value="custom">Custom</option>
+                    <option value="file">File</option>
+                    <option value="note">Note</option>
+                    <option value="reader">Reader</option>
+                    <option value="pdf">PDF</option>
+                  </select>
+                </label>
               </form>
+              <div class="button-row">
+                <button type="button" class="button button-primary" data-whiteboard-save>Save board</button>
+              </div>
+            </aside>
+
+            <article class="panel whiteboard-surface">
+              <div class="whiteboard-toolbar">
+                <p class="eyebrow">Virtual board</p>
+                <p class="panel-note" data-whiteboard-status>Select or add a card to begin.</p>
+              </div>
+              <div class="whiteboard-canvas" data-whiteboard-canvas>
+                <svg class="whiteboard-links" data-whiteboard-links aria-hidden="true"></svg>
+              </div>
             </article>
           </section>
+          <script id="whiteboard-initial" type="application/json">{{ whiteboard_state|tojson }}</script>
+          <script id="whiteboard-seeds" type="application/json">{{ whiteboard_seed_items|tojson }}</script>
           {% elif active_page == 'access' %}
           <section class="page-intro">
             <div>

@@ -86,6 +86,8 @@ MAX_READER_FETCH_BYTES = int(os.environ.get("QUICKDROP_MAX_READER_FETCH_BYTES", 
 READER_FETCH_TIMEOUT = int(os.environ.get("QUICKDROP_READER_FETCH_TIMEOUT", "20"))
 MAX_CHAT_HISTORY_ITEMS = int(os.environ.get("QUICKDROP_MAX_CHAT_HISTORY", "200"))
 MAX_CHAT_MESSAGE_CHARS = int(os.environ.get("QUICKDROP_MAX_CHAT_MESSAGE_CHARS", "500"))
+MAX_WHITEBOARD_NODES = int(os.environ.get("QUICKDROP_MAX_WHITEBOARD_NODES", "250"))
+MAX_WHITEBOARD_LINKS = int(os.environ.get("QUICKDROP_MAX_WHITEBOARD_LINKS", "500"))
 PDFLATEX_BIN = os.environ.get("QUICKDROP_PDFLATEX_BIN", "pdflatex")
 SAFE_INLINE_MIME_PREFIXES = ("image/", "text/plain")
 SAFE_INLINE_MIME_TYPES = {"application/pdf"}
@@ -345,6 +347,10 @@ def rotate_csrf_token() -> None:
 
 def validate_csrf() -> None:
     token = request.form.get("csrf_token", "")
+    validate_csrf_token(token)
+
+
+def validate_csrf_token(token: str) -> None:
     session_token = session.get("csrf_token", "")
     if not token or not session_token or not secrets.compare_digest(token, session_token):
         raise Forbidden()
@@ -715,6 +721,104 @@ def find_history_item(path: Path, item_id: str) -> Optional[Dict]:
 
 def get_chat_history_file() -> Path:
     return DATA_DIR / "live_chat.json"
+
+
+def get_whiteboard_file() -> Path:
+    return DATA_DIR / "whiteboard.json"
+
+
+def load_whiteboard_state() -> Dict:
+    path = get_whiteboard_file()
+    if not path.exists():
+        return {"nodes": [], "links": [], "updated": None, "updated_by": None}
+    try:
+        raw = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return {"nodes": [], "links": [], "updated": None, "updated_by": None}
+    if not isinstance(raw, dict):
+        return {"nodes": [], "links": [], "updated": None, "updated_by": None}
+    nodes = raw.get("nodes") if isinstance(raw.get("nodes"), list) else []
+    links = raw.get("links") if isinstance(raw.get("links"), list) else []
+    return {
+        "nodes": nodes[:MAX_WHITEBOARD_NODES],
+        "links": links[:MAX_WHITEBOARD_LINKS],
+        "updated": raw.get("updated"),
+        "updated_by": raw.get("updated_by"),
+    }
+
+
+def sanitize_whiteboard_state(payload: Dict) -> Dict:
+    if not isinstance(payload, dict):
+        raise ValueError("Whiteboard payload must be an object.")
+
+    nodes_in = payload.get("nodes", [])
+    links_in = payload.get("links", [])
+    if not isinstance(nodes_in, list) or not isinstance(links_in, list):
+        raise ValueError("Whiteboard nodes and links must be arrays.")
+
+    if len(nodes_in) > MAX_WHITEBOARD_NODES:
+        raise ValueError(f"Too many whiteboard nodes. Max is {MAX_WHITEBOARD_NODES}.")
+    if len(links_in) > MAX_WHITEBOARD_LINKS:
+        raise ValueError(f"Too many whiteboard links. Max is {MAX_WHITEBOARD_LINKS}.")
+
+    nodes: List[Dict] = []
+    node_ids = set()
+    for node in nodes_in:
+        if not isinstance(node, dict):
+            continue
+        node_id = str(node.get("id", "")).strip()[:64]
+        if not node_id or node_id in node_ids:
+            continue
+        node_ids.add(node_id)
+        title = str(node.get("title", "")).strip()[:160] or "Untitled card"
+        node_type = str(node.get("type", "custom")).strip()[:40] or "custom"
+        section = str(node.get("section", "")).strip()[:240]
+        comment = str(node.get("comment", "")).strip()[:1200]
+        try:
+            x = float(node.get("x", 80))
+            y = float(node.get("y", 80))
+        except (TypeError, ValueError):
+            x, y = 80.0, 80.0
+        nodes.append(
+            {
+                "id": node_id,
+                "title": title,
+                "type": node_type,
+                "section": section,
+                "comment": comment,
+                "x": max(0.0, min(4000.0, x)),
+                "y": max(0.0, min(4000.0, y)),
+            }
+        )
+
+    links: List[Dict] = []
+    link_ids = set()
+    for link in links_in:
+        if not isinstance(link, dict):
+            continue
+        source = str(link.get("from", "")).strip()[:64]
+        target = str(link.get("to", "")).strip()[:64]
+        if source not in node_ids or target not in node_ids or source == target:
+            continue
+        link_id = str(link.get("id", "")).strip()[:64] or uuid4().hex
+        if link_id in link_ids:
+            continue
+        link_ids.add(link_id)
+        label = str(link.get("label", "")).strip()[:120]
+        links.append({"id": link_id, "from": source, "to": target, "label": label})
+
+    return {
+        "nodes": nodes,
+        "links": links,
+        "updated": now_iso(),
+        "updated_by": current_username(),
+    }
+
+
+def save_whiteboard_state(payload: Dict) -> Dict:
+    state = sanitize_whiteboard_state(payload)
+    get_whiteboard_file().write_text(json.dumps(state, indent=2))
+    return state
 
 
 def iter_uploaded_files(directory: Path):
@@ -1521,6 +1625,8 @@ def build_template_context(active_page: str) -> Dict:
     manageable_users: List[str] = []
     available_share_users: List[str] = []
     chat_history: List[Dict] = []
+    whiteboard_state = {"nodes": [], "links": [], "updated": None, "updated_by": None}
+    whiteboard_seed_items: List[Dict] = []
     global_search_items: List[Dict] = []
     global_search_query = request.args.get("q", "").strip()
     workspace_counts = {
@@ -1561,6 +1667,7 @@ def build_template_context(active_page: str) -> Dict:
             latex_history = load_history(selected_paths["latex_history_file"])
             reader_history = get_reader_history(selected_paths["reader_history_file"])
             chat_history = load_history(get_chat_history_file())
+            whiteboard_state = load_whiteboard_state()
             storage = {
                 "total_bytes": total_bytes,
                 "remaining_bytes": 0,
@@ -1631,6 +1738,7 @@ def build_template_context(active_page: str) -> Dict:
             latex_groups = [{"owner": username, "items": latex_history}]
             reader_groups = [{"owner": username, "items": reader_history}]
             chat_history = load_history(get_chat_history_file())
+            whiteboard_state = load_whiteboard_state()
             workspace_counts["files"] = len(files)
             workspace_counts["text"] = sum(len(group["items"]) for group in text_groups)
             workspace_counts["latex"] = sum(len(group["items"]) for group in latex_groups)
@@ -1706,6 +1814,61 @@ def build_template_context(active_page: str) -> Dict:
                     "url": url_for("chat_page"),
                 }
             )
+        for node in whiteboard_state.get("nodes", []):
+            global_search_items.append(
+                {
+                    "kind": "Whiteboard",
+                    "page": "Board",
+                    "title": node.get("title", "Untitled card"),
+                    "meta": f"{node.get('type', 'card')} · {node.get('section', '')}",
+                    "snippet": summarize_text(node.get("comment", ""), 120),
+                    "url": url_for("chat_page"),
+                }
+            )
+
+        for file in files:
+            whiteboard_seed_items.append(
+                {
+                    "id": f"file::{file.get('owner','')}::{file.get('name','')}",
+                    "type": "file",
+                    "title": file.get("name", "File"),
+                    "section": "",
+                    "comment": f"Owner: {file.get('owner', '')}",
+                }
+            )
+        for group in text_groups:
+            for item in group.get("items", []):
+                whiteboard_seed_items.append(
+                    {
+                        "id": f"note::{group.get('owner','')}::{item.get('id','')}",
+                        "type": "note",
+                        "title": item.get("title") or "Untitled note",
+                        "section": "",
+                        "comment": summarize_text(item.get("content", ""), 220),
+                    }
+                )
+        for group in reader_groups:
+            for item in group.get("items", []):
+                whiteboard_seed_items.append(
+                    {
+                        "id": f"reader::{group.get('owner','')}::{item.get('id','')}",
+                        "type": "reader",
+                        "title": item.get("title") or "Untitled page",
+                        "section": "",
+                        "comment": summarize_text(item.get("summary", ""), 220),
+                    }
+                )
+        for group in latex_groups:
+            for item in group.get("items", []):
+                whiteboard_seed_items.append(
+                    {
+                        "id": f"pdf::{group.get('owner','')}::{item.get('id','')}",
+                        "type": "pdf",
+                        "title": item.get("title") or "Untitled PDF",
+                        "section": "",
+                        "comment": "",
+                    }
+                )
 
     return {
         "files": files,
@@ -1730,6 +1893,8 @@ def build_template_context(active_page: str) -> Dict:
         "active_page": active_page,
         "available_share_users": available_share_users,
         "chat_history": chat_history,
+        "whiteboard_state": whiteboard_state,
+        "whiteboard_seed_items": whiteboard_seed_items[:500],
         "max_chat_message_chars": MAX_CHAT_MESSAGE_CHARS,
         "workspace_counts": workspace_counts,
         "global_search_items": global_search_items[:400],
@@ -1961,6 +2126,28 @@ def chat_page():
 @login_required
 def chat_messages():
     return {"messages": load_history(get_chat_history_file())}
+
+
+@app.get("/board/state")
+@login_required
+def whiteboard_state():
+    return {"board": load_whiteboard_state()}
+
+
+@app.post("/board/save")
+@login_required
+def save_whiteboard():
+    payload = request.get_json(silent=True) or {}
+    validate_csrf_token(str(payload.get("csrf_token", "")))
+    try:
+        board_payload = {
+            "nodes": payload.get("nodes", []),
+            "links": payload.get("links", []),
+        }
+        state = save_whiteboard_state(board_payload)
+    except ValueError as error:
+        return {"ok": False, "error": str(error)}, 400
+    return {"ok": True, "board": state}
 
 
 @app.post("/files/upload")

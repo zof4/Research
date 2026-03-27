@@ -556,6 +556,8 @@
       return;
     }
     input.dataset.globalSearchInit = "1";
+    const headerSearch = document.querySelector("[data-header-search]");
+    const toggle = document.querySelector("[data-global-search-toggle]");
     const searchPanel = document.querySelector("[data-global-search-panel]");
     const resultsRoot = document.querySelector("[data-global-search-results]");
     const indexNode = document.querySelector("#global-search-index");
@@ -567,6 +569,27 @@
         searchIndex = [];
       }
     }
+
+    const closeSearch = () => {
+      if (headerSearch instanceof HTMLElement) {
+        headerSearch.classList.remove("is-open");
+      }
+      if (toggle instanceof HTMLButtonElement) {
+        toggle.setAttribute("aria-expanded", "false");
+      }
+      if (searchPanel instanceof HTMLElement) {
+        searchPanel.classList.add("is-hidden");
+      }
+    };
+
+    const openSearch = () => {
+      if (headerSearch instanceof HTMLElement) {
+        headerSearch.classList.add("is-open");
+      }
+      if (toggle instanceof HTMLButtonElement) {
+        toggle.setAttribute("aria-expanded", "true");
+      }
+    };
 
     const applySearch = () => {
       const query = input.value || "";
@@ -585,7 +608,9 @@
 
       const normalized = query.trim().toLowerCase();
       if (!normalized) {
-        searchPanel.classList.add("is-hidden");
+        if (!(headerSearch instanceof HTMLElement) || !headerSearch.classList.contains("is-open")) {
+          searchPanel.classList.add("is-hidden");
+        }
         resultsRoot.innerHTML = "";
         return;
       }
@@ -597,6 +622,7 @@
         })
         .slice(0, 25);
 
+      openSearch();
       searchPanel.classList.remove("is-hidden");
       resultsRoot.innerHTML = matches.length
         ? matches
@@ -612,7 +638,37 @@
         : '<p class="filter-empty-state">No workspace results match this query.</p>';
     };
 
+    if (toggle instanceof HTMLButtonElement) {
+      toggle.addEventListener("click", () => {
+        const willOpen = !(headerSearch instanceof HTMLElement && headerSearch.classList.contains("is-open"));
+        if (willOpen) {
+          openSearch();
+          searchPanel?.classList.remove("is-hidden");
+          input.focus();
+        } else {
+          closeSearch();
+        }
+      });
+    }
+
+    document.addEventListener("click", (event) => {
+      if (!(headerSearch instanceof HTMLElement)) {
+        return;
+      }
+      const target = event.target;
+      if (target instanceof Node && headerSearch.contains(target)) {
+        return;
+      }
+      closeSearch();
+    });
+
     input.addEventListener("input", applySearch);
+    input.addEventListener("focus", () => {
+      openSearch();
+      if (input.value.trim()) {
+        searchPanel?.classList.remove("is-hidden");
+      }
+    });
     applySearch();
   };
 
@@ -623,12 +679,270 @@
     }
     shell.dataset.scrollHeaderInit = "1";
 
+    let lastY = window.scrollY;
     const syncCompactState = () => {
-      shell.classList.toggle("is-scrolled", window.scrollY > 0);
+      const currentY = window.scrollY;
+      shell.classList.toggle("is-scrolled", currentY > 0);
+      const isMobile = window.innerWidth <= 920;
+      const isScrollingDown = currentY > lastY + 2;
+      shell.classList.toggle("is-mobile-scroll-down", isMobile && currentY > 24 && isScrollingDown);
+      lastY = currentY;
     };
 
     window.addEventListener("scroll", syncCompactState, { passive: true });
     syncCompactState();
+  };
+
+  const initWhiteboard = () => {
+    const root = document.querySelector("[data-whiteboard-root]");
+    if (!(root instanceof HTMLElement) || root.dataset.whiteboardInit) {
+      return;
+    }
+    root.dataset.whiteboardInit = "1";
+
+    const canvas = root.querySelector("[data-whiteboard-canvas]");
+    const linksLayer = root.querySelector("[data-whiteboard-links]");
+    const status = root.querySelector("[data-whiteboard-status]");
+    const saveButton = root.querySelector("[data-whiteboard-save]");
+    const addCustomButton = root.querySelector("[data-whiteboard-add-custom]");
+    const addSeedButton = root.querySelector("[data-whiteboard-add-seed]");
+    const startLinkButton = root.querySelector("[data-whiteboard-link]");
+    const deleteButton = root.querySelector("[data-whiteboard-delete]");
+    const seedSelect = root.querySelector("[data-whiteboard-seed]");
+    const editorForm = root.querySelector("[data-whiteboard-editor]");
+    const initialNode = document.querySelector("#whiteboard-initial");
+    const seedsNode = document.querySelector("#whiteboard-seeds");
+    const csrfInput = editorForm?.querySelector("input[name='csrf_token']");
+    const titleInput = editorForm?.querySelector("input[name='title']");
+    const sectionInput = editorForm?.querySelector("input[name='section']");
+    const commentInput = editorForm?.querySelector("textarea[name='comment']");
+    const typeInput = editorForm?.querySelector("select[name='type']");
+    if (!(canvas instanceof HTMLElement) || !(linksLayer instanceof SVGElement)) {
+      return;
+    }
+
+    let board = { nodes: [], links: [] };
+    let seeds = [];
+    try {
+      board = JSON.parse(initialNode?.textContent || '{"nodes":[],"links":[]}');
+      seeds = JSON.parse(seedsNode?.textContent || "[]");
+    } catch (_error) {
+      board = { nodes: [], links: [] };
+      seeds = [];
+    }
+    board.nodes = Array.isArray(board.nodes) ? board.nodes : [];
+    board.links = Array.isArray(board.links) ? board.links : [];
+
+    let selectedId = null;
+    let linkStartId = null;
+    let dragging = null;
+
+    const setStatus = (message) => {
+      if (status instanceof HTMLElement) {
+        status.textContent = message;
+      }
+    };
+
+    const getNode = (id) => board.nodes.find((node) => node.id === id);
+
+    const syncEditor = () => {
+      const node = getNode(selectedId);
+      if (!(titleInput instanceof HTMLInputElement) || !(sectionInput instanceof HTMLInputElement) || !(commentInput instanceof HTMLTextAreaElement) || !(typeInput instanceof HTMLSelectElement)) {
+        return;
+      }
+      if (!node) {
+        titleInput.value = "";
+        sectionInput.value = "";
+        commentInput.value = "";
+        typeInput.value = "custom";
+        return;
+      }
+      titleInput.value = node.title || "";
+      sectionInput.value = node.section || "";
+      commentInput.value = node.comment || "";
+      typeInput.value = node.type || "custom";
+    };
+
+    const renderLinks = () => {
+      linksLayer.innerHTML = "";
+      board.links.forEach((link) => {
+        const from = getNode(link.from);
+        const to = getNode(link.to);
+        if (!from || !to) {
+          return;
+        }
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute("x1", String((from.x || 0) + 115));
+        line.setAttribute("y1", String((from.y || 0) + 55));
+        line.setAttribute("x2", String((to.x || 0) + 115));
+        line.setAttribute("y2", String((to.y || 0) + 55));
+        line.setAttribute("stroke", "currentColor");
+        line.setAttribute("stroke-opacity", "0.6");
+        line.setAttribute("stroke-width", "2");
+        linksLayer.append(line);
+      });
+    };
+
+    const renderNodes = () => {
+      canvas.querySelectorAll(".whiteboard-node").forEach((el) => el.remove());
+      board.nodes.forEach((node) => {
+        const card = document.createElement("article");
+        card.className = "whiteboard-node";
+        if (node.id === selectedId) {
+          card.classList.add("is-selected");
+        }
+        card.style.left = `${Math.max(0, Number(node.x || 0))}px`;
+        card.style.top = `${Math.max(0, Number(node.y || 0))}px`;
+        card.dataset.nodeId = node.id;
+        card.innerHTML = `
+          <p class="eyebrow">${escapeHtml(String(node.type || "custom").toUpperCase())}</p>
+          <h3>${escapeHtml(node.title || "Untitled card")}</h3>
+          ${node.section ? `<p><strong>Section:</strong> ${escapeHtml(node.section)}</p>` : ""}
+          ${node.comment ? `<p>${escapeHtml(node.comment)}</p>` : ""}`;
+
+        card.addEventListener("mousedown", (event) => {
+          dragging = {
+            id: node.id,
+            startX: event.clientX,
+            startY: event.clientY,
+            originX: Number(node.x || 0),
+            originY: Number(node.y || 0),
+          };
+        });
+
+        card.addEventListener("click", () => {
+          if (linkStartId && linkStartId !== node.id) {
+            board.links.push({ id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, from: linkStartId, to: node.id, label: "" });
+            linkStartId = null;
+            setStatus("Link created. Save to persist.");
+          } else if (linkStartId === node.id) {
+            linkStartId = null;
+            setStatus("Link mode cancelled.");
+          }
+          selectedId = node.id;
+          syncEditor();
+          render();
+        });
+
+        canvas.append(card);
+      });
+      renderLinks();
+    };
+
+    const render = () => {
+      renderNodes();
+      syncEditor();
+    };
+
+    document.addEventListener("mousemove", (event) => {
+      if (!dragging) {
+        return;
+      }
+      const node = getNode(dragging.id);
+      if (!node) {
+        return;
+      }
+      node.x = Math.max(0, dragging.originX + (event.clientX - dragging.startX));
+      node.y = Math.max(0, dragging.originY + (event.clientY - dragging.startY));
+      renderNodes();
+    });
+
+    document.addEventListener("mouseup", () => {
+      dragging = null;
+    });
+
+    addCustomButton?.addEventListener("click", () => {
+      const id = `node-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const node = { id, type: "custom", title: "New card", section: "", comment: "", x: 96, y: 96 };
+      board.nodes.push(node);
+      selectedId = id;
+      setStatus("Custom card added.");
+      render();
+    });
+
+    addSeedButton?.addEventListener("click", () => {
+      if (!(seedSelect instanceof HTMLSelectElement) || !seedSelect.value) {
+        setStatus("Choose an item first.");
+        return;
+      }
+      const seed = seeds.find((item) => item.id === seedSelect.value);
+      if (!seed) {
+        setStatus("Selected item no longer available.");
+        return;
+      }
+      const id = `node-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const node = { id, type: seed.type || "custom", title: seed.title || "Card", section: seed.section || "", comment: seed.comment || "", x: 110, y: 110 };
+      board.nodes.push(node);
+      selectedId = id;
+      setStatus(`${seed.type || "Item"} card added.`);
+      render();
+    });
+
+    startLinkButton?.addEventListener("click", () => {
+      if (!selectedId) {
+        setStatus("Select a source card first.");
+        return;
+      }
+      linkStartId = selectedId;
+      setStatus("Link mode started. Click a target card.");
+    });
+
+    deleteButton?.addEventListener("click", () => {
+      if (!selectedId) {
+        setStatus("Select a card to delete.");
+        return;
+      }
+      board.nodes = board.nodes.filter((node) => node.id !== selectedId);
+      board.links = board.links.filter((link) => link.from !== selectedId && link.to !== selectedId);
+      selectedId = null;
+      linkStartId = null;
+      setStatus("Card deleted.");
+      render();
+    });
+
+    if (editorForm instanceof HTMLFormElement) {
+      editorForm.addEventListener("input", () => {
+        const node = getNode(selectedId);
+        if (!node) {
+          return;
+        }
+        if (titleInput instanceof HTMLInputElement) {
+          node.title = titleInput.value;
+        }
+        if (sectionInput instanceof HTMLInputElement) {
+          node.section = sectionInput.value;
+        }
+        if (commentInput instanceof HTMLTextAreaElement) {
+          node.comment = commentInput.value;
+        }
+        if (typeInput instanceof HTMLSelectElement) {
+          node.type = typeInput.value;
+        }
+        renderNodes();
+      });
+    }
+
+    saveButton?.addEventListener("click", async () => {
+      const csrfToken = csrfInput instanceof HTMLInputElement ? csrfInput.value : "";
+      try {
+        const response = await fetch("/board/save", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ csrf_token: csrfToken, nodes: board.nodes, links: board.links }),
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload.ok) {
+          setStatus(payload.error || "Unable to save board.");
+          return;
+        }
+        setStatus("Board saved.");
+      } catch (_error) {
+        setStatus("Network error while saving board.");
+      }
+    });
+
+    render();
   };
 
   const hasDashboardShell = (doc) =>
@@ -690,6 +1004,7 @@
     initListFilters();
     initGlobalSearch();
     initCompactHeaderOnScroll();
+    initWhiteboard();
     return true;
   };
 
@@ -813,4 +1128,5 @@
   initListFilters();
   initGlobalSearch();
   initCompactHeaderOnScroll();
+  initWhiteboard();
 })();

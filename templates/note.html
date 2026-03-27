@@ -47,6 +47,19 @@
               <button type="button" class="button button-secondary toolbar-button" data-insert-template="reference">Ref block</button>
               <button type="button" class="button button-secondary toolbar-button" data-insert-template="whiteboard">Whiteboard</button>
             </div>
+            <details class="inline-details">
+              <summary class="button button-secondary">How whiteboard works</summary>
+              <div class="detail-panel prose-block">
+                <p>The whiteboard insert is a structured markdown block for mapping ideas to sources.</p>
+                <ul>
+                  <li><strong>Node:</strong> concept or section anchor.</li>
+                  <li><strong>Linked doc:</strong> related file, URL, or note.</li>
+                  <li><strong>Citation:</strong> page/section evidence.</li>
+                  <li><strong>Open question:</strong> unresolved follow-up.</li>
+                </ul>
+                <p>Planned next step: a dedicated draggable board panel with links/comments that sync to notes.</p>
+              </div>
+            </details>
             <label class="field">
               <span>Content</span>
               <textarea name="content" rows="22" maxlength="{{ max_text_chars }}" required>{{ entry.content }}</textarea>
