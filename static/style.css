@@ -119,6 +119,20 @@ body {
 .section-head { display: flex; flex-wrap: wrap; align-items: center; gap: .7rem; justify-content: space-between; margin-bottom: .8rem; }
 .section-head h2 { margin: .1rem 0 0; font-size: clamp(1.6rem,4.5vw,3.6rem); text-transform: none; font-weight: 320; letter-spacing: -.02em; }
 
+.file-table-head {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr) 120px minmax(180px, auto);
+  gap: .8rem;
+  padding: .75rem 1rem;
+  margin-bottom: .45rem;
+  color: #7e859b;
+  font-size: .72rem;
+  letter-spacing: .28em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--line-soft);
+}
+.file-stack { gap: .55rem; }
+
 .item-stack { display: grid; gap: .7rem; }
 .item-card {
   border: 1px solid var(--line-soft);
@@ -150,6 +164,13 @@ body {
   padding: 1.1rem;
   border-color: rgba(255, 255, 255, 0.09);
 }
+.file-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr) 120px minmax(180px, auto);
+  align-items: center;
+  gap: .8rem;
+}
+.file-col { min-width: 0; }
 .file-tile-head {
   display: flex;
   align-items: center;
@@ -194,7 +215,36 @@ body {
   text-transform: uppercase;
   color: #8088a1;
 }
-.share-list { margin-top: .15rem; }
+.file-size {
+  color: #adb4c7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 1.05rem;
+  font-style: italic;
+}
+.file-actions {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+}
+.file-action-button {
+  padding: .45rem .6rem;
+  border-radius: 10px;
+  font-size: .72rem;
+}
+.file-actions-secondary {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+.file-share-form {
+  grid-column: 1 / -1;
+}
+.share-list {
+  margin-top: .15rem;
+  grid-column: 1 / -1;
+}
 .share-pill-list { display: flex; flex-wrap: wrap; gap: .35rem; }
 .share-pill-button {
   border-radius: 999px;
@@ -249,4 +299,8 @@ button, .button-link { cursor: pointer; text-decoration: none; display: inline-f
   .site-header { display: block; border-bottom: 1px solid var(--line-soft); background: rgba(5,6,8,.85); }
   .site-header-inner { max-width: 1200px; margin:0 auto; padding: .7rem 1rem; display:grid; grid-template-columns: auto 1fr auto; gap:.6rem; align-items:center; }
   .top-nav { display: flex; overflow:auto; gap:.35rem; }
+  .file-table-head { display: none; }
+  .file-row { grid-template-columns: 1fr; }
+  .file-size { font-size: .92rem; }
+  .file-actions { justify-self: start; }
 }
