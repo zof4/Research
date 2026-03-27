@@ -12,11 +12,11 @@
         <div class="site-header-inner">
           <a class="brand" href="{{ url_for('index') }}" data-async-nav>VAULT.</a>
           <nav class="top-nav" aria-label="Sections">
-            <a href="{{ url_for('files_page') }}" data-async-nav class="{% if active_page in ['home', 'files'] %}is-active{% endif %}">Storage</a>
-            <a href="{{ url_for('text_page') }}" data-async-nav class="{% if active_page == 'text' %}is-active{% endif %}">Text Lab</a>
-            <a href="{{ url_for('reader_page') }}" data-async-nav class="{% if active_page == 'reader' %}is-active{% endif %}">Proxy Node</a>
-            <a href="{{ url_for('latex_page') }}" data-async-nav class="{% if active_page == 'latex' %}is-active{% endif %}">LaTeX Forge</a>
-            <a href="{{ url_for('chat_page') }}" data-async-nav class="{% if active_page == 'chat' %}is-active{% endif %}">Board</a>
+            <a href="{{ url_for('files_page') }}" data-async-nav class="{% if active_page in ['home', 'files'] %}is-active{% endif %}">Files</a>
+            <a href="{{ url_for('text_page') }}" data-async-nav class="{% if active_page == 'text' %}is-active{% endif %}">Text</a>
+            <a href="{{ url_for('reader_page') }}" data-async-nav class="{% if active_page == 'reader' %}is-active{% endif %}">Web Archive</a>
+            <a href="{{ url_for('latex_page') }}" data-async-nav class="{% if active_page == 'latex' %}is-active{% endif %}">LaTeX PDF</a>
+            <a href="{{ url_for('chat_page') }}" data-async-nav class="{% if active_page == 'chat' %}is-active{% endif %}">Messages</a>
             <a href="{{ url_for('access_page') }}" data-async-nav class="{% if active_page == 'access' %}is-active{% endif %}">Settings</a>
           </nav>
           {% if is_authenticated %}
@@ -38,15 +38,15 @@
           <a class="brand" href="{{ url_for('index') }}" data-async-nav>VAULT.</a>
         </div>
         <nav class="sidebar-nav" aria-label="Sections">
-          <a href="{{ url_for('files_page') }}" data-async-nav class="{% if active_page in ['home', 'files'] %}is-active{% endif %}">Storage</a>
-          <a href="{{ url_for('text_page') }}" data-async-nav class="{% if active_page == 'text' %}is-active{% endif %}">Text Lab</a>
-          <a href="{{ url_for('reader_page') }}" data-async-nav class="{% if active_page == 'reader' %}is-active{% endif %}">Proxy Node</a>
-          <a href="{{ url_for('latex_page') }}" data-async-nav class="{% if active_page == 'latex' %}is-active{% endif %}">LaTeX Forge</a>
-          <a href="{{ url_for('chat_page') }}" data-async-nav class="{% if active_page == 'chat' %}is-active{% endif %}">Board</a>
+          <a href="{{ url_for('files_page') }}" data-async-nav class="{% if active_page in ['home', 'files'] %}is-active{% endif %}">Files</a>
+          <a href="{{ url_for('text_page') }}" data-async-nav class="{% if active_page == 'text' %}is-active{% endif %}">Text</a>
+          <a href="{{ url_for('reader_page') }}" data-async-nav class="{% if active_page == 'reader' %}is-active{% endif %}">Web Archive</a>
+          <a href="{{ url_for('latex_page') }}" data-async-nav class="{% if active_page == 'latex' %}is-active{% endif %}">LaTeX PDF</a>
+          <a href="{{ url_for('chat_page') }}" data-async-nav class="{% if active_page == 'chat' %}is-active{% endif %}">Messages</a>
           <a href="{{ url_for('access_page') }}" data-async-nav class="{% if active_page == 'access' %}is-active{% endif %}">Settings</a>
         </nav>
         <section class="node-status card">
-          <p class="section-kicker">Node status</p>
+          <p class="section-kicker">Uplink status</p>
           <div class="storage-meter"><span style="width: {{ '%.2f'|format(storage.usage_percent) }}%"></span></div>
           <p class="helper-text">Uplink: {{ human_size(storage.total_bytes) }} used</p>
         </section>
@@ -56,7 +56,7 @@
         <div class="topbar">
           <div class="topbar-inner">
             <div class="search-shell">
-              <input type="search" placeholder="Deep search..." aria-label="Search workspace" />
+              <input type="search" placeholder="Deep search logic across vault..." aria-label="Search workspace" />
             </div>
             <div class="user-orbs">
               <span>U1</span><span>U2</span><span>U3</span>
