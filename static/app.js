@@ -540,6 +540,43 @@
     });
   };
 
+  const initGlobalSearch = () => {
+    const input = document.querySelector("[data-global-search]");
+    if (!(input instanceof HTMLInputElement) || input.dataset.globalSearchInit) {
+      return;
+    }
+    input.dataset.globalSearchInit = "1";
+
+    const applySearch = () => {
+      const query = input.value || "";
+      const scopedInputs = document.querySelectorAll("[data-list-filter-input]");
+      scopedInputs.forEach((filterInput) => {
+        if (!(filterInput instanceof HTMLInputElement)) {
+          return;
+        }
+        filterInput.value = query;
+        filterInput.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    };
+
+    input.addEventListener("input", applySearch);
+  };
+
+  const initCompactHeaderOnScroll = () => {
+    const shell = document.querySelector(".app-shell");
+    if (!(shell instanceof HTMLElement) || shell.dataset.scrollHeaderInit) {
+      return;
+    }
+    shell.dataset.scrollHeaderInit = "1";
+
+    const syncCompactState = () => {
+      shell.classList.toggle("is-scrolled", window.scrollY > 0);
+    };
+
+    window.addEventListener("scroll", syncCompactState, { passive: true });
+    syncCompactState();
+  };
+
   const hasDashboardShell = (doc) =>
     shellSelectors.every((selector) => doc.querySelector(selector));
 
@@ -597,6 +634,8 @@
     initChatPolling();
     initFilePaste();
     initListFilters();
+    initGlobalSearch();
+    initCompactHeaderOnScroll();
     return true;
   };
 
@@ -718,4 +757,6 @@
   initChatPolling();
   initFilePaste();
   initListFilters();
+  initGlobalSearch();
+  initCompactHeaderOnScroll();
 })();

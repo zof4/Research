@@ -1671,6 +1671,17 @@ def render_dashboard_page(active_page: str):
     return render_template("index.html", **context)
 
 
+def can_view_text_entry(entry: Dict, owner: str, viewer: str, admin_view: bool) -> bool:
+    if admin_view or owner == viewer:
+        return True
+    shared_with = {
+        normalize_username(str(value))
+        for value in entry.get("shared_with", [])
+        if normalize_username(str(value))
+    }
+    return viewer in shared_with
+
+
 @app.context_processor
 def utility_processor():
     return {
@@ -1836,6 +1847,32 @@ def files_page():
 @app.get("/text")
 def text_page():
     return render_dashboard_page("text")
+
+
+@app.get("/text/view/<entry_id>")
+@login_required
+def view_text_entry(entry_id: str):
+    viewer = current_username()
+    if not viewer:
+        raise Forbidden()
+
+    owner = get_target_username_from_request(default=viewer if not is_admin_user() else None)
+    paths = ensure_user_paths(owner)
+    entry = find_history_item(paths["text_history_file"], entry_id)
+    if entry is None or not can_view_text_entry(entry, owner, viewer, is_admin_user()):
+        raise NotFound()
+
+    return render_template(
+        "note.html",
+        entry=entry,
+        entry_owner=owner,
+        is_authenticated=True,
+        is_admin=is_admin_user(),
+        current_username=viewer,
+        selected_owner=owner,
+        available_share_users=[user for user in managed_usernames() if user != owner and user != ADMIN_USERNAME],
+        max_text_chars=MAX_TEXT_CHARS,
+    )
 
 
 @app.get("/latex")
