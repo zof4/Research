@@ -21,7 +21,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>{{ page_titles.get(active_page, "Dropper") }} · Dropper</title>
     <script>
       (function () {
@@ -54,24 +54,16 @@
           {{ ui.nav_link('text_page', 'Notes', 'text', active_page, is_admin, selected_owner) }}
           {{ ui.nav_link('reader_page', 'Reader', 'reader', active_page, is_admin, selected_owner) }}
           {{ ui.nav_link('latex_page', 'PDF', 'latex', active_page, is_admin, selected_owner) }}
+          {{ ui.nav_link('access_page', 'Access', 'access', active_page, is_admin, selected_owner) }}
         </nav>
         {% endif %}
 
-        {{ ui.appearance_controls(True) }}
-
-        <div class="header-status">
+        <div class="header-search">
           {% if is_authenticated %}
-          <a class="account-chip" href="{{ ui.page_url('access_page', is_admin, selected_owner) }}" data-async-nav>
-            <span class="account-label">{% if is_admin %}Admin{% else %}{{ current_username }}{% endif %}</span>
-            <span class="account-detail">
-              {% if is_admin %}Managing {{ selected_owner }}{% else %}Signed in{% endif %}
-            </span>
-          </a>
-          {% else %}
-          <span class="account-chip is-muted">
-            <span class="account-label">Guest</span>
-            <span class="account-detail">Sign in to upload or save.</span>
-          </span>
+          <label class="field">
+            <span>Search</span>
+            <input type="search" data-global-search placeholder="Search current page items" />
+          </label>
           {% endif %}
         </div>
       </header>
@@ -630,12 +622,7 @@
                       </div>
                       <div class="record-side">
                         <div class="button-row">
-                          <details class="inline-details">
-                            <summary class="button button-primary">Read note</summary>
-                            <div class="detail-panel prose-block">
-                              {{ render_basic_text_markup(item.content) }}
-                            </div>
-                          </details>
+                          <a class="button button-primary" href="{{ url_for('view_text_entry', entry_id=item.id, owner=group.owner) }}">Read note</a>
                           {% if is_admin or group.owner == current_username %}
                           <details class="inline-details">
                             <summary class="button button-secondary">Manage</summary>
@@ -1209,6 +1196,7 @@
         {{ ui.nav_link('text_page', 'Notes', 'text', active_page, is_admin, selected_owner, True) }}
         {{ ui.nav_link('reader_page', 'Reader', 'reader', active_page, is_admin, selected_owner, True) }}
         {{ ui.nav_link('latex_page', 'PDF', 'latex', active_page, is_admin, selected_owner, True) }}
+        {{ ui.nav_link('access_page', 'Access', 'access', active_page, is_admin, selected_owner, True) }}
       </nav>
       {% endif %}
     </div>

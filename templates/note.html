@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>{{ entry.title }} · Note · Dropper</title>
+    <script>
+      (function () {
+        try {
+          document.documentElement.dataset.interface = localStorage.getItem("dropper-interface") || "clean";
+          document.documentElement.dataset.tone = localStorage.getItem("dropper-tone") || "dark";
+        } catch (_error) {
+          document.documentElement.dataset.interface = "clean";
+          document.documentElement.dataset.tone = "dark";
+        }
+      })();
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body class="app-body reader-page">
+    <div class="reader-shell">
+      <header class="reader-topbar">
+        <div class="reader-topbar-inner">
+          <a class="button button-secondary" href="{% if is_admin %}{{ url_for('text_page', owner=entry_owner) }}{% else %}{{ url_for('text_page') }}{% endif %}">Back to notes</a>
+          <div class="reader-heading">
+            <p class="eyebrow">Note</p>
+            <h1>{{ entry.title }}</h1>
+            <p class="lead">Owner: {{ entry_owner }} · {{ format_timestamp(entry.updated or entry.created) }}</p>
+          </div>
+          <div></div>
+        </div>
+      </header>
+      <main class="reader-main note-main">
+        <article class="panel reader-panel note-panel">
+          <form method="post" action="{{ url_for('edit_text_entry', entry_id=entry.id) }}" class="stack-form text-editor-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            {% if is_admin %}<input type="hidden" name="owner" value="{{ entry_owner }}" />{% endif %}
+            <label class="field">
+              <span>Title</span>
+              <input type="text" name="title" maxlength="120" value="{{ entry.title }}" />
+            </label>
+            <div class="text-toolbar" data-text-toolbar>
+              <button type="button" class="button button-secondary toolbar-button" data-wrap="**">Bold</button>
+              <button type="button" class="button button-secondary toolbar-button" data-wrap="*">Italic</button>
+              <button type="button" class="button button-secondary toolbar-button" data-wrap="`">Code</button>
+              <button type="button" class="button button-secondary toolbar-button" data-prefix="- ">List</button>
+            </div>
+            <label class="field">
+              <span>Content</span>
+              <textarea name="content" rows="22" maxlength="{{ max_text_chars }}" required>{{ entry.content }}</textarea>
+            </label>
+            <details class="inline-details nested-details">
+              <summary class="button button-secondary">Preview</summary>
+              <div class="detail-panel">
+                <div class="formatted-preview prose-block" data-text-preview>{{ render_basic_text_markup(entry.content) }}</div>
+              </div>
+            </details>
+            {% if is_admin or entry_owner == current_username %}
+            <button type="submit" class="button button-primary">Save changes</button>
+            {% endif %}
+          </form>
+        </article>
+      </main>
+    </div>
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  </body>
+</html>
