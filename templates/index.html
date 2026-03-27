@@ -419,15 +419,35 @@
                 {% if group.files %}
                 <div class="item-stack">
                   {% for file in group.files %}
-                  <article class="item-card row-card">
+                  <article class="item-card row-card file-tile">
                     <div class="row-main">
-                      <h3>
-                        <a class="text-link" href="{{ url_for('download_file', filename=file.name, owner=file.owner) }}" target="_blank" rel="noopener noreferrer">
-                          {{ file.name }}
-                        </a>
-                        {% if file.hidden %}<span class="item-badge">Hidden</span>{% endif %}
-                      </h3>
-                      <p class="item-meta">{{ human_size(file.size) }} • {{ file.modified.strftime('%Y-%m-%d %H:%M') }}</p>
+                      <div class="file-tile-head">
+                        <span class="file-icon" aria-hidden="true">🗎</span>
+                        <div>
+                          <h3>
+                            <a class="text-link" href="{{ url_for('download_file', filename=file.name, owner=file.owner) }}" target="_blank" rel="noopener noreferrer">
+                              {{ file.name }}
+                            </a>
+                            {% if file.hidden %}<span class="item-badge">Hidden</span>{% endif %}
+                          </h3>
+                          <p class="item-meta">{{ human_size(file.size) }} • {{ file.modified.strftime('%Y-%m-%d %H:%M') }}</p>
+                        </div>
+                      </div>
+                      <div class="file-permissions">
+                        {% if file.shared_with %}
+                        <div class="share-avatar-stack" aria-label="Shared with users">
+                          {% for shared_user in file.shared_with[:3] %}
+                          <span class="share-avatar" title="{{ shared_user }}">{{ shared_user[:2]|upper }}</span>
+                          {% endfor %}
+                          {% if file.shared_with|length > 3 %}
+                          <span class="share-avatar share-avatar-overflow">+{{ file.shared_with|length - 3 }}</span>
+                          {% endif %}
+                          <span class="share-avatar share-avatar-add" title="Share with another user">+</span>
+                        </div>
+                        {% else %}
+                        <span class="private-pill">Private</span>
+                        {% endif %}
+                      </div>
                     </div>
                     <form method="post" action="{{ url_for('delete_file', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
                       <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
@@ -469,16 +489,36 @@
               {% endfor %}
             {% elif files %}
               {% for file in files %}
-              <article class="item-card row-card">
+              <article class="item-card row-card file-tile">
                 <div class="row-main">
-                  <h3>
-                    <a class="text-link" href="{{ url_for('download_file', filename=file.name, owner=file.owner) }}" target="_blank" rel="noopener noreferrer">
-                      {{ file.name }}
-                    </a>
-                    {% if file.hidden %}<span class="item-badge">Hidden</span>{% endif %}
-                    {% if file.is_shared_to_viewer %}<span class="item-badge">Shared</span>{% endif %}
-                  </h3>
-                  <p class="item-meta">{{ human_size(file.size) }} • {{ file.modified.strftime('%Y-%m-%d %H:%M') }}{% if is_admin %} • {{ file.owner }}{% endif %}</p>
+                  <div class="file-tile-head">
+                    <span class="file-icon" aria-hidden="true">🗎</span>
+                    <div>
+                      <h3>
+                        <a class="text-link" href="{{ url_for('download_file', filename=file.name, owner=file.owner) }}" target="_blank" rel="noopener noreferrer">
+                          {{ file.name }}
+                        </a>
+                        {% if file.hidden %}<span class="item-badge">Hidden</span>{% endif %}
+                        {% if file.is_shared_to_viewer %}<span class="item-badge">Shared</span>{% endif %}
+                      </h3>
+                      <p class="item-meta">{{ human_size(file.size) }} • {{ file.modified.strftime('%Y-%m-%d %H:%M') }}{% if is_admin %} • {{ file.owner }}{% endif %}</p>
+                    </div>
+                  </div>
+                  <div class="file-permissions">
+                    {% if file.shared_with %}
+                    <div class="share-avatar-stack" aria-label="Shared with users">
+                      {% for shared_user in file.shared_with[:3] %}
+                      <span class="share-avatar" title="{{ shared_user }}">{{ shared_user[:2]|upper }}</span>
+                      {% endfor %}
+                      {% if file.shared_with|length > 3 %}
+                      <span class="share-avatar share-avatar-overflow">+{{ file.shared_with|length - 3 }}</span>
+                      {% endif %}
+                      <span class="share-avatar share-avatar-add" title="Share with another user">+</span>
+                    </div>
+                    {% else %}
+                    <span class="private-pill">Private</span>
+                    {% endif %}
+                  </div>
                 </div>
 
                 {% if is_authenticated and (is_admin or file.owner == current_username) %}

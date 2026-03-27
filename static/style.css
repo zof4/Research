@@ -130,6 +130,79 @@ body {
 .item-head { display:flex; justify-content: space-between; gap: .8rem; }
 .row-card { display: grid; gap: .6rem; }
 .row-main h3 { margin: 0; }
+.text-link { color: #f1f4fb; text-decoration: none; }
+.text-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.item-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: .15rem .45rem;
+  margin-left: .35rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: .64rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #d4d9e7;
+}
+
+.file-tile {
+  border-radius: 24px;
+  padding: 1.1rem;
+  border-color: rgba(255, 255, 255, 0.09);
+}
+.file-tile-head {
+  display: flex;
+  align-items: center;
+  gap: .85rem;
+}
+.file-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  font-size: 1.35rem;
+}
+.file-permissions {
+  margin-top: .7rem;
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+}
+.share-avatar-stack { display: flex; align-items: center; }
+.share-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  margin-left: -8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: #171a22;
+  color: #d6dbeb;
+  font-size: .62rem;
+  font-weight: 700;
+}
+.share-avatar:first-child { margin-left: 0; }
+.share-avatar-overflow { background: #1e222d; color: #aab2c8; }
+.share-avatar-add { background: rgba(255,255,255,.03); color: #8f97af; font-size: .9rem; }
+.private-pill {
+  font-size: .74rem;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: #8088a1;
+}
+.share-list { margin-top: .15rem; }
+.share-pill-list { display: flex; flex-wrap: wrap; gap: .35rem; }
+.share-pill-button {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line-soft);
+  padding: .25rem .5rem;
+  font-size: .72rem;
+}
 
 form { margin: 0; }
 .stack-form { display:grid; gap:.55rem; }
