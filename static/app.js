@@ -1,5 +1,5 @@
 (function () {
-  const shellSelectors = [".site-header", "main.page"];
+  const shellSelectors = [".app-shell"];
 
   const escapeHtml = (value) =>
     String(value || "")
@@ -421,35 +421,15 @@
       fileInput.dispatchEvent(new Event("change", { bubbles: true }));
     });
   };
-
-
-  const applyStoredTheme = () => {
-    const savedTheme = window.localStorage.getItem("vaultTheme");
-    document.body.classList.toggle("vault-light", savedTheme === "light");
-  };
-
-  const initThemeToggle = () => {
-    if (document.body?.dataset.themeToggleInit) {
-      return;
-    }
-    document.body.dataset.themeToggleInit = "1";
-
-    document.addEventListener("click", (event) => {
-      const toggle = event.target.closest("[data-theme-toggle]");
-      if (!(toggle instanceof HTMLElement)) {
-        return;
-      }
-      const nextLight = !document.body.classList.contains("vault-light");
-      document.body.classList.toggle("vault-light", nextLight);
-      window.localStorage.setItem("vaultTheme", nextLight ? "light" : "dark");
-    });
-  };
-
   const hasDashboardShell = (doc) =>
     shellSelectors.every((selector) => doc.querySelector(selector));
 
   const initChatPolling = () => {
     const feed = document.querySelector("[data-chat-feed]");
+    if (window.dropperChatInterval) {
+      window.clearInterval(window.dropperChatInterval);
+      window.dropperChatInterval = null;
+    }
     if (!(feed instanceof HTMLElement)) {
       return;
     }
@@ -480,24 +460,22 @@
     };
 
     fetchMessages();
-    window.setInterval(fetchMessages, 5000);
+    window.dropperChatInterval = window.setInterval(fetchMessages, 5000);
   };
 
   const replaceDashboardShell = (doc) => {
-    const nextHeader = doc.querySelector(".site-header");
-    const nextMain = doc.querySelector("main.page");
-    const currentHeader = document.querySelector(".site-header");
-    const currentMain = document.querySelector("main.page");
+    const nextShell = doc.querySelector(".app-shell");
+    const currentShell = document.querySelector(".app-shell");
 
-    if (!nextHeader || !nextMain || !currentHeader || !currentMain) {
+    if (!nextShell || !currentShell) {
       return false;
     }
 
-    currentHeader.replaceWith(nextHeader);
-    currentMain.replaceWith(nextMain);
+    currentShell.replaceWith(nextShell);
     document.title = doc.title || document.title;
     initTextFormatting();
     initChatPolling();
+    initFilePaste();
     return true;
   };
 
@@ -592,10 +570,6 @@
       return;
     }
 
-    if (link.closest(".sidebar-nav") || link.closest(".top-nav")) {
-      return;
-    }
-
     const url = link.href;
     if (!url || new URL(url, window.location.origin).origin !== window.location.origin) {
       return;
@@ -618,8 +592,6 @@
     window.location.reload();
   });
 
-  applyStoredTheme();
-  initThemeToggle();
   initTextFormatting();
   initChatPolling();
   initFilePaste();

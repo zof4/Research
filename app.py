@@ -1521,6 +1521,13 @@ def build_template_context(active_page: str) -> Dict:
     manageable_users: List[str] = []
     available_share_users: List[str] = []
     chat_history: List[Dict] = []
+    workspace_counts = {
+        "files": 0,
+        "text": 0,
+        "latex": 0,
+        "reader": 0,
+        "chat": 0,
+    }
 
     if authenticated and username:
         if is_admin_user(username):
@@ -1560,6 +1567,11 @@ def build_template_context(active_page: str) -> Dict:
                 "usage_percent": 0,
                 "has_limit": False,
             }
+            workspace_counts["files"] = len(files)
+            workspace_counts["text"] = sum(len(group["items"]) for group in text_groups)
+            workspace_counts["latex"] = sum(len(group["items"]) for group in latex_groups)
+            workspace_counts["reader"] = sum(len(group["items"]) for group in reader_groups)
+            workspace_counts["chat"] = len(chat_history)
         else:
             paths = ensure_user_paths(username)
             available_share_users = [user for user in managed_usernames() if user != username]
@@ -1617,6 +1629,11 @@ def build_template_context(active_page: str) -> Dict:
             latex_groups = [{"owner": username, "items": latex_history}]
             reader_groups = [{"owner": username, "items": reader_history}]
             chat_history = load_history(get_chat_history_file())
+            workspace_counts["files"] = len(files)
+            workspace_counts["text"] = sum(len(group["items"]) for group in text_groups)
+            workspace_counts["latex"] = sum(len(group["items"]) for group in latex_groups)
+            workspace_counts["reader"] = sum(len(group["items"]) for group in reader_groups)
+            workspace_counts["chat"] = len(chat_history)
     else:
         storage = build_storage_summary(0)
         storage["has_limit"] = True
@@ -1645,6 +1662,7 @@ def build_template_context(active_page: str) -> Dict:
         "available_share_users": available_share_users,
         "chat_history": chat_history,
         "max_chat_message_chars": MAX_CHAT_MESSAGE_CHARS,
+        "workspace_counts": workspace_counts,
     }
 
 
@@ -1660,6 +1678,7 @@ def utility_processor():
         "csrf_token": get_or_create_csrf_token(),
         "format_timestamp": format_timestamp,
         "render_basic_text_markup": render_basic_text_markup,
+        "summarize_text": summarize_text,
     }
 
 

@@ -1,0 +1,23 @@
+{% macro page_url(endpoint, is_admin=False, selected_owner='') -%}
+{{ url_for(endpoint, owner=selected_owner) if is_admin and selected_owner else url_for(endpoint) }}
+{%- endmacro %}
+
+{% macro nav_link(endpoint, label, key, active_page, is_admin=False, selected_owner='', mobile=False) -%}
+<a
+  href="{{ page_url(endpoint, is_admin, selected_owner) }}"
+  class="{{ 'mobile-nav-link' if mobile else 'nav-link' }} {% if active_page == key %}is-active{% endif %}"
+  {% if not mobile %}data-async-nav{% endif %}
+>
+  <span>{{ label }}</span>
+</a>
+{%- endmacro %}
+
+{% macro metric_card(label, value, hint='') -%}
+<article class="metric-card">
+  <p class="metric-label">{{ label }}</p>
+  <p class="metric-value">{{ value }}</p>
+  {% if hint %}
+  <p class="metric-hint">{{ hint }}</p>
+  {% endif %}
+</article>
+{%- endmacro %}
