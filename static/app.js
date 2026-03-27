@@ -421,6 +421,125 @@
       fileInput.dispatchEvent(new Event("change", { bubbles: true }));
     });
   };
+
+  const getStoredAppearance = () => {
+    let interfaceMode = "clean";
+    let toneMode = "dark";
+
+    try {
+      interfaceMode = window.localStorage.getItem("dropper-interface") || interfaceMode;
+      toneMode = window.localStorage.getItem("dropper-tone") || toneMode;
+    } catch (_error) {
+      // fall back to defaults
+    }
+
+    return { interfaceMode, toneMode };
+  };
+
+  const applyAppearance = () => {
+    const { interfaceMode, toneMode } = getStoredAppearance();
+    document.documentElement.dataset.interface = interfaceMode;
+    document.documentElement.dataset.tone = toneMode;
+
+    document.querySelectorAll("[data-appearance-interface]").forEach((button) => {
+      button.classList.toggle("is-active", button.getAttribute("data-appearance-interface") === interfaceMode);
+    });
+
+    document.querySelectorAll("[data-appearance-tone]").forEach((button) => {
+      button.classList.toggle("is-active", button.getAttribute("data-appearance-tone") === toneMode);
+    });
+  };
+
+  const initAppearanceControls = () => {
+    if (!document.body || document.body.dataset.appearanceInit) {
+      applyAppearance();
+      return;
+    }
+
+    document.body.dataset.appearanceInit = "1";
+
+    document.addEventListener("click", (event) => {
+      const interfaceButton = event.target.closest("[data-appearance-interface]");
+      const toneButton = event.target.closest("[data-appearance-tone]");
+
+      if (!(interfaceButton instanceof HTMLButtonElement) && !(toneButton instanceof HTMLButtonElement)) {
+        return;
+      }
+
+      if (interfaceButton instanceof HTMLButtonElement) {
+        const nextInterface = interfaceButton.getAttribute("data-appearance-interface") || "clean";
+        window.localStorage.setItem("dropper-interface", nextInterface);
+      }
+
+      if (toneButton instanceof HTMLButtonElement) {
+        const nextTone = toneButton.getAttribute("data-appearance-tone") || "dark";
+        window.localStorage.setItem("dropper-tone", nextTone);
+      }
+
+      applyAppearance();
+    });
+
+    applyAppearance();
+  };
+
+  const updateFilterEmptyState = (list, visibleCount) => {
+    if (!(list instanceof HTMLElement)) {
+      return;
+    }
+
+    let emptyState = list.nextElementSibling;
+    if (!(emptyState instanceof HTMLElement) || !emptyState.hasAttribute("data-filter-empty-state")) {
+      emptyState = document.createElement("p");
+      emptyState.className = "filter-empty-state";
+      emptyState.setAttribute("data-filter-empty-state", "1");
+      emptyState.textContent = "No matches for the current filter.";
+      list.insertAdjacentElement("afterend", emptyState);
+    }
+
+    emptyState.hidden = visibleCount > 0;
+  };
+
+  const runListFilter = (name, query) => {
+    const normalizedQuery = String(query || "").trim().toLowerCase();
+    const lists = document.querySelectorAll(`[data-list-filter-list="${name}"]`);
+
+    lists.forEach((list) => {
+      const items = Array.from(list.querySelectorAll("[data-list-filter-item]"));
+      let visibleCount = 0;
+
+      items.forEach((item) => {
+        const haystack = (item.getAttribute("data-filter-text") || item.textContent || "").toLowerCase();
+        const isVisible = !normalizedQuery || haystack.includes(normalizedQuery);
+        item.classList.toggle("is-filter-hidden", !isVisible);
+        if (isVisible) {
+          visibleCount += 1;
+        }
+      });
+
+      updateFilterEmptyState(list, visibleCount);
+    });
+  };
+
+  const initListFilters = () => {
+    document.querySelectorAll("[data-list-filter-input]").forEach((input) => {
+      if (!(input instanceof HTMLInputElement) || input.dataset.filterInit) {
+        return;
+      }
+
+      input.dataset.filterInit = "1";
+      const targetName = input.getAttribute("data-list-filter-input");
+
+      const applyCurrentValue = () => {
+        if (targetName) {
+          runListFilter(targetName, input.value);
+        }
+      };
+
+      input.addEventListener("input", applyCurrentValue);
+      applyCurrentValue();
+    });
+  };
+
   const hasDashboardShell = (doc) =>
     shellSelectors.every((selector) => doc.querySelector(selector));
 
@@ -438,8 +557,8 @@
       feed.innerHTML = (messages || [])
         .map(
           (message) => `
-          <article class="item-card">
-            <p class="item-meta"><strong>${escapeHtml(message.author || "unknown")}</strong> · ${escapeHtml(message.created || "")}</p>
+          <article class="message-card">
+            <p class="message-meta"><strong>${escapeHtml(message.author || "unknown")}</strong> · ${escapeHtml(message.created || "")}</p>
             <p>${escapeHtml(message.content || "")}</p>
           </article>`,
         )
@@ -473,9 +592,11 @@
 
     currentShell.replaceWith(nextShell);
     document.title = doc.title || document.title;
+    applyAppearance();
     initTextFormatting();
     initChatPolling();
     initFilePaste();
+    initListFilters();
     return true;
   };
 
@@ -592,7 +713,9 @@
     window.location.reload();
   });
 
+  initAppearanceControls();
   initTextFormatting();
   initChatPolling();
   initFilePaste();
+  initListFilters();
 })();

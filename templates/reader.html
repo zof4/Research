@@ -4,6 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{{ entry.title }} · Dropper</title>
+    <script>
+      (function () {
+        try {
+          document.documentElement.dataset.interface = localStorage.getItem("dropper-interface") || "clean";
+          document.documentElement.dataset.tone = localStorage.getItem("dropper-tone") || "dark";
+        } catch (_error) {
+          document.documentElement.dataset.interface = "clean";
+          document.documentElement.dataset.tone = "dark";
+        }
+      })();
+    </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   </head>
   <body class="app-body reader-page">
@@ -20,6 +31,24 @@
               {% if entry.word_count %} · {{ entry.word_count }} words{% endif %}
               {% if entry.reader_mode_used %} · {{ entry.reader_mode_used|upper }}{% endif %}
             </p>
+          </div>
+          <div class="reader-appearance">
+            <section class="appearance-panel is-compact" aria-label="Appearance">
+              <div class="appearance-group">
+                <p class="appearance-label">Interface</p>
+                <div class="toggle-set" role="group" aria-label="Interface style">
+                  <button type="button" class="toggle-button" data-appearance-interface="clean">Clean</button>
+                  <button type="button" class="toggle-button" data-appearance-interface="draft">Draft</button>
+                </div>
+              </div>
+              <div class="appearance-group">
+                <p class="appearance-label">Color</p>
+                <div class="toggle-set" role="group" aria-label="Color mode">
+                  <button type="button" class="toggle-button" data-appearance-tone="dark">Dark</button>
+                  <button type="button" class="toggle-button" data-appearance-tone="light">Light</button>
+                </div>
+              </div>
+            </section>
           </div>
           <div class="button-row">
             <a class="button button-primary" href="{{ entry.url }}" target="_blank" rel="noopener noreferrer">Open source</a>
@@ -65,5 +94,6 @@
         </article>
       </main>
     </div>
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
   </body>
 </html>

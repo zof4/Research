@@ -23,6 +23,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{{ page_titles.get(active_page, "Dropper") }} · Dropper</title>
+    <script>
+      (function () {
+        try {
+          document.documentElement.dataset.interface = localStorage.getItem("dropper-interface") || "clean";
+          document.documentElement.dataset.tone = localStorage.getItem("dropper-tone") || "dark";
+        } catch (_error) {
+          document.documentElement.dataset.interface = "clean";
+          document.documentElement.dataset.tone = "dark";
+        }
+      })();
+    </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   </head>
   <body class="app-body page-{{ active_page }}">
@@ -45,6 +56,8 @@
           {{ ui.nav_link('latex_page', 'PDF', 'latex', active_page, is_admin, selected_owner) }}
         </nav>
         {% endif %}
+
+        {{ ui.appearance_controls(True) }}
 
         <div class="header-status">
           {% if is_authenticated %}
@@ -123,6 +136,7 @@
               <p class="lead">
                 Dropper keeps files, notes, cached pages, and PDFs in a simple black-and-white workspace that works on desktop and mobile.
               </p>
+              {{ ui.appearance_controls() }}
               <form method="post" action="{{ url_for('login') }}" class="stack-form" data-async>
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
                 <label class="field">
@@ -309,6 +323,19 @@
                   {% endif %}
                 </p>
               </article>
+
+              <article class="panel">
+                <div class="section-heading">
+                  <div>
+                    <p class="eyebrow">Find</p>
+                    <h2>Filter files</h2>
+                  </div>
+                </div>
+                <label class="field">
+                  <span>Search by name, owner, type, or shared user</span>
+                  <input type="search" data-list-filter-input="files" placeholder="Start typing to filter files" />
+                </label>
+              </article>
             </aside>
 
             <div class="workspace-main">
@@ -323,9 +350,9 @@
                     <p class="section-meta">{{ group.files|length }} files · {{ human_size(group.total_bytes) }}</p>
                   </div>
                   {% if group.files %}
-                  <div class="record-list">
+                  <div class="record-list" data-list-filter-list="files">
                     {% for file in group.files %}
-                    <article class="record">
+                    <article class="record" data-list-filter-item data-filter-text="{{ file.name }} {{ file.owner }} {{ file.type }} {{ file.shared_with|join(' ') }}">
                       <div class="record-main">
                         <div class="record-heading">
                           <a class="record-title" href="{{ url_for('download_file', filename=file.name, owner=file.owner) }}" target="_blank" rel="noopener noreferrer">{{ file.name }}</a>
@@ -413,9 +440,9 @@
                   </div>
                   <p class="section-meta">{{ files|length }} items</p>
                 </div>
-                <div class="record-list">
+                <div class="record-list" data-list-filter-list="files">
                   {% for file in files %}
-                  <article class="record">
+                  <article class="record" data-list-filter-item data-filter-text="{{ file.name }} {{ file.owner }} {{ file.type }} {{ file.shared_with|join(' ') }}">
                     <div class="record-main">
                       <div class="record-heading">
                         <a class="record-title" href="{{ url_for('download_file', filename=file.name, owner=file.owner) }}" target="_blank" rel="noopener noreferrer">{{ file.name }}</a>
@@ -553,6 +580,19 @@
                   <button type="submit" class="button button-primary button-block">Save note</button>
                 </form>
               </article>
+
+              <article class="panel">
+                <div class="section-heading">
+                  <div>
+                    <p class="eyebrow">Find</p>
+                    <h2>Filter notes</h2>
+                  </div>
+                </div>
+                <label class="field">
+                  <span>Search by title, content, owner, or shared user</span>
+                  <input type="search" data-list-filter-input="notes" placeholder="Start typing to filter notes" />
+                </label>
+              </article>
             </aside>
 
             <div class="workspace-main">
@@ -567,9 +607,9 @@
                     <p class="section-meta">{{ group['items']|length }} notes</p>
                   </div>
                   {% if group['items'] %}
-                  <div class="record-list">
+                  <div class="record-list" data-list-filter-list="notes">
                     {% for item in group['items'] %}
-                    <article class="record">
+                    <article class="record" data-list-filter-item data-filter-text="{{ item.title }} {{ item.content }} {{ group.owner }} {{ item.shared_with|join(' ') }}">
                       <div class="record-main">
                         <div class="record-heading">
                           <h3 class="record-title">{{ item.title }}</h3>
@@ -772,6 +812,19 @@
                   <button type="submit" class="button button-secondary button-block">Open live reader</button>
                 </form>
               </article>
+
+              <article class="panel">
+                <div class="section-heading">
+                  <div>
+                    <p class="eyebrow">Find</p>
+                    <h2>Filter pages</h2>
+                  </div>
+                </div>
+                <label class="field">
+                  <span>Search by title, source, author, or summary</span>
+                  <input type="search" data-list-filter-input="reader" placeholder="Start typing to filter cached pages" />
+                </label>
+              </article>
             </aside>
 
             <div class="workspace-main">
@@ -786,9 +839,9 @@
                     <p class="section-meta">{{ group['items']|length }} pages</p>
                   </div>
                   {% if group['items'] %}
-                  <div class="record-list">
+                  <div class="record-list" data-list-filter-list="reader">
                     {% for item in group['items'] %}
-                    <article class="record">
+                    <article class="record" data-list-filter-item data-filter-text="{{ item.title }} {{ item.source_label }} {{ item.author or '' }} {{ item.summary or '' }} {{ group.owner }}">
                       <div class="record-main">
                         <div class="record-heading">
                           <h3 class="record-title">{{ item.title }}</h3>
@@ -907,6 +960,19 @@
                 </form>
               </article>
               {% endif %}
+
+              <article class="panel">
+                <div class="section-heading">
+                  <div>
+                    <p class="eyebrow">Find</p>
+                    <h2>Filter PDFs</h2>
+                  </div>
+                </div>
+                <label class="field">
+                  <span>Search by title, source, or owner</span>
+                  <input type="search" data-list-filter-input="pdfs" placeholder="Start typing to filter PDFs" />
+                </label>
+              </article>
             </aside>
 
             <div class="workspace-main">
@@ -921,9 +987,9 @@
                     <p class="section-meta">{{ group['items']|length }} PDFs</p>
                   </div>
                   {% if group['items'] %}
-                  <div class="record-list">
+                  <div class="record-list" data-list-filter-list="pdfs">
                     {% for item in group['items'] %}
-                    <article class="record">
+                    <article class="record" data-list-filter-item data-filter-text="{{ item.title }} {{ item.source }} {{ group.owner }}">
                       <div class="record-main">
                         <div class="record-heading">
                           <h3 class="record-title">{{ item.title }}</h3>
@@ -985,6 +1051,45 @@
               {% endif %}
             </div>
           </section>
+          {% elif active_page == 'chat' %}
+          <section class="page-intro">
+            <div>
+              <p class="eyebrow">Board</p>
+              <h1>{{ page_titles.get(active_page) }}</h1>
+              <p class="lead">{{ page_descriptions.get(active_page) }}</p>
+            </div>
+          </section>
+
+          <section class="overview-grid">
+            <article class="panel panel-wide">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Messages</p>
+                  <h2>Shared board</h2>
+                </div>
+                <p class="section-meta">{{ workspace_counts.chat }} total</p>
+              </div>
+              <div class="message-feed" id="chat-feed" data-chat-feed>
+                {% for message in chat_history %}
+                <article class="message-card">
+                  <p class="message-meta"><strong>{{ message.author }}</strong> · {{ format_timestamp(message.created) }}</p>
+                  <p>{{ message.content }}</p>
+                </article>
+                {% endfor %}
+                {% if not chat_history %}
+                <p class="empty-state">No messages yet.</p>
+                {% endif %}
+              </div>
+              <form method="post" action="{{ url_for('send_chat_message') }}" class="stack-form" data-async>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <label class="field">
+                  <span>New message</span>
+                  <input type="text" name="message" maxlength="{{ max_chat_message_chars }}" required />
+                </label>
+                <button type="submit" class="button button-primary">Send message</button>
+              </form>
+            </article>
+          </section>
           {% elif active_page == 'access' %}
           <section class="page-intro">
             <div>
@@ -1019,6 +1124,13 @@
                 Admin view across all users.
                 {% endif %}
               </p>
+            </article>
+
+            <article class="panel">
+              <p class="eyebrow">Appearance</p>
+              <h2>Visual preferences</h2>
+              <p class="panel-note">Use the clean base UI or your alternate draft, then switch between dark and light.</p>
+              {{ ui.appearance_controls() }}
             </article>
 
             {% if is_admin %}

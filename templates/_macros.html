@@ -21,3 +21,22 @@
   {% endif %}
 </article>
 {%- endmacro %}
+
+{% macro appearance_controls(compact=False) -%}
+<section class="appearance-panel {% if compact %}is-compact{% endif %}" aria-label="Appearance">
+  <div class="appearance-group">
+    <p class="appearance-label">Interface</p>
+    <div class="toggle-set" role="group" aria-label="Interface style">
+      <button type="button" class="toggle-button" data-appearance-interface="clean">Clean</button>
+      <button type="button" class="toggle-button" data-appearance-interface="draft">Draft</button>
+    </div>
+  </div>
+  <div class="appearance-group">
+    <p class="appearance-label">Color</p>
+    <div class="toggle-set" role="group" aria-label="Color mode">
+      <button type="button" class="toggle-button" data-appearance-tone="dark">Dark</button>
+      <button type="button" class="toggle-button" data-appearance-tone="light">Light</button>
+    </div>
+  </div>
+</section>
+{%- endmacro %}
