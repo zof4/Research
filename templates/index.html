@@ -364,6 +364,7 @@
                           <a class="record-title" href="{{ url_for('download_file', filename=file.name, owner=file.owner) }}" target="_blank" rel="noopener noreferrer">{{ file.name }}</a>
                           <div class="tag-row">
                             {% if file.hidden %}<span class="tag">Hidden</span>{% endif %}
+                            {% if file.public_enabled %}<span class="tag">Public link</span>{% endif %}
                           </div>
                         </div>
                         <p class="record-meta">{{ file.modified.strftime('%b %d, %Y') }} · {{ file.owner }}</p>
@@ -408,7 +409,28 @@
                                 {% endfor %}
                               </div>
                               {% endif %}
+                              <div class="stack-form">
+                                <label class="field">
+                                  <span>Public link</span>
+                                  {% if file.public_enabled %}
+                                  <input type="text" readonly value="{{ url_for('download_public_file', token=file.public_token, _external=True) }}" onclick="this.select();" />
+                                  {% else %}
+                                  <input type="text" readonly value="Public link disabled" />
+                                  {% endif %}
+                                </label>
+                              </div>
                               <div class="button-row">
+                                {% if file.public_enabled %}
+                                <form method="post" action="{{ url_for('disable_public_file_link', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
+                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                                  <button type="submit" class="button button-secondary">Disable link</button>
+                                </form>
+                                {% else %}
+                                <form method="post" action="{{ url_for('enable_public_file_link', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
+                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                                  <button type="submit" class="button button-secondary">Enable public link</button>
+                                </form>
+                                {% endif %}
                                 {% if file.hidden %}
                                 <form method="post" action="{{ url_for('unhide_file', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
                                   <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
@@ -454,6 +476,7 @@
                         <a class="record-title" href="{{ url_for('download_file', filename=file.name, owner=file.owner) }}" target="_blank" rel="noopener noreferrer">{{ file.name }}</a>
                         <div class="tag-row">
                           {% if file.hidden %}<span class="tag">Hidden</span>{% endif %}
+                          {% if file.public_enabled %}<span class="tag">Public link</span>{% endif %}
                           {% if file.is_shared_to_viewer %}<span class="tag">Shared</span>{% endif %}
                         </div>
                       </div>
@@ -503,7 +526,28 @@
                               {% endfor %}
                             </div>
                             {% endif %}
+                            <div class="stack-form">
+                              <label class="field">
+                                <span>Public link</span>
+                                {% if file.public_enabled %}
+                                <input type="text" readonly value="{{ url_for('download_public_file', token=file.public_token, _external=True) }}" onclick="this.select();" />
+                                {% else %}
+                                <input type="text" readonly value="Public link disabled" />
+                                {% endif %}
+                              </label>
+                            </div>
                             <div class="button-row">
+                              {% if file.public_enabled %}
+                              <form method="post" action="{{ url_for('disable_public_file_link', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                                <button type="submit" class="button button-secondary">Disable link</button>
+                              </form>
+                              {% else %}
+                              <form method="post" action="{{ url_for('enable_public_file_link', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                                <button type="submit" class="button button-secondary">Enable public link</button>
+                              </form>
+                              {% endif %}
                               {% if file.hidden %}
                               <form method="post" action="{{ url_for('unhide_file', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />

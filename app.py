@@ -425,6 +425,7 @@ def ensure_user_paths(username: str) -> Dict[str, Path]:
         "reader_history_file": data / "reader_history.json",
         "hidden_files_file": data / "hidden_files.json",
         "file_shares_file": data / "file_shares.json",
+        "public_file_links_file": data / "public_file_links.json",
     }
 
 
@@ -582,6 +583,59 @@ def clear_file_shares(path: Path, filename: str) -> None:
     shares = load_file_shares(path)
     shares.pop(filename, None)
     save_file_shares(path, shares)
+
+
+def load_public_file_links(path: Path) -> Dict[str, str]:
+    if not path.exists():
+        return {}
+    try:
+        loaded = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(loaded, dict):
+        return {}
+    cleaned: Dict[str, str] = {}
+    for filename, token in loaded.items():
+        if not isinstance(filename, str) or not isinstance(token, str):
+            continue
+        safe_name = secure_filename(filename)
+        if safe_name != filename:
+            continue
+        if not token:
+            continue
+        cleaned[filename] = token
+    return cleaned
+
+
+def save_public_file_links(path: Path, links: Dict[str, str]) -> None:
+    path.write_text(json.dumps(links, indent=2))
+
+
+def set_public_file_link(path: Path, filename: str, enabled: bool) -> Optional[str]:
+    links = load_public_file_links(path)
+    if enabled:
+        token = links.get(filename)
+        if not token:
+            token = secrets.token_urlsafe(24)
+            links[filename] = token
+        save_public_file_links(path, links)
+        return token
+    links.pop(filename, None)
+    save_public_file_links(path, links)
+    return None
+
+
+def find_public_file_by_token(token: str) -> Optional[Tuple[str, str]]:
+    normalized_token = token.strip()
+    if not normalized_token:
+        return None
+    for owner in managed_usernames():
+        owner_paths = ensure_user_paths(owner)
+        public_links = load_public_file_links(owner_paths["public_file_links_file"])
+        for filename, stored_token in public_links.items():
+            if secrets.compare_digest(stored_token, normalized_token):
+                return owner, filename
+    return None
 
 
 def login_required(view):
@@ -836,11 +890,13 @@ def get_file_listing(
     owner: str,
     hidden_filenames: Optional[set] = None,
     shared_with_map: Optional[Dict[str, List[str]]] = None,
+    public_links_map: Optional[Dict[str, str]] = None,
     viewer: Optional[str] = None,
 ) -> Tuple[List[Dict], int]:
     files = []
     total_bytes = 0
     shared_with_map = shared_with_map or {}
+    public_links_map = public_links_map or {}
     normalized_viewer = normalize_username(viewer or "")
 
     for path in iter_uploaded_files(directory):
@@ -855,6 +911,8 @@ def get_file_listing(
                 "owner": owner,
                 "hidden": path.name in (hidden_filenames or set()),
                 "shared_with": shared_with,
+                "public_token": public_links_map.get(path.name, ""),
+                "public_enabled": path.name in public_links_map,
                 "is_shared_to_viewer": bool(
                     normalized_viewer and normalized_viewer in shared_with and owner != normalized_viewer
                 ),
@@ -1650,11 +1708,13 @@ def build_template_context(active_page: str) -> Dict:
                 paths = ensure_user_paths(owner)
                 hidden_files = set(load_hidden_files(paths["hidden_files_file"]))
                 user_file_shares = load_file_shares(paths["file_shares_file"])
+                user_public_links = load_public_file_links(paths["public_file_links_file"])
                 user_files, user_total = get_file_listing(
                     paths["uploads_dir"],
                     owner=owner,
                     hidden_filenames=hidden_files,
                     shared_with_map=user_file_shares,
+                    public_links_map=user_public_links,
                 )
                 files.extend(user_files)
                 file_groups.append({"owner": owner, "files": user_files, "total_bytes": user_total})
@@ -1686,11 +1746,13 @@ def build_template_context(active_page: str) -> Dict:
             available_share_users = [user for user in managed_usernames() if user != username]
             hidden_files = set(load_hidden_files(paths["hidden_files_file"]))
             file_shares = load_file_shares(paths["file_shares_file"])
+            public_links = load_public_file_links(paths["public_file_links_file"])
             files, total_bytes = get_file_listing(
                 paths["uploads_dir"],
                 owner=username,
                 hidden_filenames=hidden_files,
                 shared_with_map=file_shares,
+                public_links_map=public_links,
                 viewer=username,
             )
             shared_file_groups: List[Dict] = []
@@ -1702,11 +1764,13 @@ def build_template_context(active_page: str) -> Dict:
                 owner_paths = ensure_user_paths(owner)
                 owner_hidden_files = set(load_hidden_files(owner_paths["hidden_files_file"]))
                 owner_file_shares = load_file_shares(owner_paths["file_shares_file"])
+                owner_public_links = load_public_file_links(owner_paths["public_file_links_file"])
                 owner_files, _owner_total = get_file_listing(
                     owner_paths["uploads_dir"],
                     owner=owner,
                     hidden_filenames=owner_hidden_files,
                     shared_with_map=owner_file_shares,
+                    public_links_map=owner_public_links,
                     viewer=username,
                 )
                 visible_shared_files = [item for item in owner_files if item.get("is_shared_to_viewer")]
@@ -2672,7 +2736,40 @@ def delete_file(filename: str):
     target.unlink()
     set_file_hidden(paths["hidden_files_file"], safe_name, False)
     clear_file_shares(paths["file_shares_file"], safe_name)
+    set_public_file_link(paths["public_file_links_file"], safe_name, enabled=False)
     flash(f"Deleted {safe_name}", "success")
+    return redirect(url_for("files_page", owner=target_owner))
+
+
+@app.post("/files/public-link/enable/<path:filename>")
+@login_required
+def enable_public_file_link(filename: str):
+    validate_csrf()
+    safe_name = secure_filename(filename)
+    if safe_name != filename:
+        raise NotFound()
+    paths, target_owner = get_target_user_paths()
+    target = paths["uploads_dir"] / safe_name
+    if not target.exists() or not target.is_file():
+        raise NotFound()
+    set_public_file_link(paths["public_file_links_file"], safe_name, enabled=True)
+    flash(f"Public link enabled for {safe_name}.", "success")
+    return redirect(url_for("files_page", owner=target_owner))
+
+
+@app.post("/files/public-link/disable/<path:filename>")
+@login_required
+def disable_public_file_link(filename: str):
+    validate_csrf()
+    safe_name = secure_filename(filename)
+    if safe_name != filename:
+        raise NotFound()
+    paths, target_owner = get_target_user_paths()
+    target = paths["uploads_dir"] / safe_name
+    if not target.exists() or not target.is_file():
+        raise NotFound()
+    set_public_file_link(paths["public_file_links_file"], safe_name, enabled=False)
+    flash(f"Public link disabled for {safe_name}.", "success")
     return redirect(url_for("files_page", owner=target_owner))
 
 
@@ -2797,6 +2894,19 @@ def download_file(filename: str):
         return send_from_directory(owner_paths["uploads_dir"], safe_name, as_attachment=should_force_download(safe_name))
 
     raise NotFound()
+
+
+@app.get("/public/files/<token>")
+def download_public_file(token: str):
+    hit = find_public_file_by_token(token)
+    if not hit:
+        raise NotFound()
+    owner, filename = hit
+    paths = ensure_user_paths(owner)
+    target = paths["uploads_dir"] / filename
+    if not target.exists() or not target.is_file():
+        raise NotFound()
+    return send_from_directory(paths["uploads_dir"], filename, as_attachment=should_force_download(filename))
 
 
 @app.get("/latex/<path:filename>")
