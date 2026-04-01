@@ -21,6 +21,7 @@ import requests
 from bs4 import BeautifulSoup, Comment, Tag
 from flask import (
     Flask,
+    Response,
     flash,
     redirect,
     render_template,
@@ -153,6 +154,7 @@ READER_ALLOWED_TAGS = {
 }
 READER_ALLOWED_ATTRS = {"href", "title"}
 READER_MODES = {"auto", "html", "json", "proxy"}
+MAX_BROWSE_FETCH_BYTES = int(os.environ.get("QUICKDROP_MAX_BROWSE_FETCH_BYTES", str(8 * 1024 * 1024)))
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
@@ -1254,6 +1256,96 @@ def fetch_url_bytes_with_headers(url: str, headers: Dict[str, str]) -> Tuple[req
     return response, bytes(content)
 
 
+def build_proxy_target_url(raw_url: str, base_url: Optional[str] = None) -> str:
+    if not raw_url:
+        return ""
+    candidate = raw_url.strip()
+    if candidate.startswith(("javascript:", "data:", "mailto:", "tel:", "#")):
+        return candidate
+    resolved = urljoin(base_url or "", candidate)
+    normalized = normalize_reader_url(resolved)
+    assert_public_reader_target(normalized)
+    return normalized
+
+
+def build_browse_proxy_url(target_url: str) -> str:
+    return url_for("browse_proxy", url=target_url)
+
+
+def rewrite_proxy_document(html_text: str, resolved_url: str) -> str:
+    soup = BeautifulSoup(html_text, "html.parser")
+    attr_names = ("href", "src", "action", "poster", "data")
+
+    for tag in soup.find_all(True):
+        for attr_name in attr_names:
+            value = tag.get(attr_name)
+            if not value:
+                continue
+            try:
+                proxied_target = build_proxy_target_url(str(value), resolved_url)
+            except ValueError:
+                continue
+            if proxied_target.startswith(("javascript:", "data:", "mailto:", "tel:", "#")):
+                continue
+            tag[attr_name] = build_browse_proxy_url(proxied_target)
+
+        srcset = tag.get("srcset")
+        if srcset:
+            rewritten_srcset = []
+            for entry in str(srcset).split(","):
+                parts = entry.strip().split()
+                if not parts:
+                    continue
+                raw_candidate = parts[0]
+                descriptor = " ".join(parts[1:])
+                try:
+                    proxied_target = build_proxy_target_url(raw_candidate, resolved_url)
+                except ValueError:
+                    continue
+                proxied_value = build_browse_proxy_url(proxied_target)
+                rewritten_srcset.append(" ".join([proxied_value, descriptor]).strip())
+            if rewritten_srcset:
+                tag["srcset"] = ", ".join(rewritten_srcset)
+
+    return str(soup)
+
+
+def fetch_browse_proxy_payload(target_url: str) -> Response:
+    normalized_url = build_proxy_target_url(target_url)
+    response = requests.get(
+        normalized_url,
+        headers=READER_REQUEST_HEADERS,
+        timeout=READER_FETCH_TIMEOUT,
+        stream=True,
+        allow_redirects=True,
+    )
+    response.raise_for_status()
+    assert_public_reader_target(response.url)
+
+    content = bytearray()
+    for chunk in response.iter_content(chunk_size=65536):
+        if not chunk:
+            continue
+        content.extend(chunk)
+        if len(content) > MAX_BROWSE_FETCH_BYTES:
+            raise ValueError(f"Browse proxy response is too large. Limit: {human_size(MAX_BROWSE_FETCH_BYTES)}.")
+
+    content_type = response.headers.get("Content-Type", "application/octet-stream")
+    status = response.status_code
+
+    if "text/html" in content_type:
+        html_text = bytes(content).decode(response.encoding or "utf-8", errors="replace")
+        rewritten = rewrite_proxy_document(html_text, response.url)
+        return Response(rewritten, status=status, content_type=content_type)
+
+    passthrough_headers = {}
+    for header_name in ("Content-Type", "Cache-Control", "ETag", "Last-Modified", "Expires"):
+        header_value = response.headers.get(header_name)
+        if header_value:
+            passthrough_headers[header_name] = header_value
+    return Response(bytes(content), status=status, headers=passthrough_headers)
+
+
 def get_best_title(soup: BeautifulSoup) -> str:
     for selector, attr in (
         ("meta[property='og:title']", "content"),
@@ -1687,6 +1779,7 @@ def build_template_context(active_page: str) -> Dict:
     whiteboard_seed_items: List[Dict] = []
     global_search_items: List[Dict] = []
     global_search_query = request.args.get("q", "").strip()
+    browse_url_input = request.args.get("url", "").strip() if active_page == "browse" else ""
     workspace_counts = {
         "files": 0,
         "text": 0,
@@ -1963,6 +2056,7 @@ def build_template_context(active_page: str) -> Dict:
         "workspace_counts": workspace_counts,
         "global_search_items": global_search_items[:400],
         "global_search_query": global_search_query,
+        "browse_url_input": browse_url_input,
     }
 
 
@@ -2137,6 +2231,23 @@ def access_page():
 @app.get("/reader")
 def reader_page():
     return render_dashboard_page("reader")
+
+
+@app.get("/browse")
+def browse_page():
+    return render_dashboard_page("browse")
+
+
+@app.get("/browse/proxy")
+@login_required
+def browse_proxy():
+    target_url = request.args.get("url", "").strip()
+    if not target_url:
+        raise NotFound()
+    try:
+        return fetch_browse_proxy_payload(target_url)
+    except (requests.RequestException, ValueError) as error:
+        return Response(f"Browse proxy failed: {error}", status=502, content_type="text/plain; charset=utf-8")
 
 
 @app.get("/files")

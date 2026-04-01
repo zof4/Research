@@ -4,6 +4,7 @@
   "files": "Files",
   "text": "Notes",
   "reader": "Reader",
+  "browse": "Browse",
   "latex": "PDF",
   "access": "Access",
   "chat": "Board",
@@ -13,6 +14,7 @@
   "files": "Upload, download, and share files without visual clutter.",
   "text": "Save notes, share them, and keep editing simple.",
   "reader": "Cache public pages and reopen them in a readable format.",
+  "browse": "Browse via the server proxy when direct access is blocked on your own network.",
   "latex": "Render source into downloadable PDFs.",
   "access": "Manage your account and, if needed, admin workspace access.",
   "chat": "Interactive whiteboard with draggable cards, section links, and comments.",
@@ -54,6 +56,7 @@
           {{ ui.nav_link('text_page', 'Notes', 'text', active_page, is_admin, selected_owner) }}
           {{ ui.nav_link('chat_page', 'Board', 'chat', active_page, is_admin, selected_owner) }}
           {{ ui.nav_link('reader_page', 'Reader', 'reader', active_page, is_admin, selected_owner) }}
+          {{ ui.nav_link('browse_page', 'Browse', 'browse', active_page, is_admin, selected_owner) }}
           {{ ui.nav_link('latex_page', 'PDF', 'latex', active_page, is_admin, selected_owner) }}
           {{ ui.nav_link('access_page', 'Access', 'access', active_page, is_admin, selected_owner) }}
         </nav>
@@ -101,6 +104,7 @@
             {{ ui.nav_link('files_page', 'Files', 'files', active_page, is_admin, selected_owner) }}
             {{ ui.nav_link('text_page', 'Notes', 'text', active_page, is_admin, selected_owner) }}
             {{ ui.nav_link('reader_page', 'Reader', 'reader', active_page, is_admin, selected_owner) }}
+            {{ ui.nav_link('browse_page', 'Browse', 'browse', active_page, is_admin, selected_owner) }}
             {{ ui.nav_link('latex_page', 'PDF', 'latex', active_page, is_admin, selected_owner) }}
             {{ ui.nav_link('chat_page', 'Board', 'chat', active_page, is_admin, selected_owner) }}
             {{ ui.nav_link('access_page', 'Access', 'access', active_page, is_admin, selected_owner) }}
@@ -1016,6 +1020,38 @@
               {% endif %}
             </div>
           </section>
+          {% elif active_page == 'browse' %}
+          <section class="page-intro">
+            <div>
+              <p class="eyebrow">Browse</p>
+              <h1>{{ page_titles.get(active_page) }}</h1>
+              <p class="lead">{{ page_descriptions.get(active_page) }}</p>
+            </div>
+          </section>
+
+          <section class="panel stack">
+            <form method="get" action="{{ url_for('browse_page') }}" class="stack-form">
+              {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
+              <label class="field">
+                <span>URL</span>
+                <input type="text" name="url" inputmode="url" autocomplete="url" value="{{ browse_url_input }}" placeholder="https://example.com" required />
+              </label>
+              <button type="submit" class="button button-primary">Open proxied browser</button>
+            </form>
+            {% if browse_url_input %}
+            <div class="browser-frame-wrap">
+              <iframe
+                class="browser-frame"
+                src="{{ url_for('browse_proxy', url=browse_url_input) }}"
+                title="Proxied browsing session"
+                loading="eager"
+                referrerpolicy="no-referrer"
+              ></iframe>
+            </div>
+            {% else %}
+            <p class="empty-state">Enter a URL to open a server-proxied browsing session.</p>
+            {% endif %}
+          </section>
           {% elif active_page == 'latex' %}
           <section class="page-intro">
             <div>
@@ -1355,6 +1391,7 @@
         {{ ui.nav_link('text_page', 'Notes', 'text', active_page, is_admin, selected_owner, True) }}
         {{ ui.nav_link('chat_page', 'Board', 'chat', active_page, is_admin, selected_owner, True) }}
         {{ ui.nav_link('reader_page', 'Reader', 'reader', active_page, is_admin, selected_owner, True) }}
+        {{ ui.nav_link('browse_page', 'Browse', 'browse', active_page, is_admin, selected_owner, True) }}
         {{ ui.nav_link('access_page', 'Access', 'access', active_page, is_admin, selected_owner, True) }}
       </nav>
       {% endif %}
