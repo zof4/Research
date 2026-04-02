@@ -875,6 +875,21 @@ button:hover,
   margin: 0;
 }
 
+.upload-progress {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.upload-progress-label {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.upload-progress .progress {
+  height: 0.48rem;
+}
+
 .field {
   display: grid;
   gap: 0.42rem;

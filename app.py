@@ -2329,14 +2329,9 @@ def save_whiteboard():
 @login_required
 def upload_file():
     validate_csrf()
-    upload = request.files.get("file")
-    if upload is None or upload.filename == "":
+    uploads = [item for item in request.files.getlist("file") if item and item.filename]
+    if not uploads:
         flash("Pick a file first.", "error")
-        return redirect(url_for("files_page"))
-
-    filename = secure_filename(upload.filename)
-    if not filename:
-        flash("Invalid filename.", "error")
         return redirect(url_for("files_page"))
 
     paths, target_owner = get_target_user_paths()
@@ -2357,27 +2352,54 @@ def upload_file():
         return redirect(url_for("files_page", owner=target_owner))
 
     max_bytes = MAX_UPLOAD_BYTES if is_admin_user() else min(MAX_UPLOAD_BYTES, remaining_bytes)
-    if filename.lower().endswith(".zip"):
-        try:
-            extracted_files, bytes_written = extract_zip_upload_with_limits(upload, paths["uploads_dir"], max_bytes)
-        except ValueError as error:
-            flash(str(error), "error")
-            return redirect(url_for("files_page", owner=target_owner))
+    uploaded_count = 0
+    imported_zip_files = 0
+    bytes_written_total = 0
+    uploaded_names: List[str] = []
 
-        if extracted_files == 0:
-            flash("ZIP upload had no valid files to import.", "error")
-            return redirect(url_for("files_page", owner=target_owner))
-        flash(
-            f"Imported {extracted_files} files from ZIP for {target_owner} ({human_size(bytes_written)} total).",
-            "success",
-        )
+    for upload in uploads:
+        filename = secure_filename(upload.filename or "")
+        if not filename:
+            continue
+
+        per_file_limit = MAX_UPLOAD_BYTES if is_admin_user() else min(MAX_UPLOAD_BYTES, max(remaining_bytes, 0))
+        if per_file_limit <= 0:
+            break
+
+        if filename.lower().endswith(".zip"):
+            try:
+                extracted_files, bytes_written = extract_zip_upload_with_limits(upload, paths["uploads_dir"], per_file_limit)
+            except ValueError as error:
+                flash(str(error), "error")
+                return redirect(url_for("files_page", owner=target_owner))
+            if extracted_files > 0:
+                imported_zip_files += extracted_files
+                bytes_written_total += bytes_written
+                remaining_bytes = max(remaining_bytes - bytes_written, 0)
+            continue
+
+        final_name = ensure_unique_filename(paths["uploads_dir"], filename)
+        destination = paths["uploads_dir"] / final_name
+        bytes_written = save_upload_with_limits(upload, destination, per_file_limit)
+        set_file_hidden(paths["hidden_files_file"], final_name, False)
+        uploaded_count += 1
+        bytes_written_total += bytes_written
+        remaining_bytes = max(remaining_bytes - bytes_written, 0)
+        if len(uploaded_names) < 3:
+            uploaded_names.append(final_name)
+
+    total_items = uploaded_count + imported_zip_files
+    if total_items == 0:
+        flash("No valid files were uploaded.", "error")
         return redirect(url_for("files_page", owner=target_owner))
 
-    final_name = ensure_unique_filename(paths["uploads_dir"], filename)
-    destination = paths["uploads_dir"] / final_name
-    bytes_written = save_upload_with_limits(upload, destination, max_bytes)
-    set_file_hidden(paths["hidden_files_file"], final_name, False)
-    flash(f"Uploaded {final_name} ({human_size(bytes_written)}) to {target_owner}.", "success")
+    summary_parts = [f"Uploaded {total_items} item{'s' if total_items != 1 else ''} to {target_owner}"]
+    if uploaded_names:
+        summary_parts.append(f"({', '.join(uploaded_names)}{'…' if uploaded_count > len(uploaded_names) else ''})")
+    if imported_zip_files:
+        summary_parts.append(f"including {imported_zip_files} file{'s' if imported_zip_files != 1 else ''} from ZIP archives")
+    summary_parts.append(f"· {human_size(bytes_written_total)} total")
+    flash(" ".join(summary_parts) + ".", "success")
     return redirect(url_for("files_page", owner=target_owner))
 
 

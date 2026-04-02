@@ -1005,6 +1005,20 @@
     initGlobalSearch();
     initCompactHeaderOnScroll();
     initWhiteboard();
+    initFilesLiveRefresh();
+    return true;
+  };
+
+  const swapFromHtml = (html, fallbackUrl, pushState = false) => {
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+    if (!hasDashboardShell(parsed) || !replaceDashboardShell(parsed)) {
+      window.location.assign(fallbackUrl || window.location.href);
+      return false;
+    }
+    if (pushState) {
+      const nextUrl = parsed.querySelector("link[rel='canonical']")?.getAttribute("href") || fallbackUrl;
+      window.history.pushState({}, "", nextUrl || window.location.href);
+    }
     return true;
   };
 
@@ -1026,16 +1040,45 @@
     }
 
     const html = await response.text();
-    const parsed = new DOMParser().parseFromString(html, "text/html");
-
-    if (!hasDashboardShell(parsed) || !replaceDashboardShell(parsed)) {
-      window.location.assign(response.url || url);
+    if (!swapFromHtml(html, response.url || url, false)) {
       return;
     }
 
     if (pushState) {
       window.history.pushState({}, "", response.url || url);
     }
+  };
+
+  const initFilesLiveRefresh = () => {
+    if (window.dropperFileRefreshInterval) {
+      window.clearInterval(window.dropperFileRefreshInterval);
+      window.dropperFileRefreshInterval = null;
+    }
+    if (!document.body.classList.contains("page-files")) {
+      return;
+    }
+    let pending = false;
+    window.dropperFileRefreshInterval = window.setInterval(async () => {
+      if (pending || document.hidden) {
+        return;
+      }
+      pending = true;
+      try {
+        const response = await fetch(window.location.href, {
+          credentials: "same-origin",
+          headers: { "X-Requested-With": "XMLHttpRequest" },
+        });
+        if (!response.ok) {
+          return;
+        }
+        const html = await response.text();
+        swapFromHtml(html, window.location.href, false);
+      } catch (_error) {
+        // ignore periodic refresh errors
+      } finally {
+        pending = false;
+      }
+    }, 10000);
   };
 
   document.addEventListener("submit", async (event) => {
@@ -1070,6 +1113,58 @@
         const data = new FormData(form);
         if (currentOwner && !data.has("owner")) {
           data.set("owner", currentOwner);
+        }
+        if (form.hasAttribute("data-upload-form")) {
+          const progressWrapper = form.querySelector("[data-upload-progress]");
+          const progressBar = form.querySelector("[data-upload-progress-bar]");
+          const progressText = form.querySelector("[data-upload-progress-text]");
+          if (progressWrapper instanceof HTMLElement) {
+            progressWrapper.classList.remove("is-hidden");
+          }
+          if (progressBar instanceof HTMLElement) {
+            progressBar.style.width = "0%";
+          }
+          if (progressText instanceof HTMLElement) {
+            progressText.textContent = "Starting upload…";
+          }
+
+          await new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open(method, action, true);
+            xhr.withCredentials = true;
+            xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
+            xhr.upload.onprogress = (progressEvent) => {
+              if (!progressEvent.lengthComputable) {
+                return;
+              }
+              const percent = Math.max(0, Math.min(100, Math.round((progressEvent.loaded / progressEvent.total) * 100)));
+              if (progressBar instanceof HTMLElement) {
+                progressBar.style.width = `${percent}%`;
+              }
+              if (progressText instanceof HTMLElement) {
+                progressText.textContent = `Uploading… ${percent}%`;
+              }
+            };
+            xhr.onerror = () => reject(new Error("Upload failed"));
+            xhr.onload = () => {
+              const contentType = xhr.getResponseHeader("content-type") || "";
+              if (!contentType.includes("text/html")) {
+                window.location.assign(xhr.responseURL || action);
+                resolve();
+                return;
+              }
+              if (progressBar instanceof HTMLElement) {
+                progressBar.style.width = "100%";
+              }
+              if (progressText instanceof HTMLElement) {
+                progressText.textContent = "Upload complete";
+              }
+              swapFromHtml(xhr.responseText || "", xhr.responseURL || action, false);
+              resolve();
+            };
+            xhr.send(data);
+          });
+          return;
         }
         await fetchAndSwap(action, { method, body: data });
         return;
@@ -1129,4 +1224,5 @@
   initGlobalSearch();
   initCompactHeaderOnScroll();
   initWhiteboard();
+  initFilesLiveRefresh();
 })();
