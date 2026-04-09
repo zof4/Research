@@ -2020,7 +2020,7 @@ def build_template_context(active_page: str) -> Dict:
                         "title": item.get("title") or item.get("html_name") or "Untitled page",
                         "meta": f"{owner} · {format_timestamp(item.get('created') or '')}",
                         "snippet": summarize_text(item.get("source", ""), 120),
-                        "url": url_for("view_html_entry", entry_id=item.get("id", ""), owner=owner),
+                        "url": url_for("html_ipad_viewer", file_id=item.get("id", ""), owner=owner),
                     }
                 )
 
@@ -2375,32 +2375,91 @@ def html_page():
 @app.get("/html/ipad-viewer")
 @login_required
 def html_ipad_viewer():
+    paths, target_owner = get_target_user_paths()
+    html_history = load_history(paths["html_history_file"])
+
+    # Pre-load the sources for all items so the SPA has it
+    for item in html_history:
+        item["source"] = read_html_content(item.get("html_name", ""), paths["html_dir"]) or str(item.get("source", ""))
+
     return render_template(
         "ipad_viewer.html",
         is_authenticated=True,
         is_admin=is_admin_user(),
         current_username=current_username(),
-        selected_owner=get_target_username_from_request(default=current_username() or ""),
+        selected_owner=target_owner,
+        html_history=html_history,
+        csrf_token=get_or_create_csrf_token()
     )
+
+
+@app.post("/html/ipad-viewer/save")
+@login_required
+def save_html_ipad_viewer():
+    if request.is_json:
+        token = request.headers.get("X-CSRFToken", "")
+    else:
+        token = request.form.get("csrf_token", "")
+    validate_csrf_token(token)
+
+    paths, target_owner = get_target_user_paths()
+
+    if request.is_json:
+        data = request.get_json()
+        title = data.get("title", "").strip() or "html-page"
+        source = data.get("source", "").strip()
+        entry_id = data.get("id", "").strip()
+    else:
+        title = request.form.get("title", "").strip() or "html-page"
+        source = request.form.get("source", "").strip()
+        entry_id = request.form.get("id", "").strip()
+
+    if not source:
+        if request.is_json:
+            return {"ok": False, "error": "HTML source cannot be empty."}, 400
+        raise ValueError("HTML source cannot be empty.")
+
+    if len(source) > MAX_HTML_CHARS:
+        if request.is_json:
+            return {"ok": False, "error": f"HTML source is too large. Limit: {MAX_HTML_CHARS} characters."}, 400
+        raise ValueError(f"HTML source is too large. Limit: {MAX_HTML_CHARS} characters.")
+
+    if entry_id:
+        entry = find_history_item(paths["html_history_file"], entry_id)
+        if entry:
+            html_name = entry.get("html_name")
+            if html_name:
+                (paths["html_dir"] / html_name).write_text(source, encoding="utf-8")
+
+            updated_entry = update_history_item(
+                paths["html_history_file"],
+                entry_id,
+                {
+                    "title": title[:120],
+                    "updated": now_iso(),
+                    "source": source
+                },
+            )
+            if request.is_json:
+                return {"ok": True, "entry": updated_entry}
+            flash("HTML page updated.", "success")
+            return redirect(url_for("html_page", owner=target_owner))
+
+    html_name, entry = save_html_viewer_entry(title, source, paths["html_dir"], paths["html_history_file"])
+
+    if request.is_json:
+        return {"ok": True, "entry": entry}
+
+    flash(f"Saved HTML page: {html_name}", "success")
+    return redirect(url_for("html_page", owner=target_owner))
 
 
 @app.get("/html/view/<entry_id>")
 @login_required
 def view_html_entry(entry_id: str):
+    # This route is obsolete. Redirecting to the new unified viewer.
     paths, target_owner = get_target_user_paths()
-    entry = find_history_item(paths["html_history_file"], entry_id)
-    if entry is None:
-        raise NotFound()
-    source = read_html_content(entry.get("html_name", ""), paths["html_dir"]) or str(entry.get("source", ""))
-    return render_template(
-        "html_viewer.html",
-        entry=entry,
-        source=source,
-        is_authenticated=True,
-        is_admin=is_admin_user(),
-        current_username=current_username(),
-        selected_owner=target_owner,
-    )
+    return redirect(url_for("html_ipad_viewer", file_id=entry_id, owner=target_owner))
 
 
 @app.get("/chat")
@@ -2712,7 +2771,7 @@ def save_html_entry():
 
     html_name, entry = save_html_viewer_entry(title, source, paths["html_dir"], paths["html_history_file"])
     flash(f"Saved HTML page: {html_name}", "success")
-    return redirect(url_for("view_html_entry", entry_id=entry["id"], owner=target_owner))
+    return redirect(url_for("html_ipad_viewer", file_id=entry["id"], owner=target_owner))
 
 
 @app.post("/reader")
