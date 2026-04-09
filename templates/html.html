@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>HTML · Dropper</title>
+    <script>
+      (function () {
+        try {
+          document.documentElement.dataset.interface = localStorage.getItem("dropper-interface") || "clean";
+          document.documentElement.dataset.tone = localStorage.getItem("dropper-tone") || "dark";
+        } catch (_error) {
+          document.documentElement.dataset.interface = "clean";
+          document.documentElement.dataset.tone = "dark";
+        }
+      })();
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body class="app-body dashboard-page">
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="logo-wrap">
+          <p class="eyebrow">Dropper</p>
+          <h1>HTML page builder</h1>
+          <p class="app-subtitle">Create, save, preview, and download HTML pages from your workspace.</p>
+        </div>
+        <div class="button-row">
+          {% if is_admin %}
+          <a class="button button-secondary" href="{{ url_for('index', owner=selected_owner) }}">Back to dashboard</a>
+          {% else %}
+          <a class="button button-secondary" href="{{ url_for('index') }}">Back to dashboard</a>
+          {% endif %}
+        </div>
+      </header>
+      {% with flashes = get_flashed_messages(with_categories=True) %}
+      {% if flashes %}
+      <section class="alert-stack">
+        {% for category, message in flashes %}
+        <article class="alert alert-{{ category }}">{{ message }}</article>
+        {% endfor %}
+      </section>
+      {% endif %}
+      {% endwith %}
+
+      <section class="workspace-grid">
+        <aside class="workspace-sidebar is-compact">
+          <article class="panel">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Create</p>
+                <h2>New HTML page</h2>
+              </div>
+            </div>
+            <form method="post" action="{{ url_for('save_html_entry') }}" class="stack-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+              {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
+              <label class="field">
+                <span>Title</span>
+                <input type="text" name="title" maxlength="120" placeholder="Optional title" />
+              </label>
+              <label class="field">
+                <span>HTML/CSS/JS source</span>
+                <textarea name="source" rows="14" maxlength="{{ max_html_chars }}" placeholder="<!doctype html>..." required></textarea>
+              </label>
+              <button type="submit" class="button button-primary button-block">Save page</button>
+            </form>
+          </article>
+
+          {% if html_history %}
+          <article class="panel">
+            <form method="post" action="{{ url_for('clear_html_entries') }}" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+              {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
+              <button type="submit" class="button button-danger">Clear all HTML pages</button>
+            </form>
+          </article>
+          {% endif %}
+        </aside>
+
+        <div class="workspace-main">
+          {% if html_groups %}
+            {% for group in html_groups %}
+            <section class="panel">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Owner</p>
+                  <h2>{{ group.owner }}</h2>
+                </div>
+                <p class="section-meta">{{ group['items']|length }} pages</p>
+              </div>
+              {% if group['items'] %}
+              <div class="record-list">
+                {% for item in group['items'] %}
+                <article class="record">
+                  <div class="record-main">
+                    <div class="record-heading">
+                      <h3 class="record-title">{{ item.title or item.html_name }}</h3>
+                      <div class="tag-row">
+                        {% if item.hidden %}<span class="tag">Hidden</span>{% endif %}
+                      </div>
+                    </div>
+                    <p class="record-meta">{{ format_timestamp(item.created) }} · {{ item.html_name }}</p>
+                    <p class="record-summary">{{ summarize_text(item.source, 180) }}</p>
+                  </div>
+                  <div class="record-side">
+                    <div class="button-row">
+                      {% if is_admin %}
+                      <a class="button button-primary" href="{{ url_for('view_html_entry', entry_id=item.id, owner=group.owner) }}">Open preview</a>
+                      <a class="button button-secondary" href="{{ url_for('download_html_file', filename=item.html_name, owner=group.owner) }}">Download</a>
+                      {% else %}
+                      <a class="button button-primary" href="{{ url_for('view_html_entry', entry_id=item.id) }}">Open preview</a>
+                      <a class="button button-secondary" href="{{ url_for('download_html_file', filename=item.html_name) }}">Download</a>
+                      {% endif %}
+                      <details class="inline-details">
+                        <summary class="button button-secondary">Manage</summary>
+                        <div class="detail-panel">
+                          <details class="inline-details nested-details">
+                            <summary class="button button-secondary">View source</summary>
+                            <div class="detail-panel">
+                              <pre class="history-pre">{{ item.source }}</pre>
+                            </div>
+                          </details>
+                          <div class="button-row">
+                            {% if item.hidden %}
+                            <form method="post" action="{{ url_for('unhide_html_entry', entry_id=item.id) }}" class="inline-form">
+                              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                              {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
+                              <button type="submit" class="button button-secondary">Show publicly</button>
+                            </form>
+                            {% else %}
+                            <form method="post" action="{{ url_for('hide_html_entry', entry_id=item.id) }}" class="inline-form">
+                              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                              {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
+                              <button type="submit" class="button button-secondary">Hide from guests</button>
+                            </form>
+                            {% endif %}
+                            <form method="post" action="{{ url_for('delete_html_entry', entry_id=item.id) }}" class="inline-form">
+                              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                              {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
+                              <button type="submit" class="button button-danger">Delete page</button>
+                            </form>
+                          </div>
+                        </div>
+                      </details>
+                    </div>
+                  </div>
+                </article>
+                {% endfor %}
+              </div>
+              {% else %}
+              <p class="empty-state">No HTML pages yet.</p>
+              {% endif %}
+            </section>
+            {% endfor %}
+          {% else %}
+          <section class="panel">
+            <p class="empty-state">No HTML pages yet.</p>
+          </section>
+          {% endif %}
+        </div>
+      </section>
+    </div>
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  </body>
+</html>
