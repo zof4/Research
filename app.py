@@ -348,9 +348,14 @@ def rotate_csrf_token() -> None:
     session["csrf_token"] = secrets.token_urlsafe(32)
 
 
+
 def validate_csrf() -> None:
-    token = request.form.get("csrf_token", "")
+    if request.is_json:
+        token = request.headers.get("X-CSRFToken", "")
+    else:
+        token = request.form.get("csrf_token", "")
     validate_csrf_token(token)
+
 
 
 def validate_csrf_token(token: str) -> None:
@@ -2295,24 +2300,59 @@ def admin_delete_user():
     return redirect(url_for("access_page", owner=ADMIN_USERNAME))
 
 
+
+
+
+
+
 @app.get("/")
-def index():
-    return render_dashboard_page("home")
-
-
-@app.get("/access")
-def access_page():
-    return render_dashboard_page("access")
-
-
+@app.get("/files")
+@app.get("/text")
 @app.get("/reader")
-def reader_page():
-    return render_dashboard_page("reader")
+@app.get("/latex")
+@app.get("/html")
+@app.get("/chat")
+def index():
+    if not is_authenticated():
+        context = build_template_context("access")
+        context["active_page"] = "access"
+        return render_template("index.html", **context)
+    context = build_template_context("home")
+    return render_template("app_index.html", **context)
 
 
-@app.get("/browse")
-def browse_page():
-    return render_dashboard_page("browse")
+@app.get("/dummy_files")
+def files_page(): return index()
+
+@app.get("/dummy_text")
+def text_page(): return index()
+
+@app.get("/dummy_reader")
+def reader_page(): return index()
+
+@app.get("/dummy_browse")
+def browse_page(): return index()
+
+@app.get("/dummy_latex")
+def latex_page(): return index()
+
+@app.get("/dummy_html")
+def html_page(): return index()
+
+@app.get("/dummy_chat")
+def chat_page(): return index()
+
+@app.get("/dummy_access")
+def access_page(): return index()
+
+
+
+
+
+
+
+
+
 
 
 @app.get("/browse/proxy")
@@ -2327,14 +2367,10 @@ def browse_proxy():
         return Response(f"Browse proxy failed: {error}", status=502, content_type="text/plain; charset=utf-8")
 
 
-@app.get("/files")
-def files_page():
-    return render_dashboard_page("files")
 
 
-@app.get("/text")
-def text_page():
-    return render_dashboard_page("text")
+
+
 
 
 @app.get("/text/view/<entry_id>")
@@ -2362,14 +2398,10 @@ def view_text_entry(entry_id: str):
     )
 
 
-@app.get("/latex")
-def latex_page():
-    return render_dashboard_page("latex")
 
 
-@app.get("/html")
-def html_page():
-    return render_dashboard_page("html", template_name="html.html")
+
+
 
 
 @app.get("/html/ipad-viewer")
@@ -2462,10 +2494,7 @@ def view_html_entry(entry_id: str):
     return redirect(url_for("html_ipad_viewer", file_id=entry_id, owner=target_owner))
 
 
-@app.get("/chat")
-@login_required
-def chat_page():
-    return render_dashboard_page("chat")
+
 
 
 @app.get("/chat/messages")
@@ -2885,20 +2914,27 @@ def refresh_reader_entry(entry_id: str):
     return redirect(url_for("view_reader_entry", entry_id=entry_id, owner=target_owner))
 
 
+
 @app.post("/reader/delete/<entry_id>")
 @login_required
 def delete_reader_entry(entry_id: str):
-    validate_csrf()
+    is_json = request.is_json or request.headers.get("Accept") == "application/json"
+    if is_json:
+        token = request.headers.get("X-CSRFToken", "")
+    else:
+        token = request.form.get("csrf_token", "")
+    validate_csrf_token(token)
+
     paths, target_owner = get_target_user_paths()
     removed = remove_history_item(paths["reader_history_file"], entry_id)
     if removed is None:
+        if is_json: return {"ok": False, "error": "Not found"}, 404
         raise NotFound()
 
     delete_reader_content(removed.get("content_filename"), paths["reader_dir"])
+    if is_json: return {"ok": True}
     flash("Reader cache entry removed.", "success")
     return redirect(url_for("reader_page", owner=target_owner))
-
-
 @app.post("/reader/hide/<entry_id>")
 @login_required
 def hide_reader_entry(entry_id: str):
@@ -2936,19 +2972,26 @@ def clear_reader_entries():
     return redirect(url_for("reader_page", owner=target_owner))
 
 
+
 @app.post("/text/delete/<entry_id>")
 @login_required
 def delete_text_entry(entry_id: str):
-    validate_csrf()
+    is_json = request.is_json or request.headers.get("Accept") == "application/json"
+    if is_json:
+        token = request.headers.get("X-CSRFToken", "")
+    else:
+        token = request.form.get("csrf_token", "")
+    validate_csrf_token(token)
+
     paths, target_owner = get_target_user_paths()
     removed = remove_history_item(paths["text_history_file"], entry_id)
     if removed is None:
+        if is_json: return {"ok": False, "error": "Not found"}, 404
         raise NotFound()
 
+    if is_json: return {"ok": True}
     flash("Text snippet deleted.", "success")
     return redirect(url_for("text_page", owner=target_owner))
-
-
 @app.post("/text/hide/<entry_id>")
 @login_required
 def hide_text_entry(entry_id: str):
@@ -3034,19 +3077,26 @@ def clear_latex_entries():
     return redirect(url_for("latex_page", owner=target_owner))
 
 
+
 @app.post("/html/delete/<entry_id>")
 @login_required
 def delete_html_entry(entry_id: str):
-    validate_csrf()
+    is_json = request.is_json or request.headers.get("Accept") == "application/json"
+    if is_json:
+        token = request.headers.get("X-CSRFToken", "")
+    else:
+        token = request.form.get("csrf_token", "")
+    validate_csrf_token(token)
+
     paths, target_owner = get_target_user_paths()
     removed = remove_history_item(paths["html_history_file"], entry_id)
     if removed is None:
+        if is_json: return {"ok": False, "error": "Not found"}, 404
         raise NotFound()
     delete_html_content(removed.get("html_name"), paths["html_dir"])
+    if is_json: return {"ok": True}
     flash("HTML page deleted.", "success")
     return redirect(url_for("html_page", owner=target_owner))
-
-
 @app.post("/html/hide/<entry_id>")
 @login_required
 def hide_html_entry(entry_id: str):
@@ -3084,18 +3134,26 @@ def clear_html_entries():
     return redirect(url_for("html_page", owner=target_owner))
 
 
+
 @app.post("/delete/<path:filename>")
 @login_required
 def delete_file(filename: str):
-    validate_csrf()
+    is_json = request.is_json or request.headers.get("Accept") == "application/json"
+    if is_json:
+        token = request.headers.get("X-CSRFToken", "")
+    else:
+        token = request.form.get("csrf_token", "")
+    validate_csrf_token(token)
 
     safe_name = secure_filename(filename)
     if safe_name != filename:
+        if is_json: return {"ok": False, "error": "Not found"}, 404
         raise NotFound()
 
     paths, target_owner = get_target_user_paths()
     target = paths["uploads_dir"] / safe_name
     if not target.exists() or not target.is_file():
+        if is_json: return {"ok": False, "error": "Already deleted"}, 404
         flash(f"{safe_name} was already gone.", "error")
         return redirect(url_for("files_page", owner=target_owner))
 
@@ -3103,10 +3161,9 @@ def delete_file(filename: str):
     set_file_hidden(paths["hidden_files_file"], safe_name, False)
     clear_file_shares(paths["file_shares_file"], safe_name)
     set_public_file_link(paths["public_file_links_file"], safe_name, enabled=False)
+    if is_json: return {"ok": True}
     flash(f"Deleted {safe_name}", "success")
     return redirect(url_for("files_page", owner=target_owner))
-
-
 @app.post("/files/public-link/enable/<path:filename>")
 @login_required
 def enable_public_file_link(filename: str):
@@ -3329,6 +3386,196 @@ def send_chat_message():
     add_history_item(get_chat_history_file(), message, MAX_CHAT_HISTORY_ITEMS)
     return redirect(url_for("chat_page"))
 
+
+
+@app.get("/api/items")
+@login_required
+def get_all_items():
+    context = build_template_context("home")
+    items = []
+
+    # Add files
+    for file in context.get("files", []):
+        items.append({
+            "type": "file",
+            "id": file.get("name"),
+            "title": file.get("name"),
+            "content": "",
+            "size": file.get("size", 0),
+            "owner": file.get("owner", ""),
+            "updated": file.get("modified").replace(microsecond=0).isoformat() if hasattr(file.get("modified"), 'isoformat') else file.get("modified"),
+            "shared_with": file.get("shared_with", []),
+            "hidden": file.get("hidden", False),
+            "url": url_for("download_file", filename=file.get("name"), owner=file.get("owner"))
+        })
+
+    # Add notes
+    for group in context.get("text_groups", []):
+        for item in group.get("items", []):
+            items.append({
+                "type": "note",
+                "id": item.get("id"),
+                "title": item.get("title") or "Untitled note",
+                "content": item.get("content", ""),
+                "owner": group.get("owner", ""),
+                "updated": item.get("updated") or item.get("created"),
+                "shared_with": item.get("shared_with", []),
+                "hidden": item.get("hidden", False),
+                "comments": item.get("comments", []),
+                "references": item.get("references", [])
+            })
+
+    # Add reader pages
+    for group in context.get("reader_groups", []):
+        for item in group.get("items", []):
+            items.append({
+                "type": "reader",
+                "id": item.get("id"),
+                "title": item.get("title") or "Untitled page",
+                "content": item.get("summary", ""),
+                "owner": group.get("owner", ""),
+                "updated": item.get("updated") or item.get("created"),
+                "source_label": item.get("source_label"),
+                "url": item.get("url"),
+                "hidden": item.get("hidden", False)
+            })
+
+    # Add PDFs
+    for group in context.get("latex_groups", []):
+        for item in group.get("items", []):
+            items.append({
+                "type": "pdf",
+                "id": item.get("id"),
+                "title": item.get("title") or "Untitled PDF",
+                "content": item.get("source", ""),
+                "owner": group.get("owner", ""),
+                "updated": item.get("created"),
+                "pdf_name": item.get("pdf_name"),
+                "hidden": item.get("hidden", False),
+                "url": url_for("download_latex_pdf", filename=item.get("pdf_name"), owner=group.get("owner"))
+            })
+
+    # Add HTML
+    for group in context.get("html_groups", []):
+        for item in group.get("items", []):
+            items.append({
+                "type": "html",
+                "id": item.get("id"),
+                "title": item.get("title") or item.get("html_name") or "Untitled page",
+                "content": item.get("source", ""),
+                "owner": group.get("owner", ""),
+                "updated": item.get("created"),
+                "html_name": item.get("html_name"),
+                "hidden": item.get("hidden", False),
+                "url": url_for("download_html_file", filename=item.get("html_name"), owner=group.get("owner"))
+            })
+
+    # Add Board messages
+    for msg in context.get("chat_history", []):
+         items.append({
+            "type": "chat",
+            "id": msg.get("id"),
+            "title": "Chat Message",
+            "content": msg.get("content", ""),
+            "owner": msg.get("author", ""),
+            "updated": msg.get("created"),
+         })
+
+    # Add Whiteboard nodes
+    for node in context.get("whiteboard_state", {}).get("nodes", []):
+         items.append({
+             "type": "board_node",
+             "id": node.get("id"),
+             "title": node.get("title", ""),
+             "content": node.get("comment", ""),
+             "owner": context.get("whiteboard_state", {}).get("updated_by", ""),
+             "updated": context.get("whiteboard_state", {}).get("updated", "")
+         })
+
+    # Sort by updated descending
+    items.sort(key=lambda x: str(x.get("updated") or ""), reverse=True)
+
+    return {"ok": True, "items": items, "storage": context.get("storage", {}), "current_username": context.get("current_username"), "is_admin": context.get("is_admin")}
+
+@app.post("/api/add")
+@login_required
+def api_add():
+    validate_csrf_token(request.headers.get("X-CSRFToken", ""))
+    paths, target_owner = get_target_user_paths()
+
+    # Handle File Upload
+    if "file" in request.files:
+        uploads = [item for item in request.files.getlist("file") if item and item.filename]
+        if not uploads:
+            return {"ok": False, "error": "No file provided"}, 400
+
+        total_bytes = get_total_storage_bytes(paths["uploads_dir"])
+        remaining_bytes = max(MAX_STORAGE_BYTES - total_bytes, 0)
+        if not is_admin_user() and remaining_bytes <= 0:
+            return {"ok": False, "error": "Storage is full"}, 413
+
+        per_file_limit = MAX_UPLOAD_BYTES if is_admin_user() else min(MAX_UPLOAD_BYTES, max(remaining_bytes, 0))
+        uploaded_names = []
+        for upload in uploads:
+            filename = secure_filename(upload.filename or "")
+            if not filename: continue
+
+            if filename.lower().endswith(".zip"):
+                 try:
+                     extract_zip_upload_with_limits(upload, paths["uploads_dir"], per_file_limit)
+                 except ValueError as e:
+                     return {"ok": False, "error": str(e)}, 400
+                 except RequestEntityTooLarge:
+                     return {"ok": False, "error": "File too large"}, 413
+                 continue
+
+            final_name = ensure_unique_filename(paths["uploads_dir"], filename)
+            destination = paths["uploads_dir"] / final_name
+            try:
+                save_upload_with_limits(upload, destination, per_file_limit)
+                set_file_hidden(paths["hidden_files_file"], final_name, False)
+                uploaded_names.append(final_name)
+            except RequestEntityTooLarge:
+                return {"ok": False, "error": "File too large"}, 413
+
+        return {"ok": True, "type": "file", "message": f"Uploaded {len(uploaded_names)} files"}
+
+    data = request.get_json() or {}
+    text_content = data.get("text", "").strip()
+
+    if not text_content:
+        return {"ok": False, "error": "Empty content"}, 400
+
+    # Check if URL for reader
+    if re.match(r"^https?://", text_content, flags=re.IGNORECASE) and len(text_content.split()) == 1:
+        try:
+            entry = cache_reader_entry(
+                text_content,
+                reader_mode="auto",
+                reader_history_file=paths["reader_history_file"],
+                reader_dir=paths["reader_dir"],
+            )
+            return {"ok": True, "type": "reader", "entry": entry}
+        except Exception as e:
+            # Fallback to saving as text if reader fails
+            pass
+
+    # Check if HTML
+    if text_content.lstrip().startswith(("<html", "<!doctype html", "<!DOCTYPE html")):
+        if len(text_content) > MAX_HTML_CHARS:
+             return {"ok": False, "error": "HTML too large"}, 400
+        html_name, entry = save_html_viewer_entry("Pasted HTML", text_content, paths["html_dir"], paths["html_history_file"])
+        return {"ok": True, "type": "html", "entry": entry}
+
+    # Save as text note
+    item = {
+        "id": uuid4().hex,
+        "title": "Quick Note",
+        "content": text_content,
+        "created": now_iso(),
+    }
+    add_history_item(paths["text_history_file"], item, MAX_TEXT_HISTORY_ITEMS)
+    return {"ok": True, "type": "note", "entry": item}
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8003"))
