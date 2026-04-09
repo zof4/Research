@@ -81,6 +81,8 @@ LOGIN_DAYS = int(os.environ.get("QUICKDROP_LOGIN_DAYS", "30"))
 MAX_TEXT_HISTORY_ITEMS = int(os.environ.get("QUICKDROP_MAX_TEXT_HISTORY", "25"))
 MAX_LATEX_HISTORY_ITEMS = int(os.environ.get("QUICKDROP_MAX_LATEX_HISTORY", "15"))
 MAX_LATEX_CHARS = int(os.environ.get("QUICKDROP_MAX_LATEX_CHARS", "12000"))
+MAX_HTML_HISTORY_ITEMS = int(os.environ.get("QUICKDROP_MAX_HTML_HISTORY", "25"))
+MAX_HTML_CHARS = int(os.environ.get("QUICKDROP_MAX_HTML_CHARS", "300000"))
 MAX_READER_HISTORY_ITEMS = int(os.environ.get("QUICKDROP_MAX_READER_HISTORY", "20"))
 MAX_READER_FETCH_BYTES = int(os.environ.get("QUICKDROP_MAX_READER_FETCH_BYTES", str(2 * 1024 * 1024)))
 READER_FETCH_TIMEOUT = int(os.environ.get("QUICKDROP_READER_FETCH_TIMEOUT", "20"))
@@ -412,17 +414,20 @@ def ensure_user_paths(username: str) -> Dict[str, Path]:
     user_root = USERS_DIR / safe_user
     uploads = user_root / "uploads"
     latex = user_root / "latex_outputs"
+    html = user_root / "html_outputs"
     reader = user_root / "reader_cache"
     data = user_root / "data"
-    for directory in (user_root, uploads, latex, reader, data):
+    for directory in (user_root, uploads, latex, html, reader, data):
         directory.mkdir(exist_ok=True)
     return {
         "root": user_root,
         "uploads_dir": uploads,
         "latex_dir": latex,
+        "html_dir": html,
         "reader_dir": reader,
         "text_history_file": data / "text_history.json",
         "latex_history_file": data / "latex_history.json",
+        "html_history_file": data / "html_history.json",
         "reader_history_file": data / "reader_history.json",
         "hidden_files_file": data / "hidden_files.json",
         "file_shares_file": data / "file_shares.json",
@@ -1120,6 +1125,34 @@ def render_latex_pdf(title: str, source: str, latex_dir: Path, latex_history_fil
     return pdf_name, item["created"]
 
 
+def save_html_viewer_entry(
+    title: str,
+    source: str,
+    html_dir: Path,
+    html_history_file: Path,
+) -> Tuple[str, Dict]:
+    safe_title = secure_filename(title) or f"html-page-{uuid4().hex[:8]}"
+    html_name = ensure_unique_filename(html_dir, f"{safe_title}.html")
+    (html_dir / html_name).write_text(source, encoding="utf-8")
+    item = {
+        "id": uuid4().hex,
+        "title": title,
+        "html_name": html_name,
+        "created": now_iso(),
+        "source": source,
+    }
+    add_history_item(html_history_file, item, MAX_HTML_HISTORY_ITEMS)
+    return html_name, item
+
+
+def delete_html_content(filename: Optional[str], html_dir: Path) -> None:
+    if not filename:
+        return
+    target = html_dir / filename
+    if target.exists() and target.is_file():
+        target.unlink()
+
+
 def normalize_reader_url(raw_url: str) -> str:
     candidate = raw_url.strip()
     if not candidate:
@@ -1765,9 +1798,11 @@ def build_template_context(active_page: str) -> Dict:
     file_groups: List[Dict] = []
     text_history: List[Dict] = []
     latex_history: List[Dict] = []
+    html_history: List[Dict] = []
     reader_history: List[Dict] = []
     text_groups: List[Dict] = []
     latex_groups: List[Dict] = []
+    html_groups: List[Dict] = []
     reader_groups: List[Dict] = []
     total_bytes = 0
     selected_owner = username or ""
@@ -1783,6 +1818,7 @@ def build_template_context(active_page: str) -> Dict:
         "files": 0,
         "text": 0,
         "latex": 0,
+        "html": 0,
         "reader": 0,
         "chat": 0,
     }
@@ -1812,11 +1848,13 @@ def build_template_context(active_page: str) -> Dict:
                 file_groups.append({"owner": owner, "files": user_files, "total_bytes": user_total})
                 text_groups.append({"owner": owner, "items": load_history(paths["text_history_file"])})
                 latex_groups.append({"owner": owner, "items": load_history(paths["latex_history_file"])})
+                html_groups.append({"owner": owner, "items": load_history(paths["html_history_file"])})
                 reader_groups.append({"owner": owner, "items": get_reader_history(paths["reader_history_file"])})
                 total_bytes += user_total
             selected_paths = ensure_user_paths(selected_owner)
             text_history = load_history(selected_paths["text_history_file"])
             latex_history = load_history(selected_paths["latex_history_file"])
+            html_history = load_history(selected_paths["html_history_file"])
             reader_history = get_reader_history(selected_paths["reader_history_file"])
             chat_history = load_history(get_chat_history_file())
             whiteboard_state = load_whiteboard_state()
@@ -1831,6 +1869,7 @@ def build_template_context(active_page: str) -> Dict:
             workspace_counts["files"] = len(files)
             workspace_counts["text"] = sum(len(group["items"]) for group in text_groups)
             workspace_counts["latex"] = sum(len(group["items"]) for group in latex_groups)
+            workspace_counts["html"] = sum(len(group["items"]) for group in html_groups)
             workspace_counts["reader"] = sum(len(group["items"]) for group in reader_groups)
             workspace_counts["chat"] = len(chat_history)
         else:
@@ -1888,16 +1927,19 @@ def build_template_context(active_page: str) -> Dict:
             storage["has_limit"] = True
             text_history = load_history(paths["text_history_file"])
             latex_history = load_history(paths["latex_history_file"])
+            html_history = load_history(paths["html_history_file"])
             reader_history = get_reader_history(paths["reader_history_file"])
             text_groups = [{"owner": username, "items": text_history}]
             text_groups.extend(shared_text_groups)
             latex_groups = [{"owner": username, "items": latex_history}]
+            html_groups = [{"owner": username, "items": html_history}]
             reader_groups = [{"owner": username, "items": reader_history}]
             chat_history = load_history(get_chat_history_file())
             whiteboard_state = load_whiteboard_state()
             workspace_counts["files"] = len(files)
             workspace_counts["text"] = sum(len(group["items"]) for group in text_groups)
             workspace_counts["latex"] = sum(len(group["items"]) for group in latex_groups)
+            workspace_counts["html"] = sum(len(group["items"]) for group in html_groups)
             workspace_counts["reader"] = sum(len(group["items"]) for group in reader_groups)
             workspace_counts["chat"] = len(chat_history)
     else:
@@ -1956,6 +1998,19 @@ def build_template_context(active_page: str) -> Dict:
                         "meta": f"{owner} · {format_timestamp(item.get('created') or '')}",
                         "snippet": summarize_text(item.get("source", ""), 120),
                         "url": url_for("download_latex_pdf", filename=item.get("pdf_name", ""), owner=owner),
+                    }
+                )
+        for group in html_groups:
+            owner = group.get("owner", "")
+            for item in group.get("items", []):
+                global_search_items.append(
+                    {
+                        "kind": "HTML",
+                        "page": "HTML Viewer",
+                        "title": item.get("title") or item.get("html_name") or "Untitled page",
+                        "meta": f"{owner} · {format_timestamp(item.get('created') or '')}",
+                        "snippet": summarize_text(item.get("source", ""), 120),
+                        "url": url_for("view_html_entry", entry_id=item.get("id", ""), owner=owner),
                     }
                 )
 
@@ -2025,6 +2080,17 @@ def build_template_context(active_page: str) -> Dict:
                         "comment": "",
                     }
                 )
+        for group in html_groups:
+            for item in group.get("items", []):
+                whiteboard_seed_items.append(
+                    {
+                        "id": f"html::{group.get('owner','')}::{item.get('id','')}",
+                        "type": "html",
+                        "title": item.get("title") or item.get("html_name") or "Untitled HTML page",
+                        "section": "",
+                        "comment": summarize_text(item.get("source", ""), 220),
+                    }
+                )
 
     return {
         "files": files,
@@ -2034,6 +2100,8 @@ def build_template_context(active_page: str) -> Dict:
         "text_groups": text_groups,
         "latex_history": latex_history,
         "latex_groups": latex_groups,
+        "html_history": html_history,
+        "html_groups": html_groups,
         "reader_history": reader_history,
         "reader_groups": reader_groups,
         "is_authenticated": authenticated,
@@ -2044,6 +2112,7 @@ def build_template_context(active_page: str) -> Dict:
         "login_configured": True,
         "login_days": LOGIN_DAYS,
         "max_latex_chars": MAX_LATEX_CHARS,
+        "max_html_chars": MAX_HTML_CHARS,
         "pdflatex_bin": PDFLATEX_BIN,
         "active_page": active_page,
         "available_share_users": available_share_users,
@@ -2286,6 +2355,28 @@ def view_text_entry(entry_id: str):
 @app.get("/latex")
 def latex_page():
     return render_dashboard_page("latex")
+
+
+@app.get("/html")
+def html_page():
+    return render_dashboard_page("html")
+
+
+@app.get("/html/view/<entry_id>")
+@login_required
+def view_html_entry(entry_id: str):
+    paths, target_owner = get_target_user_paths()
+    entry = find_history_item(paths["html_history_file"], entry_id)
+    if entry is None:
+        raise NotFound()
+    return render_template(
+        "html_viewer.html",
+        entry=entry,
+        is_authenticated=True,
+        is_admin=is_admin_user(),
+        current_username=current_username(),
+        selected_owner=target_owner,
+    )
 
 
 @app.get("/chat")
@@ -2580,6 +2671,26 @@ def save_latex_entry():
     return redirect(url_for("latex_page", owner=target_owner))
 
 
+@app.post("/html")
+@login_required
+def save_html_entry():
+    validate_csrf()
+    paths, target_owner = get_target_user_paths()
+    title = request.form.get("title", "").strip() or "html-page"
+    source = request.form.get("source", "").strip()
+
+    if not source:
+        flash("HTML source cannot be empty.", "error")
+        return redirect(url_for("html_page", owner=target_owner))
+    if len(source) > MAX_HTML_CHARS:
+        flash(f"HTML source is too large. Limit: {MAX_HTML_CHARS} characters.", "error")
+        return redirect(url_for("html_page", owner=target_owner))
+
+    html_name, entry = save_html_viewer_entry(title, source, paths["html_dir"], paths["html_history_file"])
+    flash(f"Saved HTML page: {html_name}", "success")
+    return redirect(url_for("view_html_entry", entry_id=entry["id"], owner=target_owner))
+
+
 @app.post("/reader")
 @login_required
 def save_reader_entry():
@@ -2840,6 +2951,56 @@ def clear_latex_entries():
     return redirect(url_for("latex_page", owner=target_owner))
 
 
+@app.post("/html/delete/<entry_id>")
+@login_required
+def delete_html_entry(entry_id: str):
+    validate_csrf()
+    paths, target_owner = get_target_user_paths()
+    removed = remove_history_item(paths["html_history_file"], entry_id)
+    if removed is None:
+        raise NotFound()
+    delete_html_content(removed.get("html_name"), paths["html_dir"])
+    flash("HTML page deleted.", "success")
+    return redirect(url_for("html_page", owner=target_owner))
+
+
+@app.post("/html/hide/<entry_id>")
+@login_required
+def hide_html_entry(entry_id: str):
+    validate_csrf()
+    paths, target_owner = get_target_user_paths()
+    item = set_history_item_hidden(paths["html_history_file"], entry_id, True)
+    if item is None:
+        raise NotFound()
+    flash("HTML page hidden from logged-out view.", "success")
+    return redirect(url_for("html_page", owner=target_owner))
+
+
+@app.post("/html/unhide/<entry_id>")
+@login_required
+def unhide_html_entry(entry_id: str):
+    validate_csrf()
+    paths, target_owner = get_target_user_paths()
+    item = set_history_item_hidden(paths["html_history_file"], entry_id, False)
+    if item is None:
+        raise NotFound()
+    flash("HTML page visible to logged-out view.", "success")
+    return redirect(url_for("html_page", owner=target_owner))
+
+
+@app.post("/html/clear")
+@login_required
+def clear_html_entries():
+    validate_csrf()
+    paths, target_owner = get_target_user_paths()
+    entries = load_history(paths["html_history_file"])
+    for entry in entries:
+        delete_html_content(entry.get("html_name"), paths["html_dir"])
+    clear_history(paths["html_history_file"])
+    flash("Cleared saved HTML pages.", "success")
+    return redirect(url_for("html_page", owner=target_owner))
+
+
 @app.post("/delete/<path:filename>")
 @login_required
 def delete_file(filename: str):
@@ -3044,6 +3205,24 @@ def download_latex_pdf(filename: str):
         raise NotFound()
 
     return send_from_directory(paths["latex_dir"], safe_name, as_attachment=True, mimetype="application/pdf")
+
+
+@app.get("/html/files/<path:filename>")
+@login_required
+def download_html_file(filename: str):
+    safe_name = secure_filename(filename)
+    if safe_name != filename:
+        raise NotFound()
+    paths, _target_owner = get_target_user_paths()
+    target = paths["html_dir"] / safe_name
+    if not target.exists() or not target.is_file():
+        raise NotFound()
+    return send_from_directory(
+        paths["html_dir"],
+        safe_name,
+        as_attachment=True,
+        mimetype="text/html; charset=utf-8",
+    )
 
 
 @app.post("/chat/send")

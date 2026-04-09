@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>{{ entry.title or entry.html_name }} · HTML Viewer · Dropper</title>
+    <script>
+      (function () {
+        try {
+          document.documentElement.dataset.interface = localStorage.getItem("dropper-interface") || "clean";
+          document.documentElement.dataset.tone = localStorage.getItem("dropper-tone") || "dark";
+        } catch (_error) {
+          document.documentElement.dataset.interface = "clean";
+          document.documentElement.dataset.tone = "dark";
+        }
+      })();
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body class="app-body reader-page">
+    <div class="reader-shell">
+      <header class="reader-topbar">
+        <div class="reader-topbar-inner">
+          <a class="button button-secondary" href="{% if is_admin %}{{ url_for('html_page', owner=selected_owner) }}{% else %}{{ url_for('html_page') }}{% endif %}">Back to HTML viewer</a>
+          <div class="reader-heading">
+            <p class="eyebrow">HTML viewer</p>
+            <h1>{{ entry.title or entry.html_name }}</h1>
+            <p class="lead">Saved {{ format_timestamp(entry.created) }} · {{ entry.html_name }}</p>
+          </div>
+          <div class="button-row">
+            {% if is_admin %}
+            <a class="button button-primary" href="{{ url_for('download_html_file', filename=entry.html_name, owner=selected_owner) }}">Download HTML</a>
+            {% else %}
+            <a class="button button-primary" href="{{ url_for('download_html_file', filename=entry.html_name) }}">Download HTML</a>
+            {% endif %}
+          </div>
+        </div>
+      </header>
+
+      <main class="reader-main">
+        <article class="panel reader-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Preview</p>
+              <h2>Sandboxed interactive preview</h2>
+            </div>
+          </div>
+          <div class="browser-frame-wrap">
+            <iframe
+              class="browser-frame"
+              sandbox="allow-forms allow-modals allow-pointer-lock allow-popups allow-presentation allow-scripts"
+              srcdoc="{{ entry.source|e }}"
+              title="Saved HTML preview"
+              loading="eager"
+              referrerpolicy="no-referrer"
+            ></iframe>
+          </div>
+        </article>
+      </main>
+    </div>
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  </body>
+</html>

@@ -6,6 +6,7 @@
   "reader": "Reader",
   "browse": "Browse",
   "latex": "PDF",
+  "html": "HTML Viewer",
   "access": "Access",
   "chat": "Board",
 } %}
@@ -16,6 +17,7 @@
   "reader": "Cache public pages and reopen them in a readable format.",
   "browse": "Browse via the server proxy when direct access is blocked on your own network.",
   "latex": "Render source into downloadable PDFs.",
+  "html": "Paste HTML/CSS/JS and save interactive static pages you can reopen and download.",
   "access": "Manage your account and, if needed, admin workspace access.",
   "chat": "Interactive whiteboard with draggable cards, section links, and comments.",
 } %}
@@ -58,6 +60,7 @@
           {{ ui.nav_link('reader_page', 'Reader', 'reader', active_page, is_admin, selected_owner) }}
           {{ ui.nav_link('browse_page', 'Browse', 'browse', active_page, is_admin, selected_owner) }}
           {{ ui.nav_link('latex_page', 'PDF', 'latex', active_page, is_admin, selected_owner) }}
+          {{ ui.nav_link('html_page', 'HTML', 'html', active_page, is_admin, selected_owner) }}
           {{ ui.nav_link('access_page', 'Access', 'access', active_page, is_admin, selected_owner) }}
         </nav>
         {% endif %}
@@ -69,7 +72,7 @@
           </button>
           <label class="field">
             <span>Search</span>
-            <input type="search" data-global-search value="{{ global_search_query }}" placeholder="Search across files, notes, reader, PDFs, and board" />
+            <input type="search" data-global-search value="{{ global_search_query }}" placeholder="Search across files, notes, reader, PDFs, HTML pages, and board" />
           </label>
           <section id="global-search-panel" class="global-search-panel is-hidden" data-global-search-panel>
             <div class="global-search-inner">
@@ -106,6 +109,7 @@
             {{ ui.nav_link('reader_page', 'Reader', 'reader', active_page, is_admin, selected_owner) }}
             {{ ui.nav_link('browse_page', 'Browse', 'browse', active_page, is_admin, selected_owner) }}
             {{ ui.nav_link('latex_page', 'PDF', 'latex', active_page, is_admin, selected_owner) }}
+            {{ ui.nav_link('html_page', 'HTML', 'html', active_page, is_admin, selected_owner) }}
             {{ ui.nav_link('chat_page', 'Board', 'chat', active_page, is_admin, selected_owner) }}
             {{ ui.nav_link('access_page', 'Access', 'access', active_page, is_admin, selected_owner) }}
           </nav>
@@ -182,6 +186,7 @@
             {{ ui.metric_card("Notes", workspace_counts.text, "Saved notes across your current view.") }}
             {{ ui.metric_card("Cached pages", workspace_counts.reader, "Reader entries ready to reopen.") }}
             {{ ui.metric_card("PDFs", workspace_counts.latex, "Rendered documents available for download.") }}
+            {{ ui.metric_card("HTML pages", workspace_counts.html, "Saved interactive static pages.") }}
           </section>
 
           <section class="tool-grid">
@@ -204,6 +209,11 @@
               <p class="eyebrow">PDF</p>
               <h2>Render source into PDFs</h2>
               <p>Generate and download documents without leaving the workspace.</p>
+            </a>
+            <a class="tool-card" href="{{ ui.page_url('html_page', is_admin, selected_owner) }}" data-async-nav>
+              <p class="eyebrow">HTML</p>
+              <h2>Build static interactive pages</h2>
+              <p>Paste source, save it, open a sandboxed preview, and download the file.</p>
             </a>
           </section>
 
@@ -1191,6 +1201,132 @@
               {% endif %}
             </div>
           </section>
+          {% elif active_page == 'html' %}
+          <section class="page-intro">
+            <div>
+              <p class="eyebrow">HTML</p>
+              <h1>{{ page_titles.get(active_page) }}</h1>
+              <p class="lead">{{ page_descriptions.get(active_page) }}</p>
+            </div>
+          </section>
+
+          <section class="workspace-grid">
+            <aside class="workspace-sidebar is-compact">
+              <article class="panel">
+                <div class="section-heading">
+                  <div>
+                    <p class="eyebrow">Create</p>
+                    <h2>New HTML page</h2>
+                  </div>
+                </div>
+                <form method="post" action="{{ url_for('save_html_entry') }}" class="stack-form" data-async>
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                  {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
+                  <label class="field">
+                    <span>Title</span>
+                    <input type="text" name="title" maxlength="120" placeholder="Optional title" />
+                  </label>
+                  <label class="field">
+                    <span>HTML/CSS/JS source</span>
+                    <textarea name="source" rows="14" maxlength="{{ max_html_chars }}" placeholder="<!doctype html>..." required></textarea>
+                  </label>
+                  <button type="submit" class="button button-primary button-block">Save page</button>
+                </form>
+              </article>
+
+              {% if html_history %}
+              <article class="panel">
+                <form method="post" action="{{ url_for('clear_html_entries') }}" class="inline-form" data-async>
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                  {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
+                  <button type="submit" class="button button-danger">Clear all HTML pages</button>
+                </form>
+              </article>
+              {% endif %}
+            </aside>
+
+            <div class="workspace-main">
+              {% if html_groups %}
+                {% for group in html_groups %}
+                <section class="panel">
+                  <div class="section-heading">
+                    <div>
+                      <p class="eyebrow">Owner</p>
+                      <h2>{{ group.owner }}</h2>
+                    </div>
+                    <p class="section-meta">{{ group['items']|length }} pages</p>
+                  </div>
+                  {% if group['items'] %}
+                  <div class="record-list">
+                    {% for item in group['items'] %}
+                    <article class="record">
+                      <div class="record-main">
+                        <div class="record-heading">
+                          <h3 class="record-title">{{ item.title or item.html_name }}</h3>
+                          <div class="tag-row">
+                            {% if item.hidden %}<span class="tag">Hidden</span>{% endif %}
+                          </div>
+                        </div>
+                        <p class="record-meta">{{ format_timestamp(item.created) }} · {{ item.html_name }}</p>
+                        <p class="record-summary">{{ summarize_text(item.source, 180) }}</p>
+                      </div>
+                      <div class="record-side">
+                        <div class="button-row">
+                          {% if is_admin %}
+                          <a class="button button-primary" href="{{ url_for('view_html_entry', entry_id=item.id, owner=group.owner) }}">Open preview</a>
+                          <a class="button button-secondary" href="{{ url_for('download_html_file', filename=item.html_name, owner=group.owner) }}">Download</a>
+                          {% else %}
+                          <a class="button button-primary" href="{{ url_for('view_html_entry', entry_id=item.id) }}">Open preview</a>
+                          <a class="button button-secondary" href="{{ url_for('download_html_file', filename=item.html_name) }}">Download</a>
+                          {% endif %}
+                          <details class="inline-details">
+                            <summary class="button button-secondary">Manage</summary>
+                            <div class="detail-panel">
+                              <details class="inline-details nested-details">
+                                <summary class="button button-secondary">View source</summary>
+                                <div class="detail-panel">
+                                  <pre class="history-pre">{{ item.source }}</pre>
+                                </div>
+                              </details>
+                              <div class="button-row">
+                                {% if item.hidden %}
+                                <form method="post" action="{{ url_for('unhide_html_entry', entry_id=item.id) }}" class="inline-form" data-async>
+                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                                  {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
+                                  <button type="submit" class="button button-secondary">Show publicly</button>
+                                </form>
+                                {% else %}
+                                <form method="post" action="{{ url_for('hide_html_entry', entry_id=item.id) }}" class="inline-form" data-async>
+                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                                  {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
+                                  <button type="submit" class="button button-secondary">Hide from guests</button>
+                                </form>
+                                {% endif %}
+                                <form method="post" action="{{ url_for('delete_html_entry', entry_id=item.id) }}" class="inline-form" data-async>
+                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                                  {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
+                                  <button type="submit" class="button button-danger">Delete page</button>
+                                </form>
+                              </div>
+                            </div>
+                          </details>
+                        </div>
+                      </div>
+                    </article>
+                    {% endfor %}
+                  </div>
+                  {% else %}
+                  <p class="empty-state">No HTML pages yet.</p>
+                  {% endif %}
+                </section>
+                {% endfor %}
+              {% else %}
+              <section class="panel">
+                <p class="empty-state">No HTML pages yet.</p>
+              </section>
+              {% endif %}
+            </div>
+          </section>
           {% elif active_page == 'chat' %}
           <section class="page-intro">
             <div>
@@ -1396,6 +1532,7 @@
         {{ ui.nav_link('chat_page', 'Board', 'chat', active_page, is_admin, selected_owner, True) }}
         {{ ui.nav_link('reader_page', 'Reader', 'reader', active_page, is_admin, selected_owner, True) }}
         {{ ui.nav_link('browse_page', 'Browse', 'browse', active_page, is_admin, selected_owner, True) }}
+        {{ ui.nav_link('html_page', 'HTML', 'html', active_page, is_admin, selected_owner, True) }}
         {{ ui.nav_link('access_page', 'Access', 'access', active_page, is_admin, selected_owner, True) }}
       </nav>
       {% endif %}
