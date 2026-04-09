@@ -2372,6 +2372,18 @@ def html_page():
     return render_dashboard_page("html", template_name="html.html")
 
 
+@app.get("/html/ipad-viewer")
+@login_required
+def html_ipad_viewer():
+    return render_template(
+        "ipad_viewer.html",
+        is_authenticated=True,
+        is_admin=is_admin_user(),
+        current_username=current_username(),
+        selected_owner=get_target_username_from_request(default=current_username() or ""),
+    )
+
+
 @app.get("/html/view/<entry_id>")
 @login_required
 def view_html_entry(entry_id: str):
