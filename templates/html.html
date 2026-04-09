@@ -27,6 +27,11 @@
         </div>
         <div class="button-row">
           {% if is_admin %}
+          <a class="button button-primary" href="{{ url_for('html_ipad_viewer', owner=selected_owner) }}">Open iPad viewer</a>
+          {% else %}
+          <a class="button button-primary" href="{{ url_for('html_ipad_viewer') }}">Open iPad viewer</a>
+          {% endif %}
+          {% if is_admin %}
           <a class="button button-secondary" href="{{ url_for('index', owner=selected_owner) }}">Back to dashboard</a>
           {% else %}
           <a class="button button-secondary" href="{{ url_for('index') }}">Back to dashboard</a>
