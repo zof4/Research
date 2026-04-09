@@ -1153,6 +1153,16 @@ def delete_html_content(filename: Optional[str], html_dir: Path) -> None:
         target.unlink()
 
 
+def read_html_content(filename: str, html_dir: Path) -> str:
+    safe_name = secure_filename(filename or "")
+    if not safe_name:
+        return ""
+    path = html_dir / safe_name
+    if not path.exists() or not path.is_file():
+        return ""
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
 def normalize_reader_url(raw_url: str) -> str:
     candidate = raw_url.strip()
     if not candidate:
@@ -2127,9 +2137,9 @@ def build_template_context(active_page: str) -> Dict:
     }
 
 
-def render_dashboard_page(active_page: str):
+def render_dashboard_page(active_page: str, template_name: str = "index.html"):
     context = build_template_context(active_page)
-    return render_template("index.html", **context)
+    return render_template(template_name, **context)
 
 
 def can_view_text_entry(entry: Dict, owner: str, viewer: str, admin_view: bool) -> bool:
@@ -2359,7 +2369,7 @@ def latex_page():
 
 @app.get("/html")
 def html_page():
-    return render_dashboard_page("html")
+    return render_dashboard_page("html", template_name="html.html")
 
 
 @app.get("/html/view/<entry_id>")
@@ -2369,9 +2379,11 @@ def view_html_entry(entry_id: str):
     entry = find_history_item(paths["html_history_file"], entry_id)
     if entry is None:
         raise NotFound()
+    source = read_html_content(entry.get("html_name", ""), paths["html_dir"]) or str(entry.get("source", ""))
     return render_template(
         "html_viewer.html",
         entry=entry,
+        source=source,
         is_authenticated=True,
         is_admin=is_admin_user(),
         current_username=current_username(),
