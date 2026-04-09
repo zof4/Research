@@ -27,9 +27,9 @@
         </div>
         <div class="button-row">
           {% if is_admin %}
-          <a class="button button-primary" href="{{ url_for('html_ipad_viewer', owner=selected_owner) }}">Open iPad viewer</a>
+          <a class="button button-primary" href="{{ url_for('html_ipad_viewer', owner=selected_owner) }}">Open Unified iPad Viewer</a>
           {% else %}
-          <a class="button button-primary" href="{{ url_for('html_ipad_viewer') }}">Open iPad viewer</a>
+          <a class="button button-primary" href="{{ url_for('html_ipad_viewer') }}">Open Unified iPad Viewer</a>
           {% endif %}
           {% if is_admin %}
           <a class="button button-secondary" href="{{ url_for('index', owner=selected_owner) }}">Back to dashboard</a>
@@ -111,10 +111,10 @@
                   <div class="record-side">
                     <div class="button-row">
                       {% if is_admin %}
-                      <a class="button button-primary" href="{{ url_for('view_html_entry', entry_id=item.id, owner=group.owner) }}">Open preview</a>
+                      <a class="button button-primary" href="{{ url_for('html_ipad_viewer', owner=group.owner, file_id=item.id) }}">Open in Viewer</a>
                       <a class="button button-secondary" href="{{ url_for('download_html_file', filename=item.html_name, owner=group.owner) }}">Download</a>
                       {% else %}
-                      <a class="button button-primary" href="{{ url_for('view_html_entry', entry_id=item.id) }}">Open preview</a>
+                      <a class="button button-primary" href="{{ url_for('html_ipad_viewer', file_id=item.id) }}">Open in Viewer</a>
                       <a class="button button-secondary" href="{{ url_for('download_html_file', filename=item.html_name) }}">Download</a>
                       {% endif %}
                       <details class="inline-details">
