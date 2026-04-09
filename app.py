@@ -79,7 +79,6 @@ ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = "dropper"
 LOGIN_DAYS = int(os.environ.get("QUICKDROP_LOGIN_DAYS", "30"))
 MAX_TEXT_HISTORY_ITEMS = int(os.environ.get("QUICKDROP_MAX_TEXT_HISTORY", "25"))
-MAX_TEXT_CHARS = int(os.environ.get("QUICKDROP_MAX_TEXT_CHARS", "12000"))
 MAX_LATEX_HISTORY_ITEMS = int(os.environ.get("QUICKDROP_MAX_LATEX_HISTORY", "15"))
 MAX_LATEX_CHARS = int(os.environ.get("QUICKDROP_MAX_LATEX_CHARS", "12000"))
 MAX_READER_HISTORY_ITEMS = int(os.environ.get("QUICKDROP_MAX_READER_HISTORY", "20"))
@@ -2044,7 +2043,6 @@ def build_template_context(active_page: str) -> Dict:
         "is_admin": is_admin_user(username),
         "login_configured": True,
         "login_days": LOGIN_DAYS,
-        "max_text_chars": MAX_TEXT_CHARS,
         "max_latex_chars": MAX_LATEX_CHARS,
         "pdflatex_bin": PDFLATEX_BIN,
         "active_page": active_page,
@@ -2282,7 +2280,6 @@ def view_text_entry(entry_id: str):
         current_username=viewer,
         selected_owner=owner,
         available_share_users=[user for user in managed_usernames() if user != owner and user != ADMIN_USERNAME],
-        max_text_chars=MAX_TEXT_CHARS,
     )
 
 
@@ -2414,10 +2411,6 @@ def save_text_entry():
     if not content:
         flash("Text transfer cannot be empty.", "error")
         return redirect(url_for("text_page", owner=target_owner))
-    if len(content) > MAX_TEXT_CHARS:
-        flash(f"Text transfer is too large. Limit: {MAX_TEXT_CHARS} characters.", "error")
-        return redirect(url_for("text_page", owner=target_owner))
-
     item = {
         "id": uuid4().hex,
         "title": title[:120],
@@ -2440,10 +2433,6 @@ def edit_text_entry(entry_id: str):
     if not content:
         flash("Text transfer cannot be empty.", "error")
         return redirect(url_for("text_page", owner=target_owner))
-    if len(content) > MAX_TEXT_CHARS:
-        flash(f"Text transfer is too large. Limit: {MAX_TEXT_CHARS} characters.", "error")
-        return redirect(url_for("text_page", owner=target_owner))
-
     item = update_history_item(
         paths["text_history_file"],
         entry_id,
