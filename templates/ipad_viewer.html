@@ -543,9 +543,8 @@
         mermaid: '<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"><\/script>\n<script>mermaid.initialize({startOnLoad:true});<\/script>\n',
         d3: '<script src="https://d3js.org/d3.v7.min.js"><\/script>\n',
         vue: '<script src="https://unpkg.com/vue@3/dist/vue.global.js"><\/script>\n',
-        react: '<script src="https://unpkg.com/react@18/umd/react.production.min.js"><\/script>\n<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"><\/script>\n'
+        react: '<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"><\/script>\n<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"><\/script>\n<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>\n<!-- Use <script type="text/babel"> for JSX -->\n'
       };
-
       // Initialization
       function init() {
         // Init CodeMirror

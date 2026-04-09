@@ -38,7 +38,29 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+<style>
+    /* Minimal styles for login page to look decent without the old style.css */
+    body { background-color: #0f172a; color: #f8fafc; font-family: sans-serif; display: flex; flex-direction: column; min-height: 100vh; margin: 0; }
+    .site-header { padding: 1rem; border-bottom: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; }
+    .brand { color: white; text-decoration: none; font-weight: bold; font-size: 1.25rem; display: flex; align-items: center; gap: 0.5rem; }
+    .brand-mark { background: #4f46e5; color: white; padding: 0.25rem 0.5rem; border-radius: 0.25rem; }
+    .page.is-login { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; padding: 2rem; }
+    .login-card { background: #1e293b; padding: 2rem; border-radius: 0.75rem; border: 1px solid #334155; width: 100%; max-width: 400px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+    .login-card h1 { font-size: 1.5rem; font-weight: bold; margin-bottom: 1rem; }
+    .login-card .lead { color: #94a3b8; margin-bottom: 2rem; font-size: 0.875rem; }
+    .field { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem; }
+    .field input { background: #0f172a; border: 1px solid #334155; padding: 0.75rem; border-radius: 0.5rem; color: white; }
+    .button-primary { background: #4f46e5; color: white; padding: 0.75rem; border-radius: 0.5rem; border: none; cursor: pointer; width: 100%; font-weight: bold; margin-top: 1rem; }
+    .button-primary:hover { background: #4338ca; }
+    .flash-stack { width: 100%; max-width: 400px; margin-bottom: 1rem; }
+    .flash-message.error { background: #ef4444; color: white; padding: 0.75rem; border-radius: 0.5rem; font-size: 0.875rem; margin-bottom: 0.5rem; }
+    .flash-message.success { background: #10b981; color: white; padding: 0.75rem; border-radius: 0.5rem; font-size: 0.875rem; margin-bottom: 0.5rem; }
+    .appearance-panel { display: none; }
+</style>
+
   </head>
   <body class="app-body page-{{ active_page }}">
     <div class="app-shell">

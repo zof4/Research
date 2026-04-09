@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Dropper Workspace</title>
+    <!-- Use Tailwind CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: {
+                            850: '#151f32',
+                            900: '#0f172a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Vue 3 CDN -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        body { background-color: #0f172a; color: #f8fafc; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        [v-cloak] { display: none; }
+        .dropzone-overlay {
+            position: fixed; inset: 0; z-index: 50; background: rgba(99, 102, 241, 0.9);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.2s; color: white;
+        }
+        .dropzone-overlay.active { opacity: 1; pointer-events: auto; }
+
+        .masonry-grid {
+            column-count: 1;
+            column-gap: 1.5rem;
+        }
+        @media (min-width: 640px) { .masonry-grid { column-count: 2; } }
+        @media (min-width: 1024px) { .masonry-grid { column-count: 3; } }
+        @media (min-width: 1280px) { .masonry-grid { column-count: 4; } }
+
+        .masonry-item {
+            break-inside: avoid;
+            margin-bottom: 1.5rem;
+            transform: translateZ(0); /* Fix for some webkit rendering issues */
+        }
+
+        /* Canvas mode styles */
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            overflow: auto;
+            background-color: #0f172a;
+            background-image: radial-gradient(#334155 1px, transparent 1px);
+            background-size: 20px 20px;
+            cursor: grab;
+        }
+        .canvas-container:active { cursor: grabbing; }
+
+        .canvas-node {
+            position: absolute;
+            width: 300px;
+            cursor: grab;
+            transition: box-shadow 0.2s;
+        }
+        .canvas-node:active { cursor: grabbing; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); z-index: 10; }
+
+        .type-badge {
+            font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+            padding: 0.125rem 0.375rem; border-radius: 9999px;
+        }
+        .bg-file { background: #3b82f6; color: white; }
+        .bg-note { background: #10b981; color: white; }
+        .bg-reader { background: #f59e0b; color: white; }
+        .bg-html { background: #8b5cf6; color: white; }
+        .bg-pdf { background: #ef4444; color: white; }
+
+        /* Viewer Overlay */
+        .viewer-overlay {
+            position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 40;
+            display: flex; flex-direction: column; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+        }
+        .viewer-overlay.active { opacity: 1; pointer-events: auto; }
+    </style>
+</head>
+<body>
+    <!-- Inject CSRF token from Flask -->
+    <script>window.csrfToken = "{{ csrf_token }}"; window.username = "{{ current_username }}";</script>
+
+    {% raw %}
+<div id="app" v-cloak class="h-screen flex flex-col">
+        <!-- Global Dropzone Overlay -->
+        <div class="dropzone-overlay" :class="{ 'active': isDragging }" @dragenter.prevent="handleDragEnter" @dragleave.prevent="handleDragLeave" @dragover.prevent @drop.prevent="handleDrop">
+            <svg class="w-24 h-24 mb-4 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+            <h2 class="text-3xl font-bold">Drop to Upload & Save</h2>
+            <p class="mt-2 text-indigo-200">Files, images, or links.</p>
+        </div>
+
+        <!-- Top Navigation -->
+        <header class="bg-slate-900 border-b border-slate-800 p-4 flex items-center justify-between sticky top-0 z-20">
+            <div class="flex items-center gap-4">
+                <h1 class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                    <span class="bg-indigo-600 text-white w-8 h-8 rounded flex items-center justify-center font-black">D</span>
+                    Dropper
+                </h1>
+
+                <!-- View Toggle -->
+                <div class="flex bg-slate-800 rounded-lg p-1 ml-4 border border-slate-700">
+                    <button @click="viewMode = 'grid'" :class="viewMode === 'grid' ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-white'" class="px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+                        Grid
+                    </button>
+                    <button @click="viewMode = 'canvas'" :class="viewMode === 'canvas' ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-white'" class="px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"></path></svg>
+                        Canvas
+                    </button>
+                </div>
+            </div>
+
+            <!-- Global Input / Omnibar -->
+            <div class="flex-1 max-w-2xl mx-8 relative">
+                <input
+                    type="text"
+                    v-model="omniInput"
+                    @keydown.enter="submitOmni"
+                    placeholder="Paste a link, write a note, or search..."
+                    class="w-full bg-slate-800 border border-slate-700 rounded-full py-2.5 pl-5 pr-12 text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                >
+                <button @click="submitOmni" class="absolute right-2 top-1.5 p-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                </button>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <a href="/access" class="text-sm font-medium text-slate-300 hover:text-white bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">Access</a>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 overflow-hidden relative">
+
+            <!-- Grid View -->
+            <div v-if="viewMode === 'grid'" class="h-full overflow-y-auto p-6 md:p-8">
+
+                <div v-if="loading" class="flex justify-center items-center h-64 text-slate-500">
+                    <svg class="animate-spin h-8 w-8 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                </div>
+
+                <div v-else-if="filteredItems.length === 0" class="flex flex-col items-center justify-center h-64 text-slate-500">
+                    <svg class="w-16 h-16 mb-4 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path></svg>
+                    <p class="text-lg">No items found.</p>
+                    <p class="text-sm mt-1">Drag and drop files or paste text above to get started.</p>
+                </div>
+
+                <div v-else class="masonry-grid">
+                    <div v-for="item in filteredItems" :key="item.id" class="masonry-item">
+                        <div class="bg-slate-800 border border-slate-700 rounded-xl p-5 hover:border-slate-500 transition-colors cursor-pointer shadow-sm group" @click="openItem(item)">
+
+                            <div class="flex justify-between items-start mb-3">
+                                <span :class="['type-badge', 'bg-' + item.type]">{{ item.type }}</span>
+                                <span class="text-xs text-slate-500">{{ formatDate(item.updated) }}</span>
+                            </div>
+
+                            <h3 class="text-lg font-bold text-white mb-2 leading-tight">{{ item.title }}</h3>
+
+                            <!-- File preview -->
+                            <div v-if="item.type === 'file'" class="mt-4 flex items-center justify-between text-sm text-slate-400">
+                                <span class="flex items-center gap-1">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
+                                    {{ formatSize(item.size) }}
+                                </span>
+                            </div>
+
+                            <!-- Note / Reader / Text content preview -->
+                            <div v-else-if="item.content" class="text-sm text-slate-300 line-clamp-4 mt-2">
+                                {{ item.content }}
+                            </div>
+
+                            <!-- HTML preview -->
+                            <div v-if="item.type === 'html'" class="mt-4 bg-slate-900 rounded p-3 text-xs font-mono text-slate-400 border border-slate-700/50 line-clamp-3">
+                                {{ item.content }}
+                            </div>
+
+                            <div class="mt-4 pt-4 border-t border-slate-700/50 flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div class="text-xs text-slate-500 truncate mr-2">{{ item.owner }}</div>
+                                <div class="flex gap-2">
+                                    <button v-if="item.url" @click.stop="downloadItem(item)" class="p-1.5 text-slate-400 hover:text-white bg-slate-700 rounded transition-colors" title="Download / Open">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                                    </button>
+                                    <button @click.stop="deleteItem(item)" class="p-1.5 text-red-400 hover:text-white bg-red-400/10 hover:bg-red-500 rounded transition-colors" title="Delete">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Canvas View -->
+            <div v-else class="canvas-container" id="canvas-container" @mousedown="startCanvasPan" @mousemove="panCanvas" @mouseup="endCanvasPan" @mouseleave="endCanvasPan">
+                <div class="canvas-surface" :style="{ transform: `translate(${canvasX}px, ${canvasY}px)` }">
+                    <!-- Draw lines between nodes if we had relationships (optional future feature) -->
+
+                    <!-- Nodes -->
+                    <div v-for="(item, index) in filteredItems" :key="item.id"
+                         class="canvas-node bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-lg"
+                         :style="{ left: `${(index % 4) * 350 + 100}px`, top: `${Math.floor(index / 4) * 300 + 100}px` }"
+                         @mousedown.stop="startNodeDrag($event, item)"
+                         @click="openItem(item)">
+
+                        <div class="flex justify-between items-start mb-2">
+                            <span :class="['type-badge', 'bg-' + item.type]">{{ item.type }}</span>
+                        </div>
+                        <h3 class="text-base font-bold text-white mb-2 leading-tight truncate">{{ item.title }}</h3>
+                        <div v-if="item.content" class="text-xs text-slate-400 line-clamp-3">
+                            {{ item.content }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- Universal Viewer / Editor Overlay -->
+        <div class="viewer-overlay" :class="{'active': activeItem}" @click.self="closeViewer">
+            <div v-if="activeItem" class="bg-slate-900 w-full max-w-5xl h-full sm:h-[90vh] sm:rounded-2xl sm:my-auto sm:mx-auto flex flex-col overflow-hidden shadow-2xl border border-slate-700 transition-all transform scale-100" style="animation: modalPop 0.2s ease-out">
+
+                <!-- Viewer Header -->
+                <div class="px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+                    <div class="flex items-center gap-3">
+                        <span :class="['type-badge', 'bg-' + activeItem.type]">{{ activeItem.type }}</span>
+                        <h2 class="text-xl font-bold truncate">{{ activeItem.title }}</h2>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <a v-if="activeItem.type === 'html'" :href="'/html/view/' + activeItem.id" target="_blank" class="px-3 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded flex items-center gap-2 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                            Open in HTML Viewer
+                        </a>
+                        <a v-if="activeItem.url" :href="activeItem.url" target="_blank" class="px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-white rounded flex items-center gap-2 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            Download
+                        </a>
+                        <button @click="closeViewer" class="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors ml-2">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Viewer Body -->
+                <div class="flex-1 overflow-y-auto p-6 bg-slate-900">
+
+                    <!-- File Viewer (placeholder since files are just downloads) -->
+                    <div v-if="activeItem.type === 'file'" class="flex flex-col items-center justify-center h-full text-slate-400">
+                        <svg class="w-24 h-24 mb-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        <p class="text-xl font-medium text-white mb-2">{{ activeItem.title }}</p>
+                        <p>{{ formatSize(activeItem.size) }} · Uploaded {{ formatDate(activeItem.updated) }}</p>
+                        <a :href="activeItem.url" target="_blank" class="mt-6 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors font-medium">Download File</a>
+                    </div>
+
+                    <!-- Note / HTML / PDF Source Viewer -->
+                    <div v-else-if="['note', 'html', 'pdf', 'reader', 'chat', 'board_node'].includes(activeItem.type)" class="h-full">
+                        <!-- We use a readonly textarea for source or plain div for read mode. For this fast iteration, a styled content area is great -->
+                        <div class="bg-slate-800 border border-slate-700 rounded-lg p-6 h-full overflow-y-auto whitespace-pre-wrap font-mono text-sm text-slate-300 leading-relaxed">
+{{ activeItem.content }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast -->
+        <div v-if="toastMessage" class="fixed bottom-4 right-4 bg-indigo-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 z-50 transform transition-all duration-300">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+            {{ toastMessage }}
+        </div>
+    </div>
+{% endraw %}
+
+    <style>
+        @keyframes modalPop {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+    </style>
+
+    <script>
+        const { createApp } = Vue
+
+        createApp({
+            data() {
+                return {
+                    items: [],
+                    loading: true,
+                    omniInput: '',
+                    viewMode: 'grid', // 'grid' or 'canvas'
+                    isDragging: false,
+                    toastMessage: '',
+                    activeItem: null,
+                    // Canvas panning state
+                    canvasX: 0,
+                    canvasY: 0,
+                    isPanning: false,
+                    startX: 0,
+                    startY: 0
+                }
+            },
+            computed: {
+                filteredItems() {
+                    if (!this.omniInput) return this.items;
+                    const q = this.omniInput.toLowerCase();
+                    return this.items.filter(item =>
+                        (item.title && item.title.toLowerCase().includes(q)) ||
+                        (item.content && item.content.toLowerCase().includes(q))
+                    );
+                }
+            },
+            mounted() {
+                this.fetchItems();
+
+                // Setup global paste listener
+                window.addEventListener('paste', this.handlePaste);
+            },
+            beforeUnmount() {
+                window.removeEventListener('paste', this.handlePaste);
+            },
+            methods: {
+                async fetchItems() {
+                    this.loading = true;
+                    try {
+                        const res = await fetch('/api/items');
+                        const data = await res.json();
+                        if (data.ok) {
+                            this.items = data.items;
+                        }
+                    } catch (e) {
+                        console.error('Failed to fetch items', e);
+                        this.showToast('Failed to load workspace.');
+                    }
+                    this.loading = false;
+                },
+
+                async submitOmni() {
+                    const text = this.omniInput.trim();
+                    if (!text) return;
+
+                    // Optimistic update
+                    const tempId = 'temp-' + Date.now();
+                    this.items.unshift({
+                        id: tempId,
+                        type: 'note', // assume note until server says otherwise
+                        title: text.substring(0, 30) + '...',
+                        content: text,
+                        updated: new Date().toISOString(),
+                        owner: window.username
+                    });
+                    this.omniInput = '';
+
+                    try {
+                        const res = await fetch('/api/add', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': window.csrfToken
+                            },
+                            body: JSON.stringify({ text })
+                        });
+                        const data = await res.json();
+                        if (data.ok) {
+                            this.showToast(data.type === 'reader' ? 'Page cached!' : 'Saved!');
+                            this.fetchItems(); // refresh to get true data
+                        } else {
+                            this.showToast('Error: ' + data.error);
+                            this.items = this.items.filter(i => i.id !== tempId);
+                        }
+                    } catch (e) {
+                        this.showToast('Failed to save.');
+                        this.items = this.items.filter(i => i.id !== tempId);
+                    }
+                },
+
+                // Drag and Drop
+                handleDragEnter(e) { this.isDragging = true; },
+                handleDragLeave(e) {
+                    // Make sure we only unset when leaving the screen, not children
+                    if (e.clientX === 0 || e.clientY === 0) {
+                        this.isDragging = false;
+                    }
+                },
+                async handleDrop(e) {
+                    this.isDragging = false;
+                    const files = e.dataTransfer.files;
+                    if (files.length > 0) {
+                        await this.uploadFiles(files);
+                    } else {
+                        const text = e.dataTransfer.getData('text');
+                        if (text) {
+                            this.omniInput = text;
+                            this.submitOmni();
+                        }
+                    }
+                },
+
+                async handlePaste(e) {
+                    // Ignore if typing in an input/textarea
+                    if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+
+                    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+                    for (let index in items) {
+                        const item = items[index];
+                        if (item.kind === 'file') {
+                            const blob = item.getAsFile();
+                            if (blob) {
+                                await this.uploadFiles([blob]);
+                                return;
+                            }
+                        }
+                    }
+
+                    // If no file, let the browser paste text natively or handle it:
+                    const text = (e.clipboardData || window.clipboardData).getData('text');
+                    if (text && !this.activeItem) {
+                        this.omniInput = text;
+                        this.submitOmni();
+                    }
+                },
+
+                async uploadFiles(filesList) {
+                    const formData = new FormData();
+                    for (let i = 0; i < filesList.length; i++) {
+                        formData.append('file', filesList[i]);
+                    }
+
+                    this.showToast('Uploading...');
+                    try {
+                        const res = await fetch('/api/add', {
+                            method: 'POST',
+                            headers: { 'X-CSRFToken': window.csrfToken },
+                            body: formData
+                        });
+                        const data = await res.json();
+                        if (data.ok) {
+                            this.showToast(data.message || 'Files uploaded!');
+                            this.fetchItems();
+                        } else {
+                            this.showToast('Upload failed: ' + data.error);
+                        }
+                    } catch (e) {
+                        this.showToast('Upload failed.');
+                    }
+                },
+
+                async deleteItem(item) {
+                    if (!confirm(`Delete ${item.title}?`)) return;
+
+                    let endpoint = '';
+                    if (item.type === 'file') endpoint = `/delete/${encodeURIComponent(item.id)}`;
+                    else if (item.type === 'note') endpoint = `/text/delete/${item.id}`;
+                    else if (item.type === 'reader') endpoint = `/reader/delete/${item.id}`;
+                    else if (item.type === 'html') endpoint = `/html/delete/${item.id}`;
+                    else if (item.type === 'pdf') endpoint = `/latex/delete/${item.id}`;
+                    else {
+                        this.showToast('Cannot delete this type from here yet.');
+                        return;
+                    }
+
+                    try {
+                        const res = await fetch(endpoint, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRFToken': window.csrfToken
+                            }
+                        });
+                        const data = await res.json();
+                        if (data.ok) {
+                            this.items = this.items.filter(i => i.id !== item.id);
+                            this.showToast('Deleted');
+                        } else {
+                            this.showToast('Failed to delete.');
+                        }
+                    } catch (e) {
+                        this.showToast('Failed to delete.');
+                    }
+                },
+
+                downloadItem(item) {
+                    if (item.url) {
+                        window.open(item.url, '_blank');
+                    }
+                },
+
+                openItem(item) {
+                    this.activeItem = item;
+                },
+                closeViewer() {
+                    this.activeItem = null;
+                },
+
+                // Canvas panning logic
+                startCanvasPan(e) {
+                    // Don't pan if clicking on a node
+                    if (e.target.closest('.canvas-node')) return;
+                    this.isPanning = true;
+                    this.startX = e.clientX - this.canvasX;
+                    this.startY = e.clientY - this.canvasY;
+                },
+                panCanvas(e) {
+                    if (!this.isPanning) return;
+                    this.canvasX = e.clientX - this.startX;
+                    this.canvasY = e.clientY - this.startY;
+                },
+                endCanvasPan() {
+                    this.isPanning = false;
+                },
+                startNodeDrag(e, item) {
+                    // Simple drag implementation for demo purposes
+                    // In a full app, we would save coords to the backend
+                    let el = e.currentTarget;
+                    let startX = e.clientX;
+                    let startY = e.clientY;
+                    let initLeft = parseInt(el.style.left || 0);
+                    let initTop = parseInt(el.style.top || 0);
+
+                    const onMove = (ev) => {
+                        el.style.left = (initLeft + ev.clientX - startX) + 'px';
+                        el.style.top = (initTop + ev.clientY - startY) + 'px';
+                    };
+                    const onEnd = () => {
+                        document.removeEventListener('mousemove', onMove);
+                        document.removeEventListener('mouseup', onEnd);
+                    };
+
+                    document.addEventListener('mousemove', onMove);
+                    document.addEventListener('mouseup', onEnd);
+                },
+
+                // Utils
+                showToast(msg) {
+                    this.toastMessage = msg;
+                    setTimeout(() => { this.toastMessage = ''; }, 3000);
+                },
+                formatSize(bytes) {
+                    if (!bytes) return '0 B';
+                    const k = 1024, sizes = ['B', 'KB', 'MB', 'GB'];
+                    const i = Math.floor(Math.log(bytes) / Math.log(k));
+                    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+                },
+                formatDate(isoString) {
+                    if (!isoString) return '';
+                    const d = new Date(isoString);
+                    // if invalid date
+                    if (isNaN(d.getTime())) return isoString;
+                    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                }
+            }
+        }).mount('#app')
+    </script>
+</body>
+</html>
