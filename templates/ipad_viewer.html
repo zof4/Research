@@ -543,7 +543,7 @@
         mermaid: '<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"><\/script>\n<script>mermaid.initialize({startOnLoad:true});<\/script>\n',
         d3: '<script src="https://d3js.org/d3.v7.min.js"><\/script>\n',
         vue: '<script src="https://unpkg.com/vue@3/dist/vue.global.js"><\/script>\n',
-        react: '<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"><\/script>\n<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"><\/script>\n<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>\n<!-- Use <script type="text/babel"> for JSX -->\n'
+        react: '<script type="importmap">\n{\n  "imports": {\n    "react": "https://esm.sh/react@18.2.0",\n    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client"\n  }\n}\n<\/script>\n<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>\n<script>\n// Hook Babel to transpiled scripts\nwindow.addEventListener("DOMContentLoaded", () => {\n  document.querySelectorAll(\'script[type="text/babel"]\').forEach(s => {\n    const code = Babel.transform(s.innerHTML, { presets: ["react"] }).code;\n    const script = document.createElement("script");\n    script.type = "module";\n    script.innerHTML = code;\n    document.body.appendChild(script);\n  });\n});\n<\/script>\n<!-- Use <script type="text/babel"> for JSX, and standard imports work! -->\n'
       };
       // Initialization
       function init() {

@@ -1,0 +1,13 @@
+--- app.py
++++ app.py
+@@ -102,6 +102,11 @@
+ @app.get("/")
+ def index():
+     if not is_authenticated():
+         context = build_template_context("access")
+         context["active_page"] = "access"
+         return render_template("index.html", **context)
+-    context = build_template_context("home")
+-    context["active_page"] = "home"
+-    return render_template("app_index.html", **context)
++    return render_template("app_index.html")

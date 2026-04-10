@@ -1,0 +1,9 @@
+--- app.py
++++ app.py
+@@ -109,7 +109,7 @@
+ @app.get("/dummy_chat")
+ def chat_page(): return index()
+
+-@app.get("/dummy_access")
++@app.get("/access")
+ def access_page(): return index()

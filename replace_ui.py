@@ -1,4 +1,13 @@
-<!DOCTYPE html>
+import re
+
+with open('templates/app_index.html', 'r') as f:
+    content = f.read()
+
+# We need to deeply refactor the body inside <div id="app" ...>
+# Since this is a complete structural change (adding sidebar, sorting, editability, and list/grid layout instead of messy masonry),
+# it's best to overwrite it with a fresh Vue setup.
+
+new_html = """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -34,7 +43,6 @@
     </style>
 </head>
 <body class="bg-slate-900 text-slate-200 h-screen overflow-hidden selection:bg-indigo-500/30">
-    {% raw %}
     <div id="app" v-cloak
          class="h-full flex flex-col"
          @dragenter.prevent="handleDragEnter"
@@ -295,9 +303,8 @@
 
     </div>
 
-{% endraw %}
     <script>
-        window.csrfToken = "{{ session.get('csrf_token', '') }}";
+        window.csrfToken = "{{ csrf_token() }}";
         window.username = "{{ session.get('username', 'Guest') }}";
 
         const { createApp } = Vue;
@@ -615,3 +622,7 @@
     </script>
 </body>
 </html>
+"""
+
+with open('templates/app_index.html', 'w') as f:
+    f.write(new_html)
