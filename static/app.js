@@ -702,6 +702,8 @@
 
     const canvas = root.querySelector("[data-whiteboard-canvas]");
     const linksLayer = root.querySelector("[data-whiteboard-links]");
+    const grid = root.querySelector("[data-whiteboard-grid]");
+    const viewButtons = Array.from(root.querySelectorAll("[data-whiteboard-view]"));
     const status = root.querySelector("[data-whiteboard-status]");
     const saveButton = root.querySelector("[data-whiteboard-save]");
     const addCustomButton = root.querySelector("[data-whiteboard-add-custom]");
@@ -736,6 +738,7 @@
     let selectedId = null;
     let linkStartId = null;
     let dragging = null;
+    let activeView = "canvas";
 
     const setStatus = (message) => {
       if (status instanceof HTMLElement) {
@@ -744,6 +747,23 @@
     };
 
     const getNode = (id) => board.nodes.find((node) => node.id === id);
+
+    const setView = (view) => {
+      activeView = view === "grid" ? "grid" : "canvas";
+      if (canvas instanceof HTMLElement) {
+        canvas.classList.toggle("is-hidden", activeView !== "canvas");
+      }
+      if (grid instanceof HTMLElement) {
+        grid.classList.toggle("is-hidden", activeView !== "grid");
+      }
+      viewButtons.forEach((button) => {
+        if (!(button instanceof HTMLElement)) {
+          return;
+        }
+        const pressed = button.dataset.whiteboardView === activeView;
+        button.setAttribute("aria-pressed", pressed ? "true" : "false");
+      });
+    };
 
     const syncEditor = () => {
       const node = getNode(selectedId);
@@ -829,10 +849,53 @@
       renderLinks();
     };
 
+    const renderGrid = () => {
+      if (!(grid instanceof HTMLElement)) {
+        return;
+      }
+      if (!board.nodes.length) {
+        grid.innerHTML = '<p class="empty-state">No cards yet. Add one from the controls.</p>';
+        return;
+      }
+      grid.innerHTML = board.nodes
+        .map(
+          (node) => `<article class="record ${node.id === selectedId ? "is-selected" : ""}" data-grid-node-id="${escapeHtml(node.id)}">
+            <div class="record-main">
+              <div class="record-heading">
+                <p class="record-title">${escapeHtml(node.title || "Untitled card")}</p>
+                <span class="tag">${escapeHtml(String(node.type || "custom").toUpperCase())}</span>
+              </div>
+              ${node.section ? `<p class="record-meta">Section: ${escapeHtml(node.section)}</p>` : ""}
+              ${node.comment ? `<p>${escapeHtml(node.comment)}</p>` : ""}
+            </div>
+          </article>`,
+        )
+        .join("");
+    };
+
     const render = () => {
       renderNodes();
+      renderGrid();
       syncEditor();
     };
+
+    grid?.addEventListener("click", (event) => {
+      const card = event.target instanceof Element ? event.target.closest("[data-grid-node-id]") : null;
+      if (!(card instanceof HTMLElement)) {
+        return;
+      }
+      selectedId = card.dataset.gridNodeId || null;
+      syncEditor();
+      setView("canvas");
+      setStatus("Card focused on canvas.");
+      render();
+    });
+
+    viewButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        setView(button.dataset.whiteboardView || "canvas");
+      });
+    });
 
     document.addEventListener("mousemove", (event) => {
       if (!dragging) {
@@ -942,6 +1005,7 @@
       }
     });
 
+    setView("canvas");
     render();
   };
 
