@@ -535,7 +535,47 @@
   <div class="box">
     Content goes here
   </div>
-</body>
+
+    <!-- Share Modal -->
+    <div id="share-modal" class="modal">
+      <div class="modal-box w-11/12 max-w-md">
+        <h3 class="font-bold text-lg mb-4 text-slate-800">Share Options</h3>
+
+        <div class="space-y-4">
+          <!-- Public Link -->
+          <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="font-semibold text-slate-700">Public Link</h4>
+              <button id="btn-toggle-public" class="text-sm font-medium text-blue-600 hover:text-blue-700">Enable</button>
+            </div>
+            <p id="public-link-status" class="text-xs text-slate-500 mb-2">Not shared publicly</p>
+            <div id="public-link-url" class="text-xs p-2 bg-white border border-slate-200 rounded break-all hidden select-all text-slate-600"></div>
+          </div>
+
+          <!-- Share with User -->
+          <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <h4 class="font-semibold text-slate-700 mb-2">Share with User</h4>
+            <div class="flex gap-2 mb-3">
+              <input type="text" id="share-username-input" placeholder="Username" class="input input-bordered input-sm flex-1 text-slate-800" />
+              <button id="btn-share-user" class="btn btn-primary btn-sm">Share</button>
+            </div>
+
+            <div class="mt-4">
+              <h5 class="text-xs font-semibold text-slate-500 uppercase mb-2">Shared With</h5>
+              <div id="shared-users-list" class="space-y-1">
+                <!-- Users injected here -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-action">
+          <button class="btn btn-sm" onclick="document.getElementById('share-modal').classList.remove('active')">Close</button>
+        </div>
+      </div>
+    </div>
+
+  </body>
 </html>`;
 
       const LIBRARY_SNIPPETS = {
@@ -545,6 +585,142 @@
         vue: '<script src="https://unpkg.com/vue@3/dist/vue.global.js"><\/script>\n',
         react: '<script type="importmap">\n{\n  "imports": {\n    "react": "https://esm.sh/react@18.2.0",\n    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client"\n  }\n}\n<\/script>\n<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>\n<script>\n// Hook Babel to transpiled scripts\nwindow.addEventListener("DOMContentLoaded", () => {\n  document.querySelectorAll(\'script[type="text/babel"]\').forEach(s => {\n    const code = Babel.transform(s.innerHTML, { presets: ["react"] }).code;\n    const script = document.createElement("script");\n    script.type = "module";\n    script.innerHTML = code;\n    document.body.appendChild(script);\n  });\n});\n<\/script>\n<!-- Use <script type="text/babel"> for JSX, and standard imports work! -->\n'
       };
+      // Initialization
+
+      document.getElementById('btn-copy-all').addEventListener('click', () => {
+        const source = editor.getValue();
+        navigator.clipboard.writeText(source).then(() => {
+          showToast('Copied to clipboard!');
+        });
+      });
+
+      document.getElementById('btn-delete-all').addEventListener('click', () => {
+        if (confirm('Are you sure you want to clear the entire document?')) {
+          editor.setValue('');
+        }
+      });
+
+      document.getElementById('btn-toggle-public').addEventListener('click', togglePublicLink);
+      document.getElementById('btn-share-user').addEventListener('click', shareWithUser);
+
+      const origLoadFile = loadFile;
+      loadFile = function(id) {
+        origLoadFile(id);
+        updateShareModal();
+      };
+
+      function getActiveFile() {
+        if (!currentFileId) return null;
+        return files.find(f => f.id === currentFileId);
+      }
+
+      function updateShareModal() {
+        const file = getActiveFile();
+        if (!file) return;
+
+        const publicBtn = document.getElementById('btn-toggle-public');
+        const publicStatus = document.getElementById('public-link-status');
+        const publicUrl = document.getElementById('public-link-url');
+
+        if (file.is_public) {
+          publicBtn.textContent = 'Disable';
+          publicBtn.classList.add('text-red-400');
+          publicStatus.textContent = 'Publicly accessible';
+
+          const baseUrl = window.location.origin;
+          {% if is_admin %}
+          const link = `${baseUrl}/p/html/${file.id}?owner={{ selected_owner }}`;
+          {% else %}
+          const link = `${baseUrl}/p/html/${file.id}`;
+          {% endif %}
+          publicUrl.textContent = link;
+          publicUrl.classList.remove('hidden');
+        } else {
+          publicBtn.textContent = 'Enable';
+          publicBtn.classList.remove('text-red-400');
+          publicStatus.textContent = 'Not shared publicly';
+          publicUrl.classList.add('hidden');
+        }
+
+        const sharedUsersContainer = document.getElementById('shared-users-list');
+        sharedUsersContainer.innerHTML = '';
+        if (file.shared_with && file.shared_with.length > 0) {
+          file.shared_with.forEach(u => {
+            const div = document.createElement('div');
+            div.className = 'flex items-center justify-between text-xs py-1 text-slate-300';
+            div.innerHTML = `
+              <span>${u}</span>
+              <button class="text-red-400 hover:text-red-300" onclick="unshareUser('${u}')">Revoke</button>
+            `;
+            sharedUsersContainer.appendChild(div);
+          });
+        }
+      }
+
+      async function togglePublicLink() {
+        if (!currentFileId) return;
+        const file = getActiveFile();
+        const action = file.is_public ? 'disable' : 'enable';
+
+        try {
+          const response = await fetch(`/html/public/${currentFileId}/${action}`, {
+            method: 'POST',
+            headers: {'X-CSRFToken': csrfToken}
+          });
+          if (response.ok) {
+            file.is_public = !file.is_public;
+            updateShareModal();
+            showToast(`Public link ${file.is_public ? 'enabled' : 'disabled'}`);
+          }
+        } catch (e) {}
+      }
+
+      async function shareWithUser() {
+        if (!currentFileId) return;
+        const username = document.getElementById('share-username-input').value.trim();
+        if (!username) return;
+
+        const formData = new FormData();
+        formData.append('share_username', username);
+
+        try {
+          const response = await fetch(`/html/share/${currentFileId}`, {
+            method: 'POST',
+            headers: {'X-CSRFToken': csrfToken},
+            body: formData
+          });
+          if (response.ok) {
+            const file = getActiveFile();
+            if (!file.shared_with) file.shared_with = [];
+            if (!file.shared_with.includes(username)) {
+               file.shared_with.push(username);
+            }
+            document.getElementById('share-username-input').value = '';
+            updateShareModal();
+            showToast(`Shared with ${username}`);
+          }
+        } catch (e) {}
+      }
+
+      async function unshareUser(username) {
+        if (!currentFileId) return;
+        const formData = new FormData();
+        formData.append('unshare_username', username);
+        try {
+          const response = await fetch(`/html/unshare/${currentFileId}`, {
+            method: 'POST',
+            headers: {'X-CSRFToken': csrfToken},
+            body: formData
+          });
+          if (response.ok) {
+            const file = getActiveFile();
+            file.shared_with = file.shared_with.filter(u => u !== username);
+            updateShareModal();
+            showToast(`Revoked from ${username}`);
+          }
+        } catch (e) {}
+      }
+
       // Initialization
       function init() {
         // Init CodeMirror
@@ -900,5 +1076,45 @@
       // Start App
       init();
     </script>
+
+    <!-- Share Modal -->
+    <div id="share-modal" class="modal">
+      <div class="modal-box w-11/12 max-w-md">
+        <h3 class="font-bold text-lg mb-4 text-slate-800">Share Options</h3>
+
+        <div class="space-y-4">
+          <!-- Public Link -->
+          <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="font-semibold text-slate-700">Public Link</h4>
+              <button id="btn-toggle-public" class="text-sm font-medium text-blue-600 hover:text-blue-700">Enable</button>
+            </div>
+            <p id="public-link-status" class="text-xs text-slate-500 mb-2">Not shared publicly</p>
+            <div id="public-link-url" class="text-xs p-2 bg-white border border-slate-200 rounded break-all hidden select-all text-slate-600"></div>
+          </div>
+
+          <!-- Share with User -->
+          <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <h4 class="font-semibold text-slate-700 mb-2">Share with User</h4>
+            <div class="flex gap-2 mb-3">
+              <input type="text" id="share-username-input" placeholder="Username" class="input input-bordered input-sm flex-1 text-slate-800" />
+              <button id="btn-share-user" class="btn btn-primary btn-sm">Share</button>
+            </div>
+
+            <div class="mt-4">
+              <h5 class="text-xs font-semibold text-slate-500 uppercase mb-2">Shared With</h5>
+              <div id="shared-users-list" class="space-y-1">
+                <!-- Users injected here -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-action">
+          <button class="btn btn-sm" onclick="document.getElementById('share-modal').classList.remove('active')">Close</button>
+        </div>
+      </div>
+    </div>
+
   </body>
 </html>
