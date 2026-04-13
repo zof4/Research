@@ -29,7 +29,6 @@ from flask import (
     send_from_directory,
     session,
     url_for,
-    abort
 )
 from markupsafe import Markup
 from werkzeug.exceptions import Forbidden, NotFound, RequestEntityTooLarge
@@ -43,6 +42,7 @@ LEGACY_UPLOAD_DIR = BASE_DIR / "uploads"
 LEGACY_LATEX_DIR = BASE_DIR / "latex_outputs"
 LEGACY_READER_DIR = BASE_DIR / "reader_cache"
 
+
 def resolve_storage_root() -> Path:
     configured = os.environ.get("QUICKDROP_STORAGE_ROOT", "").strip()
     if not configured:
@@ -54,6 +54,7 @@ def resolve_storage_root() -> Path:
     if not candidate.is_absolute():
         candidate = (BASE_DIR / candidate).resolve()
     return candidate
+
 
 STORAGE_ROOT = resolve_storage_root()
 DATA_DIR = STORAGE_ROOT / "data"
@@ -163,6 +164,7 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.secret_key = os.environ.get("QUICKDROP_SECRET_KEY") or secrets.token_hex(32)
 app.permanent_session_lifetime = timedelta(days=LOGIN_DAYS)
 
+
 def human_size(num_bytes: int) -> str:
     step = 1024.0
     for unit in ["B", "KB", "MB", "GB", "TB"]:
@@ -171,8 +173,10 @@ def human_size(num_bytes: int) -> str:
         num_bytes /= step
     return f"{num_bytes:.1f} PB"
 
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
 
 def format_timestamp(value: str) -> str:
     try:
@@ -181,11 +185,13 @@ def format_timestamp(value: str) -> str:
         return value
     return parsed.astimezone().strftime("%Y-%m-%d %H:%M")
 
+
 def summarize_text(text: str, limit: int = 180) -> str:
     collapsed = " ".join(text.split())
     if len(collapsed) <= limit:
         return collapsed
     return collapsed[: limit - 1].rstrip() + "…"
+
 
 def render_basic_text_markup(value: str) -> Markup:
     escaped = (
@@ -329,6 +335,7 @@ def render_basic_text_markup(value: str) -> Markup:
     flush_code_block()
     return Markup("".join(html_parts))
 
+
 def get_or_create_csrf_token() -> str:
     token = session.get("csrf_token")
     if token is None:
@@ -336,8 +343,11 @@ def get_or_create_csrf_token() -> str:
         session["csrf_token"] = token
     return token
 
+
 def rotate_csrf_token() -> None:
     session["csrf_token"] = secrets.token_urlsafe(32)
+
+
 
 def validate_csrf() -> None:
     if request.is_json:
@@ -346,348 +356,17 @@ def validate_csrf() -> None:
         token = request.form.get("csrf_token", "")
     validate_csrf_token(token)
 
+
+
 def validate_csrf_token(token: str) -> None:
     session_token = session.get("csrf_token", "")
     if not token or not session_token or not secrets.compare_digest(token, session_token):
         raise Forbidden()
 
-def wrap_react_source(source: str) -> str:
-    if not source: return source
-    stripped = source.strip()
-    if re.search(r'<(html|!doctype|head|body)', stripped, re.IGNORECASE): return source
-    if 'import React' in stripped or 'export default' in stripped or 'import ' in stripped:
-        boilerplate = f"""<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>React Preview</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script type="importmap">
-      {{
-        "imports": {{
-          "react": "https://esm.sh/react@18.2.0",
-          "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-          "lucide-react": "https://esm.sh/lucide-react@0.292.0?deps=react@18.2.0"
-        }}
-      }}
-    </script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="text/babel" data-type="module">
-      import React from 'react';
-      import * as ReactDOM from 'react-dom/client';
-      {source}
-      const root = ReactDOM.createRoot(document.getElementById('root'));
-      if (typeof App !== 'undefined') {{
-          root.render(React.createElement(App));
-      }} else {{
-          root.render(React.createElement(() => <div>Error: Please export or define an 'App' component</div>));
-      }}
-    </script>
-  </body>
-</html>"""
-        return boilerplate
-    return source
-
-    stripped = source.strip()
-    if re.search(r'<(html|!doctype|head|body)', stripped, re.IGNORECASE): return source
-    if 'import React' in stripped or 'export default' in stripped or 'import ' in stripped:
-        boilerplate = f"""<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>React Preview</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script type="importmap">
-      {{
-        "imports": {{
-          "react": "https://esm.sh/react@18.2.0",
-          "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-          "lucide-react": "https://esm.sh/lucide-react@0.292.0?deps=react@18.2.0"
-        }}
-      }}
-    </script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="text/babel" data-type="module">
-      import React from 'react';
-      import * as ReactDOM from 'react-dom/client';
-      {source}
-      const root = ReactDOM.createRoot(document.getElementById('root'));
-      if (typeof App !== 'undefined') {{
-          root.render(React.createElement(App));
-      }} else {{
-          root.render(React.createElement(() => <div>Error: Please export or define an 'App' component</div>));
-      }}
-    </script>
-  </body>
-</html>"""
-        return boilerplate
-    return source
-    if 'import React' in stripped or 'export default' in stripped or 'import ' in stripped:
-        boilerplate = f"""<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>React Preview</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script type="importmap">
-      {{
-        "imports": {{
-          "react": "https://esm.sh/react@18.2.0",
-          "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-          "lucide-react": "https://esm.sh/lucide-react@0.292.0?deps=react@18.2.0"
-        }}
-      }}
-    </script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="text/babel" data-type="module">
-      import React from 'react';
-      import * as ReactDOM from 'react-dom/client';
-      {source}
-      const root = ReactDOM.createRoot(document.getElementById('root'));
-      if (typeof App !== 'undefined') {{
-          root.render(React.createElement(App));
-      }} else {{
-          root.render(React.createElement(() => <div>Error: Please export or define an 'App' component</div>));
-      }}
-    </script>
-  </body>
-</html>"""
-        return boilerplate
-    return source
-
-    stripped = source.strip()
-    if re.search(r'<(html|!doctype|head|body)', stripped, re.IGNORECASE): return source
-    if 'import React' in stripped or 'export default' in stripped or 'import ' in stripped:
-        boilerplate = f"""<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>React Preview</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script type="importmap">
-      {{
-        "imports": {{
-          "react": "https://esm.sh/react@18.2.0",
-          "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-          "lucide-react": "https://esm.sh/lucide-react@0.292.0?deps=react@18.2.0"
-        }}
-      }}
-    </script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="text/babel" data-type="module">
-      import React from 'react';
-      import * as ReactDOM from 'react-dom/client';
-      {source}
-      const root = ReactDOM.createRoot(document.getElementById('root'));
-      if (typeof App !== 'undefined') {{
-          root.render(React.createElement(App));
-      }} else {{
-          root.render(React.createElement(() => <div>Error: Please export or define an 'App' component</div>));
-      }}
-    </script>
-  </body>
-</html>"""
-        return boilerplate
-    return source
-
-    stripped = source.strip()
-    if re.search(r'<(html|!doctype|head|body)', stripped, re.IGNORECASE): return source
-    if 'import React' in stripped or 'export default' in stripped or 'import ' in stripped:
-        boilerplate = f"""<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>React Preview</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script type="importmap">
-      {{
-        "imports": {{
-          "react": "https://esm.sh/react@18.2.0",
-          "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-          "lucide-react": "https://esm.sh/lucide-react@0.292.0?deps=react@18.2.0"
-        }}
-      }}
-    </script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="text/babel" data-type="module">
-      import React from 'react';
-      import * as ReactDOM from 'react-dom/client';
-      {source}
-      const root = ReactDOM.createRoot(document.getElementById('root'));
-      if (typeof App !== 'undefined') {{
-          root.render(React.createElement(App));
-      }} else {{
-          root.render(React.createElement(() => <div>Error: Please export or define an 'App' component</div>));
-      }}
-    </script>
-  </body>
-</html>"""
-        return boilerplate
-    return source
-
-
-    stripped = source.strip()
-    if re.search(r'<(html|!doctype|head|body)', stripped, re.IGNORECASE): return source
-    if 'import React' in stripped or 'export default' in stripped or 'import ' in stripped:
-        boilerplate = f"""<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>React Preview</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script type="importmap">
-      {{
-        "imports": {{
-          "react": "https://esm.sh/react@18.2.0",
-          "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-          "lucide-react": "https://esm.sh/lucide-react@0.292.0?deps=react@18.2.0"
-        }}
-      }}
-    </script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="text/babel" data-type="module">
-      import React from 'react';
-      import * as ReactDOM from 'react-dom/client';
-      {source}
-      const root = ReactDOM.createRoot(document.getElementById('root'));
-      if (typeof App !== 'undefined') {{
-          root.render(React.createElement(App));
-      }} else {{
-          root.render(React.createElement(() => <div>Error: Please export or define an 'App' component</div>));
-      }}
-    </script>
-  </body>
-</html>"""
-        return boilerplate
-    return source
-
-
-
-
-    stripped = source.strip()
-    if re.search(r'<(html|!doctype|head|body)', stripped, re.IGNORECASE): return source
-    if 'import React' in stripped or 'export default' in stripped or 'import ' in stripped:
-        boilerplate = f"""<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>React Preview</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script type="importmap">
-      {{
-        "imports": {{
-          "react": "https://esm.sh/react@18.2.0",
-          "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-          "lucide-react": "https://esm.sh/lucide-react@0.292.0?deps=react@18.2.0"
-        }}
-      }}
-    </script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="text/babel" data-type="module">
-      import React from 'react';
-      import * as ReactDOM from 'react-dom/client';
-      {source}
-      const root = ReactDOM.createRoot(document.getElementById('root'));
-      if (typeof App !== 'undefined') {{
-          root.render(React.createElement(App));
-      }} else {{
-          root.render(React.createElement(() => <div>Error: Please export or define an 'App' component</div>));
-      }}
-    </script>
-  </body>
-</html>"""
-        return boilerplate
-    return source
-
-
-
-
-    stripped = source.strip()
-    if re.search(r'<(html|!doctype|head|body)', stripped, re.IGNORECASE): return source
-    if 'import React' in stripped or 'export default' in stripped or 'import ' in stripped:
-        boilerplate = f"""<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>React Preview</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script type="importmap">
-      {{
-        "imports": {{
-          "react": "https://esm.sh/react@18.2.0",
-          "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-          "lucide-react": "https://esm.sh/lucide-react@0.292.0?deps=react@18.2.0"
-        }}
-      }}
-    </script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="text/babel" data-type="module">
-      import React from 'react';
-      import * as ReactDOM from 'react-dom/client';
-      {source}
-      const root = ReactDOM.createRoot(document.getElementById('root'));
-      if (typeof App !== 'undefined') {{
-          root.render(React.createElement(App));
-      }} else {{
-          root.render(React.createElement(() => <div>Error: Please export or define an 'App' component</div>));
-      }}
-    </script>
-  </body>
-</html>"""
-        return boilerplate
-    return source
-
 
 def is_authenticated() -> bool:
     return bool(session.get("authenticated") and session.get("username"))
+
 
 def current_username() -> Optional[str]:
     username = session.get("username")
@@ -695,12 +374,15 @@ def current_username() -> Optional[str]:
         return None
     return username
 
+
 def is_admin_user(username: Optional[str] = None) -> bool:
     resolved = username or current_username()
     return resolved == ADMIN_USERNAME
 
+
 def normalize_username(raw_value: str) -> str:
     return secure_filename(raw_value.strip().lower())
+
 
 def managed_usernames() -> List[str]:
     users = set(load_users().keys())
@@ -709,6 +391,7 @@ def managed_usernames() -> List[str]:
             users.add(user_dir.name)
     users.add(ADMIN_USERNAME)
     return sorted(users)
+
 
 def get_target_username_from_request(default: Optional[str] = None) -> str:
     if not is_admin_user():
@@ -727,6 +410,7 @@ def get_target_username_from_request(default: Optional[str] = None) -> str:
     if candidate not in managed_usernames():
         raise NotFound()
     return candidate
+
 
 def ensure_user_paths(username: str) -> Dict[str, Path]:
     safe_user = secure_filename(username).strip().lower()
@@ -755,15 +439,18 @@ def ensure_user_paths(username: str) -> Dict[str, Path]:
         "public_file_links_file": data / "public_file_links.json",
     }
 
+
 def get_current_user_paths() -> Dict[str, Path]:
     username = current_username()
     if not username:
         raise Forbidden()
     return ensure_user_paths(username)
 
+
 def get_target_user_paths(default: Optional[str] = None) -> Tuple[Dict[str, Path], str]:
     username = get_target_username_from_request(default=default)
     return ensure_user_paths(username), username
+
 
 def load_users() -> Dict[str, str]:
     if not USERS_FILE.exists():
@@ -776,8 +463,10 @@ def load_users() -> Dict[str, str]:
         return {}
     return {str(k): str(v) for k, v in loaded.items()}
 
+
 def save_users(users: Dict[str, str]) -> None:
     USERS_FILE.write_text(json.dumps(users, indent=2))
+
 
 def copy_missing_tree(source: Path, destination: Path) -> None:
     if not source.exists():
@@ -791,6 +480,7 @@ def copy_missing_tree(source: Path, destination: Path) -> None:
     destination.mkdir(parents=True, exist_ok=True)
     for child in source.iterdir():
         copy_missing_tree(child, destination / child.name)
+
 
 def migrate_legacy_storage_once() -> None:
     if USERS_FILE.exists() or any(USERS_DIR.iterdir()):
@@ -829,7 +519,9 @@ def migrate_legacy_storage_once() -> None:
                 continue
             copy_missing_tree(source, STORAGE_ROOT / source_name)
 
+
 migrate_legacy_storage_once()
+
 
 def load_hidden_files(path: Path) -> List[str]:
     if not path.exists():
@@ -846,9 +538,11 @@ def load_hidden_files(path: Path) -> List[str]:
             cleaned.append(item)
     return cleaned
 
+
 def save_hidden_files(path: Path, hidden_files: List[str]) -> None:
     deduped = sorted(set(hidden_files))
     path.write_text(json.dumps(deduped, indent=2))
+
 
 def set_file_hidden(path: Path, filename: str, hidden: bool) -> None:
     hidden_files = set(load_hidden_files(path))
@@ -857,6 +551,7 @@ def set_file_hidden(path: Path, filename: str, hidden: bool) -> None:
     else:
         hidden_files.discard(filename)
     save_hidden_files(path, list(hidden_files))
+
 
 def load_file_shares(path: Path) -> Dict[str, List[str]]:
     if not path.exists():
@@ -875,9 +570,11 @@ def load_file_shares(path: Path) -> Dict[str, List[str]]:
         cleaned[filename] = users
     return cleaned
 
+
 def save_file_shares(path: Path, shares: Dict[str, List[str]]) -> None:
     normalized = {key: sorted(set(value)) for key, value in shares.items()}
     path.write_text(json.dumps(normalized, indent=2))
+
 
 def set_file_share(path: Path, filename: str, username: str, shared: bool) -> None:
     shares = load_file_shares(path)
@@ -892,10 +589,12 @@ def set_file_share(path: Path, filename: str, username: str, shared: bool) -> No
         shares.pop(filename, None)
     save_file_shares(path, shares)
 
+
 def clear_file_shares(path: Path, filename: str) -> None:
     shares = load_file_shares(path)
     shares.pop(filename, None)
     save_file_shares(path, shares)
+
 
 def load_public_file_links(path: Path) -> Dict[str, str]:
     if not path.exists():
@@ -918,8 +617,10 @@ def load_public_file_links(path: Path) -> Dict[str, str]:
         cleaned[filename] = token
     return cleaned
 
+
 def save_public_file_links(path: Path, links: Dict[str, str]) -> None:
     path.write_text(json.dumps(links, indent=2))
+
 
 def set_public_file_link(path: Path, filename: str, enabled: bool) -> Optional[str]:
     links = load_public_file_links(path)
@@ -934,6 +635,7 @@ def set_public_file_link(path: Path, filename: str, enabled: bool) -> Optional[s
     save_public_file_links(path, links)
     return None
 
+
 def find_public_file_by_token(token: str) -> Optional[Tuple[str, str]]:
     normalized_token = token.strip()
     if not normalized_token:
@@ -946,10 +648,15 @@ def find_public_file_by_token(token: str) -> Optional[Tuple[str, str]]:
                 return owner, filename
     return None
 
+
 def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
+        if not is_authenticated():
+            flash("Log in to use Dropper tools from this device.", "error")
+            return redirect(url_for("index"))
         return view(*args, **kwargs)
+
     return wrapped
 
 
@@ -966,13 +673,16 @@ def load_history(path: Path) -> List[Dict]:
         return []
     return data
 
+
 def save_history(path: Path, items: List[Dict]) -> None:
     path.write_text(json.dumps(items, indent=2))
+
 
 def add_history_item(path: Path, item: Dict, limit: int) -> None:
     items = load_history(path)
     items.insert(0, item)
     save_history(path, items[:limit])
+
 
 def append_history_item_field(path: Path, item_id: str, field: str, value: Dict) -> Optional[Dict]:
     items = load_history(path)
@@ -987,6 +697,7 @@ def append_history_item_field(path: Path, item_id: str, field: str, value: Dict)
         save_history(path, items)
         return item
     return None
+
 
 def toggle_history_share(path: Path, item_id: str, username: str, shared: bool) -> Optional[Dict]:
     items = load_history(path)
@@ -1007,6 +718,7 @@ def toggle_history_share(path: Path, item_id: str, username: str, shared: bool) 
         return item
     return None
 
+
 def replace_history_item(path: Path, item: Dict) -> None:
     items = load_history(path)
     updated = False
@@ -1018,6 +730,7 @@ def replace_history_item(path: Path, item: Dict) -> None:
     if not updated:
         items.insert(0, item)
     save_history(path, items[:MAX_READER_HISTORY_ITEMS])
+
 
 def remove_history_item(path: Path, item_id: str) -> Optional[Dict]:
     items = load_history(path)
@@ -1032,8 +745,10 @@ def remove_history_item(path: Path, item_id: str) -> Optional[Dict]:
         save_history(path, kept)
     return removed
 
+
 def clear_history(path: Path) -> None:
     save_history(path, [])
+
 
 def set_history_item_hidden(path: Path, item_id: str, hidden: bool) -> Optional[Dict]:
     items = load_history(path)
@@ -1046,6 +761,7 @@ def set_history_item_hidden(path: Path, item_id: str, hidden: bool) -> Optional[
     if updated_item is not None:
         save_history(path, items)
     return updated_item
+
 
 def update_history_item(path: Path, item_id: str, updates: Dict) -> Optional[Dict]:
     items = load_history(path)
@@ -1060,17 +776,21 @@ def update_history_item(path: Path, item_id: str, updates: Dict) -> Optional[Dic
         save_history(path, items)
     return updated_item
 
+
 def find_history_item(path: Path, item_id: str) -> Optional[Dict]:
     for item in load_history(path):
         if item.get("id") == item_id:
             return item
     return None
 
+
 def get_chat_history_file() -> Path:
     return DATA_DIR / "live_chat.json"
 
+
 def get_whiteboard_file() -> Path:
     return DATA_DIR / "whiteboard.json"
+
 
 def load_whiteboard_state() -> Dict:
     path = get_whiteboard_file()
@@ -1090,6 +810,7 @@ def load_whiteboard_state() -> Dict:
         "updated": raw.get("updated"),
         "updated_by": raw.get("updated_by"),
     }
+
 
 def sanitize_whiteboard_state(payload: Dict) -> Dict:
     if not isinstance(payload, dict):
@@ -1158,18 +879,22 @@ def sanitize_whiteboard_state(payload: Dict) -> Dict:
         "updated_by": current_username(),
     }
 
+
 def save_whiteboard_state(payload: Dict) -> Dict:
     state = sanitize_whiteboard_state(payload)
     get_whiteboard_file().write_text(json.dumps(state, indent=2))
     return state
+
 
 def iter_uploaded_files(directory: Path):
     for path in sorted(directory.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
         if path.is_file() and path.name != ".gitkeep":
             yield path
 
+
 def get_total_storage_bytes(directory: Path) -> int:
     return sum(path.stat().st_size for path in iter_uploaded_files(directory))
+
 
 def get_file_listing(
     directory: Path,
@@ -1207,6 +932,7 @@ def get_file_listing(
 
     return files, total_bytes
 
+
 def build_storage_summary(total_bytes: int) -> Dict:
     remaining_bytes = max(MAX_STORAGE_BYTES - total_bytes, 0)
     usage_percent = min((total_bytes / MAX_STORAGE_BYTES) * 100, 100) if MAX_STORAGE_BYTES else 100
@@ -1217,6 +943,7 @@ def build_storage_summary(total_bytes: int) -> Dict:
         "max_upload_bytes": MAX_UPLOAD_BYTES,
         "usage_percent": usage_percent,
     }
+
 
 def ensure_unique_filename(directory: Path, filename: str) -> str:
     candidate = filename
@@ -1229,6 +956,7 @@ def ensure_unique_filename(directory: Path, filename: str) -> str:
         counter += 1
 
     return candidate
+
 
 def save_upload_with_limits(upload, destination: Path, max_bytes: int) -> int:
     bytes_written = 0
@@ -1254,6 +982,7 @@ def save_upload_with_limits(upload, destination: Path, max_bytes: int) -> int:
     temp_path.replace(destination)
     return bytes_written
 
+
 def _safe_zip_member_name(member_name: str) -> str:
     raw = member_name.replace("\\", "/").strip()
     if not raw:
@@ -1266,6 +995,7 @@ def _safe_zip_member_name(member_name: str) -> str:
     if not safe_parts:
         return ""
     return "__".join(safe_parts)
+
 
 def extract_zip_upload_with_limits(upload, destination_dir: Path, max_bytes: int) -> Tuple[int, int]:
     upload.stream.seek(0)
@@ -1323,6 +1053,7 @@ def extract_zip_upload_with_limits(upload, destination_dir: Path, max_bytes: int
 
     return extracted_files, written_bytes
 
+
 def should_force_download(filename: str) -> bool:
     mime_type, _ = mimetypes.guess_type(filename)
     if mime_type is None:
@@ -1331,12 +1062,14 @@ def should_force_download(filename: str) -> bool:
         return False
     return not mime_type.startswith(SAFE_INLINE_MIME_PREFIXES)
 
+
 def latex_has_forbidden_tokens(source: str) -> Optional[str]:
     lowered = source.lower()
     for token in FORBIDDEN_LATEX_TOKENS:
         if token in lowered:
             return token
     return None
+
 
 def render_latex_pdf(title: str, source: str, latex_dir: Path, latex_history_file: Path) -> Tuple[str, str]:
     blocked_token = latex_has_forbidden_tokens(source)
@@ -1396,6 +1129,7 @@ def render_latex_pdf(title: str, source: str, latex_dir: Path, latex_history_fil
     add_history_item(latex_history_file, item, MAX_LATEX_HISTORY_ITEMS)
     return pdf_name, item["created"]
 
+
 def save_html_viewer_entry(
     title: str,
     source: str,
@@ -1415,12 +1149,14 @@ def save_html_viewer_entry(
     add_history_item(html_history_file, item, MAX_HTML_HISTORY_ITEMS)
     return html_name, item
 
+
 def delete_html_content(filename: Optional[str], html_dir: Path) -> None:
     if not filename:
         return
     target = html_dir / filename
     if target.exists() and target.is_file():
         target.unlink()
+
 
 def read_html_content(filename: str, html_dir: Path) -> str:
     safe_name = secure_filename(filename or "")
@@ -1430,6 +1166,7 @@ def read_html_content(filename: str, html_dir: Path) -> str:
     if not path.exists() or not path.is_file():
         return ""
     return path.read_text(encoding="utf-8", errors="replace")
+
 
 def normalize_reader_url(raw_url: str) -> str:
     candidate = raw_url.strip()
@@ -1445,13 +1182,16 @@ def normalize_reader_url(raw_url: str) -> str:
         raise ValueError("That URL does not look valid.")
     return candidate
 
+
 def normalize_reader_mode(raw_mode: str) -> str:
     mode = (raw_mode or "auto").strip().lower()
     return mode if mode in READER_MODES else "auto"
 
+
 def is_reddit_url(url: str) -> bool:
     host = urlparse(url).netloc.lower()
     return "reddit.com" in host or host.endswith("redd.it")
+
 
 def reddit_html_url(url: str) -> str:
     parsed = urlparse(url)
@@ -1470,6 +1210,7 @@ def reddit_html_url(url: str) -> str:
     query = urlencode(query_items)
 
     return parsed._replace(netloc="old.reddit.com", path=path, query=query).geturl()
+
 
 def reddit_mirror_urls(url: str) -> List[str]:
     parsed = urlparse(url)
@@ -1490,6 +1231,7 @@ def reddit_mirror_urls(url: str) -> List[str]:
             parsed_base._replace(path=path, query=query, params="", fragment="").geturl()
         )
     return mirror_urls
+
 
 def assert_public_reader_target(url: str) -> None:
     parsed = urlparse(url)
@@ -1518,6 +1260,7 @@ def assert_public_reader_target(url: str) -> None:
         ):
             raise ValueError("Reader fetches only allow public internet hosts.")
 
+
 def fetch_url_bytes(url: str) -> Tuple[requests.Response, bytes]:
     response = requests.get(
         url,
@@ -1537,6 +1280,7 @@ def fetch_url_bytes(url: str) -> Tuple[requests.Response, bytes]:
         if len(content) > MAX_READER_FETCH_BYTES:
             raise ValueError(f"Reader fetch is too large. Limit: {human_size(MAX_READER_FETCH_BYTES)}.")
     return response, bytes(content)
+
 
 def fetch_url_bytes_with_headers(url: str, headers: Dict[str, str]) -> Tuple[requests.Response, bytes]:
     response = requests.get(
@@ -1558,6 +1302,7 @@ def fetch_url_bytes_with_headers(url: str, headers: Dict[str, str]) -> Tuple[req
             raise ValueError(f"Reader fetch is too large. Limit: {human_size(MAX_READER_FETCH_BYTES)}.")
     return response, bytes(content)
 
+
 def build_proxy_target_url(raw_url: str, base_url: Optional[str] = None) -> str:
     if not raw_url:
         return ""
@@ -1569,8 +1314,10 @@ def build_proxy_target_url(raw_url: str, base_url: Optional[str] = None) -> str:
     assert_public_reader_target(normalized)
     return normalized
 
+
 def build_browse_proxy_url(target_url: str) -> str:
     return url_for("browse_proxy", url=target_url)
+
 
 def rewrite_proxy_document(html_text: str, resolved_url: str) -> str:
     soup = BeautifulSoup(html_text, "html.parser")
@@ -1609,6 +1356,7 @@ def rewrite_proxy_document(html_text: str, resolved_url: str) -> str:
 
     return str(soup)
 
+
 def fetch_browse_proxy_payload(target_url: str) -> Response:
     normalized_url = build_proxy_target_url(target_url)
     response = requests.get(
@@ -1644,6 +1392,7 @@ def fetch_browse_proxy_payload(target_url: str) -> Response:
             passthrough_headers[header_name] = header_value
     return Response(bytes(content), status=status, headers=passthrough_headers)
 
+
 def get_best_title(soup: BeautifulSoup) -> str:
     for selector, attr in (
         ("meta[property='og:title']", "content"),
@@ -1658,6 +1407,7 @@ def get_best_title(soup: BeautifulSoup) -> str:
     heading = soup.find(["h1", "h2"])
     return heading.get_text(" ", strip=True) if heading else "Cached Reader Page"
 
+
 def get_author_name(soup: BeautifulSoup) -> Optional[str]:
     for selector, attr in (
         ("meta[name='author']", "content"),
@@ -1667,6 +1417,7 @@ def get_author_name(soup: BeautifulSoup) -> Optional[str]:
         if node and node.get(attr):
             return node.get(attr).strip()
     return None
+
 
 def remove_non_content_nodes(soup: BeautifulSoup) -> None:
     for comment in soup.find_all(string=lambda text: isinstance(text, Comment)):
@@ -1693,6 +1444,7 @@ def remove_non_content_nodes(soup: BeautifulSoup) -> None:
     ):
         tag.decompose()
 
+
 def score_candidate(tag: Tag) -> int:
     text = tag.get_text(" ", strip=True)
     if len(text) < 200:
@@ -1703,6 +1455,7 @@ def score_candidate(tag: Tag) -> int:
     links = len(tag.find_all("a"))
     penalty = min(links * 15, 400)
     return len(text) + paragraphs * 180 + headings * 120 + lists * 50 - penalty
+
 
 def choose_content_root(soup: BeautifulSoup) -> Tag:
     for selector in CONTENT_SELECTORS:
@@ -1725,6 +1478,7 @@ def choose_content_root(soup: BeautifulSoup) -> Tag:
     if soup.body:
         return soup.body
     return soup
+
 
 def sanitize_reader_html(html_fragment: str, base_url: str) -> str:
     soup = BeautifulSoup(html_fragment, "html.parser")
@@ -1750,6 +1504,7 @@ def sanitize_reader_html(html_fragment: str, base_url: str) -> str:
 
     return str(soup)
 
+
 def extract_generic_reader_payload(url: str, html_bytes: bytes, encoding_hint: Optional[str]) -> Dict:
     html_text = html_bytes.decode(encoding_hint or "utf-8", errors="replace")
     soup = BeautifulSoup(html_text, "html.parser")
@@ -1771,6 +1526,7 @@ def extract_generic_reader_payload(url: str, html_bytes: bytes, encoding_hint: O
         "content_html": str(content_soup),
     }
 
+
 def reddit_json_url(url: str) -> Optional[str]:
     parsed = urlparse(url)
     host = parsed.netloc.lower()
@@ -1783,8 +1539,10 @@ def reddit_json_url(url: str) -> Optional[str]:
         path = f"{path}.json"
     return f"https://www.reddit.com{path}?raw_json=1&limit=20"
 
+
 def sanitize_html_snippet(snippet: str, base_url: str) -> str:
     return sanitize_reader_html(unescape(snippet), base_url)
+
 
 def render_reddit_comment(comment_data: Dict, depth: int = 0, max_depth: int = 2) -> str:
     body_html = sanitize_html_snippet(comment_data.get("body_html") or "", "https://www.reddit.com")
@@ -1820,6 +1578,7 @@ def render_reddit_comment(comment_data: Dict, depth: int = 0, max_depth: int = 2
 
     html_parts.append("</article>")
     return "".join(html_parts)
+
 
 def extract_reddit_reader_payload(url: str) -> Optional[Dict]:
     json_url = reddit_json_url(url)
@@ -1886,6 +1645,7 @@ def extract_reddit_reader_payload(url: str) -> Optional[Dict]:
         "content_html": combined_html,
     }
 
+
 def fetch_html_reader_payload(url: str) -> Dict:
     response, payload = fetch_url_bytes(url)
     content_type = response.headers.get("Content-Type", "")
@@ -1897,6 +1657,7 @@ def fetch_html_reader_payload(url: str) -> Dict:
     generic_payload["reader_mode_used"] = "html"
     return generic_payload
 
+
 def fetch_html_reader_payload_with_headers(url: str, headers: Dict[str, str]) -> Dict:
     response, payload = fetch_url_bytes_with_headers(url, headers)
     content_type = response.headers.get("Content-Type", "")
@@ -1907,6 +1668,7 @@ def fetch_html_reader_payload_with_headers(url: str, headers: Dict[str, str]) ->
     generic_payload["resolved_url"] = response.url
     generic_payload["reader_mode_used"] = "html"
     return generic_payload
+
 
 def fetch_proxy_reader_payload(url: str) -> Dict:
     """
@@ -1931,21 +1693,25 @@ def fetch_proxy_reader_payload(url: str) -> Dict:
         "reader_mode_used": "proxy",
     }
 
+
 def write_reader_content(entry_id: str, content_html: str, reader_dir: Path) -> str:
     filename = f"{entry_id}.html"
     path = reader_dir / filename
     path.write_text(content_html)
     return filename
 
+
 def delete_reader_content(filename: Optional[str], reader_dir: Path) -> None:
     if not filename:
         return
     (reader_dir / filename).unlink(missing_ok=True)
 
+
 def delete_latex_content(filename: Optional[str], latex_dir: Path) -> None:
     if not filename:
         return
     (latex_dir / filename).unlink(missing_ok=True)
+
 
 def fetch_reader_payload(url: str, reader_mode: str = "auto") -> Dict:
     normalized_url = normalize_reader_url(url)
@@ -1999,6 +1765,7 @@ def fetch_reader_payload(url: str, reader_mode: str = "auto") -> Dict:
             return fetch_proxy_reader_payload(normalized_url)
         raise
 
+
 def cache_reader_entry(
     url: str,
     reader_mode: str = "auto",
@@ -2027,14 +1794,17 @@ def cache_reader_entry(
     replace_history_item(reader_history_file, entry)
     return entry
 
+
 def get_reader_history(reader_history_file: Path) -> List[Dict]:
     return load_history(reader_history_file)
+
 
 def read_reader_content(filename: str, reader_dir: Path) -> str:
     path = reader_dir / filename
     if not path.exists():
         raise NotFound()
     return path.read_text()
+
 
 def build_template_context(active_page: str) -> Dict:
     authenticated = is_authenticated()
@@ -2371,9 +2141,11 @@ def build_template_context(active_page: str) -> Dict:
         "browse_url_input": browse_url_input,
     }
 
+
 def render_dashboard_page(active_page: str, template_name: str = "index.html"):
     context = build_template_context(active_page)
     return render_template(template_name, **context)
+
 
 def can_view_text_entry(entry: Dict, owner: str, viewer: str, admin_view: bool) -> bool:
     if admin_view or owner == viewer:
@@ -2385,6 +2157,7 @@ def can_view_text_entry(entry: Dict, owner: str, viewer: str, admin_view: bool) 
     }
     return viewer in shared_with
 
+
 @app.context_processor
 def utility_processor():
     return {
@@ -2395,6 +2168,7 @@ def utility_processor():
         "summarize_text": summarize_text,
     }
 
+
 @app.errorhandler(RequestEntityTooLarge)
 def handle_file_too_large(_error):
     flash(
@@ -2402,6 +2176,7 @@ def handle_file_too_large(_error):
         "error",
     )
     return redirect(url_for("files_page")), 413
+
 
 @app.post("/login")
 def login():
@@ -2439,7 +2214,8 @@ def login():
     session["username"] = username
     rotate_csrf_token()
     flash(f"Logged in as {username}. This device stays trusted for {LOGIN_DAYS} days unless you log out.", "success")
-    return redirect(url_for("access_page"))
+    return redirect(url_for("index"))
+
 
 @app.post("/logout")
 def logout():
@@ -2448,6 +2224,7 @@ def logout():
     rotate_csrf_token()
     flash("Logged out on this device.", "success")
     return redirect(url_for("access_page"))
+
 
 @app.post("/admin/users/create")
 @login_required
@@ -2471,6 +2248,7 @@ def admin_create_user():
     ensure_user_paths(username)
     flash(f"Created or reset account for {username}.", "success")
     return redirect(url_for("access_page", owner=username))
+
 
 @app.post("/admin/users/password")
 @login_required
@@ -2497,6 +2275,7 @@ def admin_update_user_password():
     save_users(users)
     flash(f"Updated password for {username}.", "success")
     return redirect(url_for("access_page", owner=username))
+
 
 @app.post("/admin/users/delete")
 @login_required
@@ -2525,33 +2304,6 @@ def admin_delete_user():
 
 
 
-@app.get("/dummy_files")
-def files_page(): return index()
-
-@app.get("/dummy_text")
-def text_page(): return index()
-
-@app.get("/dummy_reader")
-def reader_page(): return index()
-
-@app.get("/dummy_browse")
-def browse_page(): return index()
-
-@app.get("/dummy_latex")
-def latex_page(): return index()
-
-@app.get("/dummy_html")
-def html_page(): return index()
-
-@app.get("/dummy_chat")
-def chat_page(): return index()
-
-@app.get("/access")
-def access_page():
-    context = build_template_context("access")
-    context["active_page"] = "access"
-    return render_template("index.html", **context)
-
 
 @app.get("/")
 @app.get("/files")
@@ -2559,7 +2311,7 @@ def access_page():
 @app.get("/reader")
 @app.get("/latex")
 @app.get("/html")
-@app.get("/chat")
+@app.get("/")
 def index():
     if not is_authenticated():
         context = build_template_context("access")
@@ -2567,6 +2319,41 @@ def index():
         return render_template("index.html", **context)
     context = build_template_context("home")
     return render_template("app_index.html", **context)
+
+
+@app.get("/dummy_files")
+def files_page(**kwargs): return redirect(url_for("index"))
+
+@app.get("/dummy_text")
+def text_page(**kwargs): return redirect(url_for("index"))
+
+@app.get("/dummy_reader")
+def reader_page(**kwargs): return redirect(url_for("index"))
+
+@app.get("/dummy_browse")
+def browse_page(**kwargs): return redirect(url_for("index"))
+
+@app.get("/dummy_latex")
+def latex_page(**kwargs): return redirect(url_for("index"))
+
+@app.get("/dummy_html")
+def html_page(**kwargs): return redirect(url_for("index"))
+
+@app.get("/dummy_chat")
+def chat_page(**kwargs): return redirect(url_for("index"))
+
+@app.get("/access")
+def access_page(): return render_template("index.html", **build_template_context("access"))
+
+
+
+
+
+
+
+
+
+
 
 @app.get("/browse/proxy")
 @login_required
@@ -2578,6 +2365,13 @@ def browse_proxy():
         return fetch_browse_proxy_payload(target_url)
     except (requests.RequestException, ValueError) as error:
         return Response(f"Browse proxy failed: {error}", status=502, content_type="text/plain; charset=utf-8")
+
+
+
+
+
+
+
 
 @app.get("/text/view/<entry_id>")
 @login_required
@@ -2603,12 +2397,17 @@ def view_text_entry(entry_id: str):
         available_share_users=[user for user in managed_usernames() if user != owner and user != ADMIN_USERNAME],
     )
 
+
+
+
+
+
+
+
 @app.get("/html/ipad-viewer")
 @login_required
 def html_ipad_viewer():
-
     paths, target_owner = get_target_user_paths()
-
     html_history = load_history(paths["html_history_file"])
 
     # Pre-load the sources for all items so the SPA has it
@@ -2625,6 +2424,7 @@ def html_ipad_viewer():
         csrf_token=get_or_create_csrf_token()
     )
 
+
 @app.post("/html/ipad-viewer/save")
 @login_required
 def save_html_ipad_viewer():
@@ -2634,9 +2434,7 @@ def save_html_ipad_viewer():
         token = request.form.get("csrf_token", "")
     validate_csrf_token(token)
 
-
     paths, target_owner = get_target_user_paths()
-
 
     if request.is_json:
         data = request.get_json()
@@ -2687,38 +2485,29 @@ def save_html_ipad_viewer():
     flash(f"Saved HTML page: {html_name}", "success")
     return redirect(url_for("html_page", owner=target_owner))
 
+
 @app.get("/html/view/<entry_id>")
 @login_required
 def view_html_entry(entry_id: str):
-
+    # This route is obsolete. Redirecting to the new unified viewer.
     paths, target_owner = get_target_user_paths()
+    return redirect(url_for("html_ipad_viewer", file_id=entry_id, owner=target_owner))
 
-    entries = load_history(paths["html_history_file"])
-    entry = next((e for e in entries if e["id"] == entry_id), None)
-    if not entry: abort(404)
 
-    source = entry.get("source", "")
-    source = wrap_react_source(source)
-    public_links = load_public_file_links(paths["public_html_links_file"])
 
-    context = build_template_context("html")
-    context.update({
-        "entry": entry,
-        "source": source,
-        "selected_owner": target_owner,
-        "is_public": entry_id in public_links
-    })
-    return render_template("html_viewer.html", **context)
+
 
 @app.get("/chat/messages")
 @login_required
 def chat_messages():
     return {"messages": load_history(get_chat_history_file())}
 
+
 @app.get("/board/state")
 @login_required
 def whiteboard_state():
     return {"board": load_whiteboard_state()}
+
 
 @app.post("/board/save")
 @login_required
@@ -2735,6 +2524,7 @@ def save_whiteboard():
         return {"ok": False, "error": str(error)}, 400
     return {"ok": True, "board": state}
 
+
 @app.post("/files/upload")
 @login_required
 def upload_file():
@@ -2744,9 +2534,7 @@ def upload_file():
         flash("Pick a file first.", "error")
         return redirect(url_for("files_page"))
 
-
     paths, target_owner = get_target_user_paths()
-
     total_bytes = get_total_storage_bytes(paths["uploads_dir"])
     remaining_bytes = max(MAX_STORAGE_BYTES - total_bytes, 0)
     if not is_admin_user() and remaining_bytes <= 0:
@@ -2814,13 +2602,12 @@ def upload_file():
     flash(" ".join(summary_parts) + ".", "success")
     return redirect(url_for("files_page", owner=target_owner))
 
+
 @app.post("/text")
 @login_required
 def save_text_entry():
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
-
     title = request.form.get("title", "").strip() or "Untitled note"
     content = request.form.get("content", "").strip()
 
@@ -2837,13 +2624,12 @@ def save_text_entry():
     flash(f"Saved text snippet for {target_owner}.", "success")
     return redirect(url_for("text_page", owner=target_owner))
 
+
 @app.post("/text/edit/<entry_id>")
 @login_required
 def edit_text_entry(entry_id: str):
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
-
     title = request.form.get("title", "").strip() or "Untitled note"
     content = request.form.get("content", "").strip()
 
@@ -2864,13 +2650,12 @@ def edit_text_entry(entry_id: str):
     flash("Text snippet updated.", "success")
     return redirect(url_for("text_page", owner=target_owner))
 
+
 @app.post("/text/share/<entry_id>")
 @login_required
 def share_text_entry(entry_id: str):
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
-
     target_username = normalize_username(request.form.get("share_username", ""))
     if not target_username:
         flash("Choose a user to share with.", "error")
@@ -2888,13 +2673,12 @@ def share_text_entry(entry_id: str):
     flash(f"Shared text item with {target_username}.", "success")
     return redirect(url_for("text_page", owner=target_owner))
 
+
 @app.post("/text/unshare/<entry_id>")
 @login_required
 def unshare_text_entry(entry_id: str):
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
-
     target_username = normalize_username(request.form.get("share_username", ""))
     if not target_username:
         flash("Choose a user to remove.", "error")
@@ -2909,13 +2693,12 @@ def unshare_text_entry(entry_id: str):
     flash(f"Removed {target_username} from text item sharing.", "success")
     return redirect(url_for("text_page", owner=target_owner))
 
+
 @app.post("/text/comment/<entry_id>")
 @login_required
 def comment_text_entry(entry_id: str):
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
-
     content = request.form.get("comment", "").strip()
     if not content:
         flash("Comment cannot be empty.", "error")
@@ -2936,13 +2719,12 @@ def comment_text_entry(entry_id: str):
     flash("Comment added.", "success")
     return redirect(url_for("text_page", owner=target_owner))
 
+
 @app.post("/text/reference/<entry_id>")
 @login_required
 def add_text_entry_reference(entry_id: str):
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
-
     label = request.form.get("reference_label", "").strip()
     url = request.form.get("reference_url", "").strip()
     citation = request.form.get("reference_citation", "").strip()
@@ -2971,13 +2753,12 @@ def add_text_entry_reference(entry_id: str):
     flash("Reference linked to note.", "success")
     return redirect(url_for("text_page", owner=target_owner))
 
+
 @app.post("/latex")
 @login_required
 def save_latex_entry():
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
-
     title = request.form.get("title", "").strip() or "latex-document"
     source = request.form.get("source", "").strip()
 
@@ -3001,13 +2782,12 @@ def save_latex_entry():
 
     return redirect(url_for("latex_page", owner=target_owner))
 
+
 @app.post("/html")
 @login_required
 def save_html_entry():
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
-
     title = request.form.get("title", "").strip() or "html-page"
     source = request.form.get("source", "").strip()
 
@@ -3022,13 +2802,12 @@ def save_html_entry():
     flash(f"Saved HTML page: {html_name}", "success")
     return redirect(url_for("html_ipad_viewer", file_id=entry["id"], owner=target_owner))
 
+
 @app.post("/reader")
 @login_required
 def save_reader_entry():
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
-
     url = request.form.get("url", "").strip()
     reader_mode = normalize_reader_mode(request.form.get("reader_mode", "auto"))
     try:
@@ -3044,6 +2823,7 @@ def save_reader_entry():
 
     flash(f"Cached reader page: {entry['title']}", "success")
     return redirect(url_for("view_reader_entry", entry_id=entry["id"], owner=target_owner))
+
 
 @app.get("/reader/live")
 @login_required
@@ -3082,12 +2862,11 @@ def live_reader():
         selected_owner=get_target_username_from_request(default=current_username() or ADMIN_USERNAME),
     )
 
+
 @app.get("/reader/<entry_id>")
 @login_required
 def view_reader_entry(entry_id: str):
-
     paths, target_owner = get_target_user_paths()
-
     entry = find_history_item(paths["reader_history_file"], entry_id)
     if entry is None:
         raise NotFound()
@@ -3104,13 +2883,12 @@ def view_reader_entry(entry_id: str):
         is_admin=is_admin_user(),
     )
 
+
 @app.post("/reader/refresh/<entry_id>")
 @login_required
 def refresh_reader_entry(entry_id: str):
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
-
     entry = find_history_item(paths["reader_history_file"], entry_id)
     if entry is None:
         raise NotFound()
@@ -3135,6 +2913,8 @@ def refresh_reader_entry(entry_id: str):
     flash("Reader cache refreshed.", "success")
     return redirect(url_for("view_reader_entry", entry_id=entry_id, owner=target_owner))
 
+
+
 @app.post("/reader/delete/<entry_id>")
 @login_required
 def delete_reader_entry(entry_id: str):
@@ -3145,9 +2925,7 @@ def delete_reader_entry(entry_id: str):
         token = request.form.get("csrf_token", "")
     validate_csrf_token(token)
 
-
     paths, target_owner = get_target_user_paths()
-
     removed = remove_history_item(paths["reader_history_file"], entry_id)
     if removed is None:
         if is_json: return {"ok": False, "error": "Not found"}, 404
@@ -3161,41 +2939,39 @@ def delete_reader_entry(entry_id: str):
 @login_required
 def hide_reader_entry(entry_id: str):
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
-
     item = set_history_item_hidden(paths["reader_history_file"], entry_id, True)
     if item is None:
         raise NotFound()
     flash("Reader entry hidden from logged-out view.", "success")
     return redirect(url_for("reader_page", owner=target_owner))
 
+
 @app.post("/reader/unhide/<entry_id>")
 @login_required
 def unhide_reader_entry(entry_id: str):
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
-
     item = set_history_item_hidden(paths["reader_history_file"], entry_id, False)
     if item is None:
         raise NotFound()
     flash("Reader entry visible to logged-out view.", "success")
     return redirect(url_for("reader_page", owner=target_owner))
 
+
 @app.post("/reader/clear")
 @login_required
 def clear_reader_entries():
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
-
     entries = load_history(paths["reader_history_file"])
     for entry in entries:
         delete_reader_content(entry.get("content_filename"), paths["reader_dir"])
     clear_history(paths["reader_history_file"])
     flash("Cleared cached reader pages.", "success")
     return redirect(url_for("reader_page", owner=target_owner))
+
+
 
 @app.post("/text/delete/<entry_id>")
 @login_required
@@ -3207,9 +2983,7 @@ def delete_text_entry(entry_id: str):
         token = request.form.get("csrf_token", "")
     validate_csrf_token(token)
 
-
     paths, target_owner = get_target_user_paths()
-
     removed = remove_history_item(paths["text_history_file"], entry_id)
     if removed is None:
         if is_json: return {"ok": False, "error": "Not found"}, 404
@@ -3222,46 +2996,41 @@ def delete_text_entry(entry_id: str):
 @login_required
 def hide_text_entry(entry_id: str):
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
-
     item = set_history_item_hidden(paths["text_history_file"], entry_id, True)
     if item is None:
         raise NotFound()
     flash("Text snippet hidden from logged-out view.", "success")
     return redirect(url_for("text_page", owner=target_owner))
 
+
 @app.post("/text/unhide/<entry_id>")
 @login_required
 def unhide_text_entry(entry_id: str):
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
-
     item = set_history_item_hidden(paths["text_history_file"], entry_id, False)
     if item is None:
         raise NotFound()
     flash("Text snippet visible to logged-out view.", "success")
     return redirect(url_for("text_page", owner=target_owner))
 
+
 @app.post("/text/clear")
 @login_required
 def clear_text_entries():
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
-
     clear_history(paths["text_history_file"])
     flash("Cleared saved text snippets.", "success")
     return redirect(url_for("text_page", owner=target_owner))
+
 
 @app.post("/latex/delete/<entry_id>")
 @login_required
 def delete_latex_entry(entry_id: str):
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
-
     removed = remove_history_item(paths["latex_history_file"], entry_id)
     if removed is None:
         raise NotFound()
@@ -3270,45 +3039,44 @@ def delete_latex_entry(entry_id: str):
     flash("LaTeX PDF deleted.", "success")
     return redirect(url_for("latex_page", owner=target_owner))
 
+
 @app.post("/latex/hide/<entry_id>")
 @login_required
 def hide_latex_entry(entry_id: str):
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
-
     item = set_history_item_hidden(paths["latex_history_file"], entry_id, True)
     if item is None:
         raise NotFound()
     flash("LaTeX PDF hidden from logged-out view.", "success")
     return redirect(url_for("latex_page", owner=target_owner))
 
+
 @app.post("/latex/unhide/<entry_id>")
 @login_required
 def unhide_latex_entry(entry_id: str):
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
-
     item = set_history_item_hidden(paths["latex_history_file"], entry_id, False)
     if item is None:
         raise NotFound()
     flash("LaTeX PDF visible to logged-out view.", "success")
     return redirect(url_for("latex_page", owner=target_owner))
 
+
 @app.post("/latex/clear")
 @login_required
 def clear_latex_entries():
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
-
     entries = load_history(paths["latex_history_file"])
     for entry in entries:
         delete_latex_content(entry.get("pdf_name"), paths["latex_dir"])
     clear_history(paths["latex_history_file"])
     flash("Cleared rendered PDFs.", "success")
     return redirect(url_for("latex_page", owner=target_owner))
+
+
 
 @app.post("/html/delete/<entry_id>")
 @login_required
@@ -3320,9 +3088,7 @@ def delete_html_entry(entry_id: str):
         token = request.form.get("csrf_token", "")
     validate_csrf_token(token)
 
-
     paths, target_owner = get_target_user_paths()
-
     removed = remove_history_item(paths["html_history_file"], entry_id)
     if removed is None:
         if is_json: return {"ok": False, "error": "Not found"}, 404
@@ -3335,41 +3101,39 @@ def delete_html_entry(entry_id: str):
 @login_required
 def hide_html_entry(entry_id: str):
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
-
     item = set_history_item_hidden(paths["html_history_file"], entry_id, True)
     if item is None:
         raise NotFound()
     flash("HTML page hidden from logged-out view.", "success")
     return redirect(url_for("html_page", owner=target_owner))
 
+
 @app.post("/html/unhide/<entry_id>")
 @login_required
 def unhide_html_entry(entry_id: str):
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
-
     item = set_history_item_hidden(paths["html_history_file"], entry_id, False)
     if item is None:
         raise NotFound()
     flash("HTML page visible to logged-out view.", "success")
     return redirect(url_for("html_page", owner=target_owner))
 
+
 @app.post("/html/clear")
 @login_required
 def clear_html_entries():
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
-
     entries = load_history(paths["html_history_file"])
     for entry in entries:
         delete_html_content(entry.get("html_name"), paths["html_dir"])
     clear_history(paths["html_history_file"])
     flash("Cleared saved HTML pages.", "success")
     return redirect(url_for("html_page", owner=target_owner))
+
+
 
 @app.post("/delete/<path:filename>")
 @login_required
@@ -3386,9 +3150,7 @@ def delete_file(filename: str):
         if is_json: return {"ok": False, "error": "Not found"}, 404
         raise NotFound()
 
-
     paths, target_owner = get_target_user_paths()
-
     target = paths["uploads_dir"] / safe_name
     if not target.exists() or not target.is_file():
         if is_json: return {"ok": False, "error": "Already deleted"}, 404
@@ -3409,15 +3171,14 @@ def enable_public_file_link(filename: str):
     safe_name = secure_filename(filename)
     if safe_name != filename:
         raise NotFound()
-
     paths, target_owner = get_target_user_paths()
-
     target = paths["uploads_dir"] / safe_name
     if not target.exists() or not target.is_file():
         raise NotFound()
     set_public_file_link(paths["public_file_links_file"], safe_name, enabled=True)
     flash(f"Public link enabled for {safe_name}.", "success")
     return redirect(url_for("files_page", owner=target_owner))
+
 
 @app.post("/files/public-link/disable/<path:filename>")
 @login_required
@@ -3426,15 +3187,14 @@ def disable_public_file_link(filename: str):
     safe_name = secure_filename(filename)
     if safe_name != filename:
         raise NotFound()
-
     paths, target_owner = get_target_user_paths()
-
     target = paths["uploads_dir"] / safe_name
     if not target.exists() or not target.is_file():
         raise NotFound()
     set_public_file_link(paths["public_file_links_file"], safe_name, enabled=False)
     flash(f"Public link disabled for {safe_name}.", "success")
     return redirect(url_for("files_page", owner=target_owner))
+
 
 @app.post("/files/share/<path:filename>")
 @login_required
@@ -3443,9 +3203,7 @@ def share_file(filename: str):
     safe_name = secure_filename(filename)
     if safe_name != filename:
         raise NotFound()
-
     paths, target_owner = get_target_user_paths()
-
     target = paths["uploads_dir"] / safe_name
     if not target.exists() or not target.is_file():
         raise NotFound()
@@ -3465,6 +3223,7 @@ def share_file(filename: str):
     flash(f"Shared {safe_name} with {target_username}.", "success")
     return redirect(url_for("files_page", owner=target_owner))
 
+
 @app.post("/files/unshare/<path:filename>")
 @login_required
 def unshare_file(filename: str):
@@ -3472,9 +3231,7 @@ def unshare_file(filename: str):
     safe_name = secure_filename(filename)
     if safe_name != filename:
         raise NotFound()
-
     paths, target_owner = get_target_user_paths()
-
     target = paths["uploads_dir"] / safe_name
     if not target.exists() or not target.is_file():
         raise NotFound()
@@ -3491,6 +3248,7 @@ def unshare_file(filename: str):
     flash(f"Removed {target_username} from {safe_name} sharing.", "success")
     return redirect(url_for("files_page", owner=target_owner))
 
+
 @app.post("/files/hide/<path:filename>")
 @login_required
 def hide_file(filename: str):
@@ -3498,15 +3256,14 @@ def hide_file(filename: str):
     safe_name = secure_filename(filename)
     if safe_name != filename:
         raise NotFound()
-
     paths, target_owner = get_target_user_paths()
-
     target = paths["uploads_dir"] / safe_name
     if not target.exists() or not target.is_file():
         raise NotFound()
     set_file_hidden(paths["hidden_files_file"], safe_name, True)
     flash(f"Hidden {safe_name}", "success")
     return redirect(url_for("files_page", owner=target_owner))
+
 
 @app.post("/files/unhide/<path:filename>")
 @login_required
@@ -3515,15 +3272,14 @@ def unhide_file(filename: str):
     safe_name = secure_filename(filename)
     if safe_name != filename:
         raise NotFound()
-
     paths, target_owner = get_target_user_paths()
-
     target = paths["uploads_dir"] / safe_name
     if not target.exists() or not target.is_file():
         raise NotFound()
     set_file_hidden(paths["hidden_files_file"], safe_name, False)
     flash(f"Unhidden {safe_name}", "success")
     return redirect(url_for("files_page", owner=target_owner))
+
 
 @app.get("/files/<path:filename>")
 @login_required
@@ -3562,6 +3318,7 @@ def download_file(filename: str):
 
     raise NotFound()
 
+
 @app.get("/public/files/<token>")
 def download_public_file(token: str):
     hit = find_public_file_by_token(token)
@@ -3573,6 +3330,7 @@ def download_public_file(token: str):
     if not target.exists() or not target.is_file():
         raise NotFound()
     return send_from_directory(paths["uploads_dir"], filename, as_attachment=should_force_download(filename))
+
 
 @app.get("/latex/<path:filename>")
 @login_required
@@ -3587,6 +3345,7 @@ def download_latex_pdf(filename: str):
         raise NotFound()
 
     return send_from_directory(paths["latex_dir"], safe_name, as_attachment=True, mimetype="application/pdf")
+
 
 @app.get("/html/files/<path:filename>")
 @login_required
@@ -3604,6 +3363,7 @@ def download_html_file(filename: str):
         as_attachment=True,
         mimetype="text/html; charset=utf-8",
     )
+
 
 @app.post("/chat/send")
 @login_required
@@ -3625,6 +3385,8 @@ def send_chat_message():
     }
     add_history_item(get_chat_history_file(), message, MAX_CHAT_HISTORY_ITEMS)
     return redirect(url_for("chat_page"))
+
+
 
 @app.get("/api/items")
 @login_required
@@ -3739,9 +3501,7 @@ def get_all_items():
 @login_required
 def api_add():
     validate_csrf_token(request.headers.get("X-CSRFToken", ""))
-
     paths, target_owner = get_target_user_paths()
-
 
     # Handle File Upload
     if "file" in request.files:
@@ -3821,200 +3581,56 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8003"))
     app.run(host="0.0.0.0", port=port)
 
-
-
-
-
-# --- HTML Sharing ---
-@app.post("/html/share/<entry_id>")
+@app.post("/api/edit")
 @login_required
-def share_html_entry(entry_id: str):
+def api_edit():
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
+    data = request.json
+    if not data: return {"ok": False, "error": "No data"}, 400
 
-    target_username = normalize_username(request.form.get("share_username", ""))
-    if target_username and target_username != target_owner and target_username in managed_usernames():
-        toggle_history_share(paths["html_history_file"], entry_id, target_username, shared=True)
-    return redirect(url_for("html_page", owner=target_owner))
+    item_id = data.get("id")
+    new_content = data.get("content")
+    item_type = data.get("type")
 
-@app.post("/html/unshare/<entry_id>")
+    if item_type == "note":
+        item = update_history_item(paths["text_history_file"], item_id, content=new_content)
+        if item:
+            return {"ok": True}
+
+    return {"ok": False, "error": "Could not edit"}, 400
+
+@app.post("/api/delete")
 @login_required
-def unshare_html_entry(entry_id: str):
+def api_delete():
     validate_csrf()
-
     paths, target_owner = get_target_user_paths()
+    data = request.json
+    if not data: return {"ok": False, "error": "No data"}, 400
 
-    target_username = normalize_username(request.form.get("unshare_username", ""))
-    if target_username: toggle_history_share(paths["html_history_file"], entry_id, target_username, shared=False)
-    return redirect(url_for("html_page", owner=target_owner))
+    item_id = data.get("id")
+    item_type = data.get("type")
 
-@app.post("/html/public/<entry_id>/enable")
-@login_required
-def enable_public_html_link(entry_id: str):
-    validate_csrf()
+    if item_type == "note":
+        remove_history_item(paths["text_history_file"], item_id)
+    elif item_type == "file":
+        target = paths["uploads_dir"] / item_id
+        if target.exists() and target.is_file():
+            target.unlink()
+            set_file_hidden(paths["hidden_files_file"], item_id, False)
+            clear_file_shares(paths["file_shares_file"], item_id)
+            set_public_file_link(paths["public_file_links_file"], item_id, enabled=False)
+    elif item_type == "html":
+        removed = remove_history_item(paths["html_history_file"], item_id)
+        if removed:
+            delete_html_content(removed.get("html_name"), paths["html_dir"])
+    elif item_type == "pdf":
+        removed = remove_history_item(paths["latex_history_file"], item_id)
+        if removed:
+            delete_latex_content(removed.get("pdf_name"), paths["latex_dir"])
+    elif item_type == "reader":
+        removed = remove_history_item(paths["reader_history_file"], item_id)
+        if removed:
+            delete_reader_content(removed.get("content_filename"), paths["reader_dir"])
 
-    paths, target_owner = get_target_user_paths()
-
-    set_public_file_link(paths["public_html_links_file"], entry_id, enabled=True)
-    return redirect(url_for("html_page", owner=target_owner))
-
-@app.post("/html/public/<entry_id>/disable")
-@login_required
-def disable_public_html_link(entry_id: str):
-    validate_csrf()
-
-    paths, target_owner = get_target_user_paths()
-
-    set_public_file_link(paths["public_html_links_file"], entry_id, enabled=False)
-    return redirect(url_for("html_page", owner=target_owner))
-
-@app.get("/p/html/<entry_id>")
-def view_public_html(entry_id: str):
-    owner = request.args.get("owner", ADMIN_USERNAME)
-    paths = get_user_paths(owner)
-    public_links = load_public_file_links(paths["public_html_links_file"])
-    if entry_id not in public_links: abort(404)
-    entries = load_history(paths["html_history_file"])
-    entry = next((e for e in entries if e["id"] == entry_id), None)
-    if not entry: abort(404)
-    source = wrap_react_source(entry.get("source", ""))
-    context = build_template_context("html")
-    context.update({"entry": entry, "source": source, "is_public_view": True, "selected_owner": owner})
-    return render_template("html_viewer.html", **context)
-
-# --- Text Sharing ---
-@app.post("/text/public/<entry_id>/enable")
-@login_required
-def enable_public_text_link(entry_id: str):
-    validate_csrf()
-
-    paths, target_owner = get_target_user_paths()
-
-    set_public_file_link(paths["public_text_links_file"], entry_id, enabled=True)
-    return redirect(url_for("text_page", owner=target_owner))
-
-@app.post("/text/public/<entry_id>/disable")
-@login_required
-def disable_public_text_link(entry_id: str):
-    validate_csrf()
-
-    paths, target_owner = get_target_user_paths()
-
-    set_public_file_link(paths["public_text_links_file"], entry_id, enabled=False)
-    return redirect(url_for("text_page", owner=target_owner))
-
-@app.get("/p/text/<entry_id>")
-def view_public_text(entry_id: str):
-    owner = request.args.get("owner", ADMIN_USERNAME)
-    paths = get_user_paths(owner)
-    if entry_id not in load_public_file_links(paths["public_text_links_file"]): abort(404)
-    entry = next((e for e in load_history(paths["text_history_file"]) if e["id"] == entry_id), None)
-    if not entry: abort(404)
-    return entry.get("content", ""), 200, {'Content-Type': 'text/plain; charset=utf-8'}
-
-# --- LaTeX Sharing ---
-@app.post("/latex/share/<entry_id>")
-@login_required
-def share_latex_entry(entry_id: str):
-    validate_csrf()
-
-    paths, target_owner = get_target_user_paths()
-
-    target_username = normalize_username(request.form.get("share_username", ""))
-    if target_username and target_username != target_owner and target_username in managed_usernames():
-        toggle_history_share(paths["latex_history_file"], entry_id, target_username, shared=True)
-    return redirect(url_for("latex_page", owner=target_owner))
-
-@app.post("/latex/unshare/<entry_id>")
-@login_required
-def unshare_latex_entry(entry_id: str):
-    validate_csrf()
-
-    paths, target_owner = get_target_user_paths()
-
-    target_username = normalize_username(request.form.get("unshare_username", ""))
-    if target_username: toggle_history_share(paths["latex_history_file"], entry_id, target_username, shared=False)
-    return redirect(url_for("latex_page", owner=target_owner))
-
-@app.post("/latex/public/<entry_id>/enable")
-@login_required
-def enable_public_latex_link(entry_id: str):
-    validate_csrf()
-
-    paths, target_owner = get_target_user_paths()
-
-    set_public_file_link(paths["public_latex_links_file"], entry_id, enabled=True)
-    return redirect(url_for("latex_page", owner=target_owner))
-
-@app.post("/latex/public/<entry_id>/disable")
-@login_required
-def disable_public_latex_link(entry_id: str):
-    validate_csrf()
-
-    paths, target_owner = get_target_user_paths()
-
-    set_public_file_link(paths["public_latex_links_file"], entry_id, enabled=False)
-    return redirect(url_for("latex_page", owner=target_owner))
-
-@app.get("/p/latex/<entry_id>")
-def view_public_latex(entry_id: str):
-    owner = request.args.get("owner", ADMIN_USERNAME)
-    paths = get_user_paths(owner)
-    if entry_id not in load_public_file_links(paths["public_latex_links_file"]): abort(404)
-    entry = next((e for e in load_history(paths["latex_history_file"]) if e["id"] == entry_id), None)
-    if not entry: abort(404)
-    return send_from_directory(paths["latex_dir"], entry["pdf_name"])
-
-# --- Reader Sharing ---
-@app.post("/reader/share/<entry_id>")
-@login_required
-def share_reader_entry(entry_id: str):
-    validate_csrf()
-
-    paths, target_owner = get_target_user_paths()
-
-    target_username = normalize_username(request.form.get("share_username", ""))
-    if target_username and target_username != target_owner and target_username in managed_usernames():
-        toggle_history_share(paths["reader_history_file"], entry_id, target_username, shared=True)
-    return redirect(url_for("reader_page", owner=target_owner))
-
-@app.post("/reader/unshare/<entry_id>")
-@login_required
-def unshare_reader_entry(entry_id: str):
-    validate_csrf()
-
-    paths, target_owner = get_target_user_paths()
-
-    target_username = normalize_username(request.form.get("unshare_username", ""))
-    if target_username: toggle_history_share(paths["reader_history_file"], entry_id, target_username, shared=False)
-    return redirect(url_for("reader_page", owner=target_owner))
-
-@app.post("/reader/public/<entry_id>/enable")
-@login_required
-def enable_public_reader_link(entry_id: str):
-    validate_csrf()
-
-    paths, target_owner = get_target_user_paths()
-
-    set_public_file_link(paths["public_reader_links_file"], entry_id, enabled=True)
-    return redirect(url_for("reader_page", owner=target_owner))
-
-@app.post("/reader/public/<entry_id>/disable")
-@login_required
-def disable_public_reader_link(entry_id: str):
-    validate_csrf()
-
-    paths, target_owner = get_target_user_paths()
-
-    set_public_file_link(paths["public_reader_links_file"], entry_id, enabled=False)
-    return redirect(url_for("reader_page", owner=target_owner))
-
-@app.get("/p/reader/<entry_id>")
-def view_public_reader(entry_id: str):
-    owner = request.args.get("owner", ADMIN_USERNAME)
-    paths = get_user_paths(owner)
-    if entry_id not in load_public_file_links(paths["public_reader_links_file"]): abort(404)
-    entry = next((e for e in load_history(paths["reader_history_file"]) if e["id"] == entry_id), None)
-    if not entry: abort(404)
-    return send_from_directory(paths["reader_dir"], entry["content_filename"])
+    return {"ok": True}

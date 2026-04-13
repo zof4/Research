@@ -2,299 +2,305 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Dropper Workspace</title>
-    <!-- Use Tailwind CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        slate: {
-                            850: '#151f32',
-                            900: '#0f172a',
-                        }
-                    }
-                }
-            }
-        }
-    </script>
-    <!-- Vue 3 CDN -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dropper</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #0f172a; color: #f8fafc; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         [v-cloak] { display: none; }
-        .dropzone-overlay {
-            position: fixed; inset: 0; z-index: 50; background: rgba(99, 102, 241, 0.9);
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            opacity: 0; pointer-events: none; transition: opacity 0.2s; color: white;
-        }
-        .dropzone-overlay.active { opacity: 1; pointer-events: auto; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
 
-        .masonry-grid {
-            column-count: 1;
-            column-gap: 1.5rem;
-        }
-        @media (min-width: 640px) { .masonry-grid { column-count: 2; } }
-        @media (min-width: 1024px) { .masonry-grid { column-count: 3; } }
-        @media (min-width: 1280px) { .masonry-grid { column-count: 4; } }
+        .viewer-enter-active, .viewer-leave-active { transition: opacity 0.3s ease; }
+        .viewer-enter-from, .viewer-leave-to { opacity: 0; }
 
-        .masonry-item {
-            break-inside: avoid;
-            margin-bottom: 1.5rem;
-            transform: translateZ(0); /* Fix for some webkit rendering issues */
-        }
-
-        /* Canvas mode styles */
-        .canvas-container {
-            position: relative;
-            width: 100%;
-            height: 100vh;
-            overflow: auto;
+        /* Canvas mode background */
+        .canvas-bg {
             background-color: #0f172a;
-            background-image: radial-gradient(#334155 1px, transparent 1px);
+            background-image: radial-gradient(#1e293b 1px, transparent 1px);
             background-size: 20px 20px;
-            cursor: grab;
         }
-        .canvas-container:active { cursor: grabbing; }
 
-        .canvas-node {
-            position: absolute;
-            width: 300px;
-            cursor: grab;
-            transition: box-shadow 0.2s;
-        }
-        .canvas-node:active { cursor: grabbing; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); z-index: 10; }
+        /* Scrollbar styles for cleaner look */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
 
-        .type-badge {
-            font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
-            padding: 0.125rem 0.375rem; border-radius: 9999px;
+        .grid-layout {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1rem;
         }
-        .bg-file { background: #3b82f6; color: white; }
-        .bg-note { background: #10b981; color: white; }
-        .bg-reader { background: #f59e0b; color: white; }
-        .bg-html { background: #8b5cf6; color: white; }
-        .bg-pdf { background: #ef4444; color: white; }
-
-        /* Viewer Overlay */
-        .viewer-overlay {
-            position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 40;
-            display: flex; flex-direction: column; opacity: 0; pointer-events: none; transition: opacity 0.2s;
-        }
-        .viewer-overlay.active { opacity: 1; pointer-events: auto; }
     </style>
 </head>
-<body>
-    <!-- Inject CSRF token from Flask -->
-    <script>window.csrfToken = "{{ csrf_token }}"; window.username = "{{ current_username }}";</script>
-
+<body class="bg-slate-900 text-slate-200 h-screen overflow-hidden selection:bg-indigo-500/30">
     {% raw %}
-<div id="app" v-cloak class="h-screen flex flex-col">
-        <!-- Global Dropzone Overlay -->
-        <div class="dropzone-overlay" :class="{ 'active': isDragging }" @dragenter.prevent="handleDragEnter" @dragleave.prevent="handleDragLeave" @dragover.prevent @drop.prevent="handleDrop">
-            <svg class="w-24 h-24 mb-4 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
-            <h2 class="text-3xl font-bold">Drop to Upload & Save</h2>
-            <p class="mt-2 text-indigo-200">Files, images, or links.</p>
+    <div id="app" v-cloak
+         class="h-full flex flex-col"
+         @dragenter.prevent="handleDragEnter"
+         @dragover.prevent
+         @dragleave.prevent="handleDragLeave"
+         @drop.prevent="handleDrop">
+
+        <!-- Global Drag & Drop Overlay -->
+        <div v-if="isDragging" class="fixed inset-0 z-50 bg-indigo-500/10 backdrop-blur-sm border-4 border-dashed border-indigo-500/50 flex flex-col items-center justify-center pointer-events-none transition-all">
+            <div class="bg-slate-800 p-6 rounded-2xl shadow-2xl flex flex-col items-center gap-4">
+                <div class="w-16 h-16 bg-indigo-500/20 rounded-full flex items-center justify-center">
+                    <svg class="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                </div>
+                <h2 class="text-2xl font-bold text-white">Drop to upload</h2>
+            </div>
         </div>
 
-        <!-- Top Navigation -->
-        <header class="bg-slate-900 border-b border-slate-800 p-4 flex items-center justify-between sticky top-0 z-20">
-            <div class="flex items-center gap-4">
-                <h1 class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-                    <span class="bg-indigo-600 text-white w-8 h-8 rounded flex items-center justify-center font-black">D</span>
-                    Dropper
-                </h1>
+        <!-- Main Layout -->
+        <div class="flex flex-1 overflow-hidden">
 
-                <!-- View Toggle -->
-                <div class="flex bg-slate-800 rounded-lg p-1 ml-4 border border-slate-700">
-                    <button @click="viewMode = 'grid'" :class="viewMode === 'grid' ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-white'" class="px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
-                        Grid
+            <!-- Sidebar -->
+            <div class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col">
+                <div class="p-4 flex items-center justify-between border-b border-slate-800">
+                    <a href="/" class="text-white font-bold text-lg flex items-center gap-2">
+                        <span class="bg-indigo-600 text-white p-1 rounded">Dr</span>
+                        Dropper
+                    </a>
+                </div>
+
+                <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-1">
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-4 px-2">Views</p>
+                    <button @click="currentFilter = 'all'" :class="['flex items-center gap-3 px-3 py-2 rounded-lg transition-colors w-full text-left', currentFilter === 'all' ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200']">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+                        All Items
                     </button>
-                    <button @click="viewMode = 'canvas'" :class="viewMode === 'canvas' ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-white'" class="px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-2">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"></path></svg>
-                        Canvas
+                    <button @click="currentFilter = 'file'" :class="['flex items-center gap-3 px-3 py-2 rounded-lg transition-colors w-full text-left', currentFilter === 'file' ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200']">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
+                        Files
                     </button>
+                    <button @click="currentFilter = 'note'" :class="['flex items-center gap-3 px-3 py-2 rounded-lg transition-colors w-full text-left', currentFilter === 'note' ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200']">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        Notes
+                    </button>
+                    <button @click="currentFilter = 'html'" :class="['flex items-center gap-3 px-3 py-2 rounded-lg transition-colors w-full text-left', currentFilter === 'html' ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200']">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                        HTML Pages
+                    </button>
+
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6 px-2">Folders</p>
+                    <div class="text-sm text-slate-500 px-3 italic">Folders coming soon</div>
+                </div>
+
+                <div class="p-4 border-t border-slate-800">
+                    <a href="/access" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        Settings
+                    </a>
                 </div>
             </div>
 
-            <!-- Global Input / Omnibar -->
-            <div class="flex-1 max-w-2xl mx-8 relative">
-                <input
-                    type="text"
-                    v-model="omniInput"
-                    @keydown.enter="submitOmni"
-                    placeholder="Paste a link, write a note, or search..."
-                    class="w-full bg-slate-800 border border-slate-700 rounded-full py-2.5 pl-5 pr-12 text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                >
-                <button @click="handleOmniAction" class="absolute right-2 top-1.5 p-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full transition-colors" aria-label="Add item or upload files">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                </button>
-                <input
-                    ref="mobileUploadInput"
-                    type="file"
-                    multiple
-                    class="hidden"
-                    @change="handleMobileUploadSelection"
-                >
-            </div>
+            <!-- Content Area -->
+            <div class="flex-1 flex flex-col bg-[#0b1120] relative">
 
-            <div class="flex items-center gap-4">
-                <a href="/access" class="text-sm font-medium text-slate-300 hover:text-white bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">Access</a>
-            </div>
-        </header>
+                <!-- Topbar -->
+                <div class="h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-900/50 backdrop-blur sticky top-0 z-10">
+                    <div class="flex items-center gap-4 flex-1">
+                        <!-- Omni Input -->
+                        <div class="relative w-full max-w-2xl group">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <svg class="w-5 h-5 text-slate-500 group-focus-within:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                            </div>
+                            <input v-model="omniInput" @keydown.enter="submitOmni" type="text"
+                                class="w-full bg-slate-800/50 border border-slate-700 text-slate-200 text-sm rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 block pl-10 pr-12 py-2.5 transition-all placeholder-slate-500"
+                                placeholder="Paste text, search, or enter a URL...">
+                            <div class="absolute inset-y-0 right-0 flex items-center pr-2">
+                                <span class="text-xs text-slate-500 border border-slate-700 rounded px-1.5 py-0.5 bg-slate-800">↵</span>
+                            </div>
+                        </div>
+                    </div>
 
-        <!-- Main Content Area -->
-        <main class="flex-1 overflow-hidden relative">
+                    <div class="flex items-center gap-3">
+                        <select v-model="sortBy" class="bg-slate-800 border border-slate-700 text-slate-300 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2">
+                            <option value="date">Sort by Date</option>
+                            <option value="name">Sort by Name</option>
+                        </select>
 
-            <!-- Grid View -->
-            <div v-if="viewMode === 'grid'" class="h-full overflow-y-auto p-6 md:p-8">
-
-                <div v-if="loading" class="flex justify-center items-center h-64 text-slate-500">
-                    <svg class="animate-spin h-8 w-8 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        <div class="flex bg-slate-800 rounded-lg p-1 border border-slate-700">
+                            <button @click="viewMode = 'grid'" :class="['p-1.5 rounded transition-colors', viewMode === 'grid' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white']">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+                            </button>
+                            <button @click="viewMode = 'canvas'" :class="['p-1.5 rounded transition-colors', viewMode === 'canvas' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white']">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
-                <div v-else-if="filteredItems.length === 0" class="flex flex-col items-center justify-center h-64 text-slate-500">
-                    <svg class="w-16 h-16 mb-4 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path></svg>
-                    <p class="text-lg">No items found.</p>
-                    <p class="text-sm mt-1">Drag and drop files or paste text above to get started.</p>
-                </div>
+                <!-- Main Feed (Grid View) -->
+                <div v-if="viewMode === 'grid'" class="flex-1 overflow-y-auto p-6" @paste="handlePaste">
+                    <div v-if="loading" class="flex items-center justify-center h-64 text-slate-500">
+                        <svg class="animate-spin h-8 w-8 text-indigo-500" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </div>
+                    <div v-else-if="filteredItems.length === 0" class="flex flex-col items-center justify-center h-64 text-slate-500">
+                        <svg class="w-16 h-16 mb-4 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path></svg>
+                        <p class="text-lg">No items here yet</p>
+                        <p class="text-sm mt-1">Paste text, drag files, or use the omnibar above.</p>
+                    </div>
 
-                <div v-else class="masonry-grid">
-                    <div v-for="item in filteredItems" :key="item.id" class="masonry-item">
-                        <div class="bg-slate-800 border border-slate-700 rounded-xl p-5 hover:border-slate-500 transition-colors cursor-pointer shadow-sm group" @click="openItem(item)">
+                    <div v-else class="grid-layout">
+                        <div v-for="item in filteredItems" :key="item.id"
+                             class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden shadow-sm hover:shadow-md hover:border-slate-600 transition-all flex flex-col group relative"
+                             @click="openItem(item)">
 
-                            <div class="flex justify-between items-start mb-3">
-                                <span :class="['type-badge', 'bg-' + item.type]">{{ item.type }}</span>
-                                <span class="text-xs text-slate-500">{{ formatDate(item.updated) }}</span>
-                            </div>
+                            <!-- Type Indicator Banner -->
+                            <div class="h-1 w-full" :class="{
+                                'bg-indigo-500': item.type === 'note',
+                                'bg-emerald-500': item.type === 'file',
+                                'bg-orange-500': item.type === 'html',
+                                'bg-red-500': item.type === 'pdf',
+                                'bg-purple-500': item.type === 'reader'
+                            }"></div>
 
-                            <h3 class="text-lg font-bold text-white mb-2 leading-tight">{{ item.title }}</h3>
+                            <div class="p-4 flex-1 flex flex-col max-h-64">
+                                <div class="flex items-start justify-between mb-2">
+                                    <h3 class="font-semibold text-slate-200 truncate pr-4" :title="item.title">{{ item.title }}</h3>
 
-                            <!-- File preview -->
-                            <div v-if="item.type === 'file'" class="mt-4 flex items-center justify-between text-sm text-slate-400">
-                                <span class="flex items-center gap-1">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
-                                    {{ formatSize(item.size) }}
-                                </span>
-                            </div>
-
-                            <!-- Note / Reader / Text content preview -->
-                            <div v-else-if="item.content" class="text-sm text-slate-300 line-clamp-4 mt-2">
-                                {{ item.content }}
-                            </div>
-
-                            <!-- HTML preview -->
-                            <div v-if="item.type === 'html'" class="mt-4 bg-slate-900 rounded p-3 text-xs font-mono text-slate-400 border border-slate-700/50 line-clamp-3">
-                                {{ item.content }}
-                            </div>
-
-                            <div class="mt-4 pt-4 border-t border-slate-700/50 flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                <div class="text-xs text-slate-500 truncate mr-2">{{ item.owner }}</div>
-                                <div class="flex gap-2">
-                                    <button v-if="item.url" @click.stop="downloadItem(item)" class="p-1.5 text-slate-400 hover:text-white bg-slate-700 rounded transition-colors" title="Download / Open">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                                    </button>
-                                    <button @click.stop="deleteItem(item)" class="p-1.5 text-red-400 hover:text-white bg-red-400/10 hover:bg-red-500 rounded transition-colors" title="Delete">
+                                    <!-- Delete Button (Visible on hover) -->
+                                    <button @click.stop="deleteItem(item)" class="p-1 text-slate-500 hover:text-red-400 hover:bg-slate-700 rounded opacity-0 group-hover:opacity-100 transition-all">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                                     </button>
+                                </div>
+
+                                <div v-if="item.type === 'note'" class="flex-1 overflow-hidden relative">
+                                    <!-- Inline Edit textarea -->
+                                    <textarea v-if="editingId === item.id"
+                                              v-model="editContent"
+                                              @click.stop
+                                              @blur="saveEdit(item)"
+                                              @keydown.esc="editingId = null"
+                                              class="w-full h-full bg-slate-900 border border-indigo-500 rounded p-2 text-sm text-slate-300 focus:outline-none resize-none"
+                                              autofocus></textarea>
+                                    <div v-else class="text-sm text-slate-400 whitespace-pre-wrap font-mono line-clamp-6" @dblclick.stop="startEdit(item)">
+                                        {{ item.content }}
+                                    </div>
+                                    <div v-if="editingId !== item.id" class="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-slate-800 to-transparent pointer-events-none"></div>
+                                </div>
+
+                                <div v-else-if="item.type === 'file'" class="flex-1 flex flex-col items-center justify-center py-4">
+                                    <svg class="w-12 h-12 text-emerald-500/50 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                    <span class="text-xs font-mono text-slate-500">{{ formatSize(item.size) }}</span>
+                                </div>
+
+                                <div v-else class="flex-1 flex flex-col items-center justify-center py-4">
+                                    <svg class="w-12 h-12 text-slate-500/50 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                                </div>
+                            </div>
+
+                            <div class="px-4 py-3 bg-slate-800/50 border-t border-slate-700/50 flex items-center justify-between mt-auto">
+                                <span class="text-xs text-slate-500">{{ formatDate(item.updated) }}</span>
+                                <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-slate-700 text-slate-300">
+                                    {{ item.type }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Canvas Mode View -->
+                <div v-else class="flex-1 overflow-hidden relative canvas-bg"
+                     @mousedown="startCanvasPan" @mousemove="panCanvas" @mouseup="endCanvasPan" @mouseleave="endCanvasPan" @paste="handlePaste">
+                    <div :style="{ transform: `translate(${canvasX}px, ${canvasY}px)` }" class="origin-top-left absolute inset-0 transition-none">
+                        <div v-for="(item, index) in filteredItems" :key="item.id"
+                             class="canvas-node absolute w-64 bg-slate-800/90 backdrop-blur border border-slate-700 shadow-xl rounded-xl cursor-move group"
+                             :style="{ left: `${(index % 5) * 280 + 50}px`, top: `${Math.floor(index / 5) * 300 + 50}px` }"
+                             @mousedown.stop="startNodeDrag($event, item)">
+
+                            <div class="p-2 border-b border-slate-700/50 flex items-center justify-between cursor-move bg-slate-800 rounded-t-xl" :class="{'bg-indigo-900/50': item.type === 'note', 'bg-emerald-900/50': item.type === 'file'}">
+                                <span class="text-xs font-semibold text-slate-300 truncate pr-2">{{ item.title }}</span>
+                                <div class="flex gap-1">
+                                    <button @click.stop="openItem(item)" class="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                                    </button>
+                                    <button @click.stop="deleteItem(item)" class="p-1 hover:bg-red-500/20 rounded text-slate-400 hover:text-red-400 transition-colors">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="p-3 max-h-48 overflow-hidden pointer-events-none">
+                                <div v-if="item.type === 'note'" class="text-xs text-slate-400 font-mono whitespace-pre-wrap line-clamp-5">{{ item.content }}</div>
+                                <div v-else-if="item.type === 'file'" class="text-center py-4 text-emerald-400/70">
+                                    <svg class="w-8 h-8 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                    <div class="text-[10px]">{{ formatSize(item.size) }}</div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Canvas View -->
-            <div v-else class="canvas-container" id="canvas-container" @mousedown="startCanvasPan" @mousemove="panCanvas" @mouseup="endCanvasPan" @mouseleave="endCanvasPan">
-                <div class="canvas-surface" :style="{ transform: `translate(${canvasX}px, ${canvasY}px)` }">
-                    <!-- Draw lines between nodes if we had relationships (optional future feature) -->
-
-                    <!-- Nodes -->
-                    <div v-for="(item, index) in filteredItems" :key="item.id"
-                         class="canvas-node bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-lg"
-                         :style="{ left: `${(index % 4) * 350 + 100}px`, top: `${Math.floor(index / 4) * 300 + 100}px` }"
-                         @mousedown.stop="startNodeDrag($event, item)"
-                         @click="openItem(item)">
-
-                        <div class="flex justify-between items-start mb-2">
-                            <span :class="['type-badge', 'bg-' + item.type]">{{ item.type }}</span>
-                        </div>
-                        <h3 class="text-base font-bold text-white mb-2 leading-tight truncate">{{ item.title }}</h3>
-                        <div v-if="item.content" class="text-xs text-slate-400 line-clamp-3">
-                            {{ item.content }}
-                        </div>
+                <!-- Toast Notification -->
+                <transition name="viewer">
+                    <div v-if="toastMessage" class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 border border-slate-700 text-white px-4 py-2 rounded-lg shadow-xl text-sm z-50 flex items-center gap-2">
+                        <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        {{ toastMessage }}
                     </div>
-                </div>
+                </transition>
             </div>
-
-        </main>
+        </div>
 
         <!-- Universal Viewer / Editor Overlay -->
-        <div class="viewer-overlay" :class="{'active': activeItem}" @click.self="closeViewer">
-            <div v-if="activeItem" class="bg-slate-900 w-full max-w-5xl h-full sm:h-[90vh] sm:rounded-2xl sm:my-auto sm:mx-auto flex flex-col overflow-hidden shadow-2xl border border-slate-700 transition-all transform scale-100" style="animation: modalPop 0.2s ease-out">
-
-                <!-- Viewer Header -->
-                <div class="px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+        <transition name="viewer">
+            <div v-if="activeItem" class="fixed inset-0 z-50 bg-slate-900/90 backdrop-blur flex flex-col" @keydown.esc="closeViewer" tabindex="0" ref="viewerWrapper">
+                <div class="h-14 border-b border-slate-800 flex items-center justify-between px-4 bg-slate-900">
                     <div class="flex items-center gap-3">
-                        <span :class="['type-badge', 'bg-' + activeItem.type]">{{ activeItem.type }}</span>
-                        <h2 class="text-xl font-bold truncate">{{ activeItem.title }}</h2>
+                        <button @click="closeViewer" class="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                        </button>
+                        <h2 class="text-lg font-semibold text-slate-200 truncate max-w-md">{{ activeItem.title }}</h2>
+                        <span class="text-xs uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-slate-800 text-slate-400">{{ activeItem.type }}</span>
                     </div>
+
                     <div class="flex items-center gap-2">
-                        <a v-if="activeItem.type === 'html'" :href="'/html/view/' + activeItem.id" target="_blank" class="px-3 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded flex items-center gap-2 transition-colors">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
-                            Open in HTML Viewer
-                        </a>
-                        <a v-if="activeItem.url" :href="activeItem.url" target="_blank" class="px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-white rounded flex items-center gap-2 transition-colors">
+                        <button v-if="activeItem.url" @click="downloadItem(activeItem)" class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-300 hover:text-white bg-slate-800 rounded-lg transition-colors border border-slate-700 hover:border-slate-600">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                            Download
-                        </a>
-                        <button @click="closeViewer" class="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors ml-2">
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            Download / Open
                         </button>
                     </div>
                 </div>
 
-                <!-- Viewer Body -->
-                <div class="flex-1 overflow-y-auto p-6 bg-slate-900">
+                <div class="flex-1 overflow-hidden relative bg-black">
+                    <!-- HTML Viewer -->
+                    <iframe v-if="activeItem.type === 'html' && activeItem.url"
+                            :src="'/html/ipad-viewer?url=' + encodeURIComponent(activeItem.url) + '&id=' + activeItem.id"
+                            class="w-full h-full border-0 bg-white"></iframe>
 
-                    <!-- File Viewer (placeholder since files are just downloads) -->
-                    <div v-if="activeItem.type === 'file'" class="flex flex-col items-center justify-center h-full text-slate-400">
-                        <svg class="w-24 h-24 mb-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                        <p class="text-xl font-medium text-white mb-2">{{ activeItem.title }}</p>
-                        <p>{{ formatSize(activeItem.size) }} · Uploaded {{ formatDate(activeItem.updated) }}</p>
-                        <a :href="activeItem.url" target="_blank" class="mt-6 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors font-medium">Download File</a>
+                    <!-- PDF / File / Reader Viewer -->
+                    <iframe v-else-if="activeItem.url && ['pdf', 'reader', 'file'].includes(activeItem.type)"
+                            :src="activeItem.url"
+                            class="w-full h-full border-0 bg-slate-100"></iframe>
+
+                    <!-- Note Editor -->
+                    <div v-else-if="activeItem.type === 'note'" class="h-full w-full max-w-4xl mx-auto p-6 bg-slate-900 border-x border-slate-800 flex flex-col">
+                        <textarea v-model="activeItem.content"
+                                  @blur="saveEdit(activeItem)"
+                                  class="flex-1 w-full bg-transparent text-slate-300 font-mono text-base focus:outline-none resize-none"
+                                  placeholder="Type your note here..."></textarea>
                     </div>
 
-                    <!-- Note / HTML / PDF Source Viewer -->
-                    <div v-else-if="['note', 'html', 'pdf', 'reader', 'chat', 'board_node'].includes(activeItem.type)" class="h-full">
-                        <!-- We use a readonly textarea for source or plain div for read mode. For this fast iteration, a styled content area is great -->
-                        <div class="bg-slate-800 border border-slate-700 rounded-lg p-6 h-full overflow-y-auto whitespace-pre-wrap font-mono text-sm text-slate-300 leading-relaxed">
-{{ activeItem.content }}
-                        </div>
+                    <div v-else class="flex items-center justify-center h-full text-slate-500">
+                        Cannot preview this item directly. Download to view.
                     </div>
                 </div>
             </div>
-        </div>
+        </transition>
 
-        <!-- Toast -->
-        <div v-if="toastMessage" class="fixed bottom-4 right-4 bg-indigo-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 z-50 transform transition-all duration-300">
-            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-            {{ toastMessage }}
-        </div>
     </div>
+
 {% endraw %}
-
-    <style>
-        @keyframes modalPop {
-            from { opacity: 0; transform: scale(0.95); }
-            to { opacity: 1; transform: scale(1); }
-        }
-    </style>
-
     <script>
-        const { createApp } = Vue
+        window.csrfToken = "{{ session.get('csrf_token', '') }}";
+        window.username = "{{ session.get('username', 'Guest') }}";
+
+        const { createApp } = Vue;
 
         createApp({
             data() {
@@ -302,36 +308,54 @@
                     items: [],
                     loading: true,
                     omniInput: '',
-                    viewMode: 'grid', // 'grid' or 'canvas'
-                    isDragging: false,
                     toastMessage: '',
                     activeItem: null,
-                    // Canvas panning state
-                    canvasX: 0,
-                    canvasY: 0,
+                    isDragging: false,
+                    viewMode: 'grid', // 'grid' | 'canvas'
+                    currentFilter: 'all', // 'all' | 'file' | 'note' | 'html'
+                    sortBy: 'date', // 'date' | 'name'
+
+                    // Inline Edit
+                    editingId: null,
+                    editContent: '',
+
+                    // Canvas state
                     isPanning: false,
-                    startX: 0,
-                    startY: 0
+                    startX: 0, startY: 0,
+                    canvasX: 0, canvasY: 0,
                 }
             },
             computed: {
                 filteredItems() {
-                    if (!this.omniInput) return this.items;
-                    const q = this.omniInput.toLowerCase();
-                    return this.items.filter(item =>
-                        (item.title && item.title.toLowerCase().includes(q)) ||
-                        (item.content && item.content.toLowerCase().includes(q))
-                    );
+                    let result = this.items;
+
+                    if (this.currentFilter !== 'all') {
+                        result = result.filter(i => i.type === this.currentFilter);
+                    }
+
+                    result = result.sort((a, b) => {
+                        if (this.sortBy === 'name') {
+                            return a.title.localeCompare(b.title);
+                        } else {
+                            // Date sort (newest first)
+                            return new Date(b.updated || 0) - new Date(a.updated || 0);
+                        }
+                    });
+
+                    return result;
                 }
             },
             mounted() {
                 this.fetchItems();
 
-                // Setup global paste listener
-                window.addEventListener('paste', this.handlePaste);
-            },
-            beforeUnmount() {
-                window.removeEventListener('paste', this.handlePaste);
+                // Add keyboard shortcut for search/omnibar
+                document.addEventListener('keydown', (e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                        e.preventDefault();
+                        const input = document.querySelector('input[type="text"]');
+                        if (input) input.focus();
+                    }
+                });
             },
             methods: {
                 async fetchItems() {
@@ -353,11 +377,10 @@
                     const text = this.omniInput.trim();
                     if (!text) return;
 
-                    // Optimistic update
                     const tempId = 'temp-' + Date.now();
                     this.items.unshift({
                         id: tempId,
-                        type: 'note', // assume note until server says otherwise
+                        type: 'note',
                         title: text.substring(0, 30) + '...',
                         content: text,
                         updated: new Date().toISOString(),
@@ -376,8 +399,8 @@
                         });
                         const data = await res.json();
                         if (data.ok) {
-                            this.showToast(data.type === 'reader' ? 'Page cached!' : 'Saved!');
-                            this.fetchItems(); // refresh to get true data
+                            this.showToast('Saved!');
+                            this.fetchItems();
                         } else {
                             this.showToast('Error: ' + data.error);
                             this.items = this.items.filter(i => i.id !== tempId);
@@ -388,27 +411,48 @@
                     }
                 },
 
-                handleOmniAction() {
-                    const isMobile = window.matchMedia('(max-width: 768px), (pointer: coarse)').matches;
-                    if (isMobile) {
-                        this.$refs.mobileUploadInput?.click();
-                        return;
-                    }
-                    this.submitOmni();
+                // Inline Editing
+                startEdit(item) {
+                    if (item.type !== 'note') return;
+                    this.editingId = item.id;
+                    this.editContent = item.content;
                 },
+                async saveEdit(item) {
+                    if (this.editingId !== item.id) return;
 
-                async handleMobileUploadSelection(event) {
-                    const input = event.target;
-                    const files = input?.files;
-                    if (!files || files.length === 0) return;
-                    await this.uploadFiles(files);
-                    input.value = '';
+                    const newContent = this.editContent.trim();
+                    this.editingId = null;
+
+                    if (newContent === item.content) return;
+
+                    const oldContent = item.content;
+                    item.content = newContent; // Optimistic
+
+                    try {
+                        const res = await fetch('/api/edit', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': window.csrfToken
+                            },
+                            body: JSON.stringify({ id: item.id, type: item.type, content: newContent })
+                        });
+                        const data = await res.json();
+                        if (data.ok) {
+                            this.showToast('Updated note');
+                        } else {
+                            item.content = oldContent;
+                            this.showToast('Failed to update note.');
+                        }
+                    } catch (e) {
+                        item.content = oldContent;
+                        this.showToast('Failed to update note.');
+                    }
                 },
 
                 // Drag and Drop
                 handleDragEnter(e) { this.isDragging = true; },
                 handleDragLeave(e) {
-                    // Make sure we only unset when leaving the screen, not children
                     if (e.clientX === 0 || e.clientY === 0) {
                         this.isDragging = false;
                     }
@@ -428,7 +472,6 @@
                 },
 
                 async handlePaste(e) {
-                    // Ignore if typing in an input/textarea
                     if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
 
                     const items = (e.clipboardData || e.originalEvent.clipboardData).items;
@@ -443,9 +486,8 @@
                         }
                     }
 
-                    // If no file, let the browser paste text natively or handle it:
                     const text = (e.clipboardData || window.clipboardData).getData('text');
-                    if (text && !this.activeItem) {
+                    if (text && !this.activeItem && !this.editingId) {
                         this.omniInput = text;
                         this.submitOmni();
                     }
@@ -466,7 +508,7 @@
                         });
                         const data = await res.json();
                         if (data.ok) {
-                            this.showToast(data.message || 'Files uploaded!');
+                            this.showToast('Files uploaded!');
                             this.fetchItems();
                         } else {
                             this.showToast('Upload failed: ' + data.error);
@@ -477,56 +519,48 @@
                 },
 
                 async deleteItem(item) {
+                    // Quick check so we don't accidentally click it
                     if (!confirm(`Delete ${item.title}?`)) return;
 
-                    let endpoint = '';
-                    if (item.type === 'file') endpoint = `/delete/${encodeURIComponent(item.id)}`;
-                    else if (item.type === 'note') endpoint = `/text/delete/${item.id}`;
-                    else if (item.type === 'reader') endpoint = `/reader/delete/${item.id}`;
-                    else if (item.type === 'html') endpoint = `/html/delete/${item.id}`;
-                    else if (item.type === 'pdf') endpoint = `/latex/delete/${item.id}`;
-                    else {
-                        this.showToast('Cannot delete this type from here yet.');
-                        return;
-                    }
+                    const oldItems = [...this.items];
+                    this.items = this.items.filter(i => i.id !== item.id); // Optimistic
 
                     try {
-                        const res = await fetch(endpoint, {
+                        const res = await fetch('/api/delete', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
-                                'Accept': 'application/json',
                                 'X-CSRFToken': window.csrfToken
-                            }
+                            },
+                            body: JSON.stringify({ id: item.id, type: item.type })
                         });
                         const data = await res.json();
                         if (data.ok) {
-                            this.items = this.items.filter(i => i.id !== item.id);
                             this.showToast('Deleted');
                         } else {
+                            this.items = oldItems;
                             this.showToast('Failed to delete.');
                         }
                     } catch (e) {
+                        this.items = oldItems;
                         this.showToast('Failed to delete.');
                     }
                 },
 
                 downloadItem(item) {
-                    if (item.url) {
-                        window.open(item.url, '_blank');
-                    }
+                    if (item.url) window.open(item.url, '_blank');
                 },
 
                 openItem(item) {
                     this.activeItem = item;
+                    if (this.$refs.viewerWrapper) this.$refs.viewerWrapper.focus();
                 },
                 closeViewer() {
                     this.activeItem = null;
                 },
 
-                // Canvas panning logic
+                // Canvas logic
                 startCanvasPan(e) {
-                    // Don't pan if clicking on a node
                     if (e.target.closest('.canvas-node')) return;
                     this.isPanning = true;
                     this.startX = e.clientX - this.canvasX;
@@ -541,8 +575,6 @@
                     this.isPanning = false;
                 },
                 startNodeDrag(e, item) {
-                    // Simple drag implementation for demo purposes
-                    // In a full app, we would save coords to the backend
                     let el = e.currentTarget;
                     let startX = e.clientX;
                     let startY = e.clientY;
@@ -562,7 +594,6 @@
                     document.addEventListener('mouseup', onEnd);
                 },
 
-                // Utils
                 showToast(msg) {
                     this.toastMessage = msg;
                     setTimeout(() => { this.toastMessage = ''; }, 3000);
@@ -576,9 +607,8 @@
                 formatDate(isoString) {
                     if (!isoString) return '';
                     const d = new Date(isoString);
-                    // if invalid date
                     if (isNaN(d.getTime())) return isoString;
-                    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    return d.toLocaleDateString();
                 }
             }
         }).mount('#app')
