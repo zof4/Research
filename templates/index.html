@@ -344,7 +344,9 @@
                   {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
                   <label class="field">
                     <span>Choose files</span>
-                    <input type="file" name="file" multiple required />
+                    <input id="file-upload-input" type="file" name="file" multiple required class="sr-only" data-upload-input />
+                    <button type="button" class="button button-secondary button-block" data-upload-picker-trigger>Select files to upload</button>
+                    <span class="text-xs text-slate-400" data-upload-selection-text>No files selected</span>
                   </label>
                   <div class="upload-progress is-hidden" data-upload-progress aria-live="polite">
                     <p class="upload-progress-label"><span data-upload-progress-text>Preparing upload…</span></p>

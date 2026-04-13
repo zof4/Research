@@ -1185,6 +1185,16 @@
   });
 
   document.addEventListener("click", async (event) => {
+    const uploadPickerTrigger = event.target.closest("[data-upload-picker-trigger]");
+    if (uploadPickerTrigger instanceof HTMLElement) {
+      const form = uploadPickerTrigger.closest("form");
+      const fileInput = form?.querySelector("[data-upload-input]");
+      if (fileInput instanceof HTMLInputElement) {
+        fileInput.click();
+      }
+      return;
+    }
+
     const link = event.target.closest("a[data-async-nav]");
     if (!(link instanceof HTMLAnchorElement)) {
       return;
@@ -1210,6 +1220,31 @@
     } catch (_error) {
       window.location.assign(url);
     }
+  });
+
+  document.addEventListener("change", (event) => {
+    const fileInput = event.target;
+    if (!(fileInput instanceof HTMLInputElement) || !fileInput.matches("[data-upload-input]")) {
+      return;
+    }
+
+    const form = fileInput.closest("form");
+    const selectionText = form?.querySelector("[data-upload-selection-text]");
+    if (!(selectionText instanceof HTMLElement)) {
+      return;
+    }
+
+    if (!fileInput.files || fileInput.files.length === 0) {
+      selectionText.textContent = "No files selected";
+      return;
+    }
+
+    if (fileInput.files.length === 1) {
+      selectionText.textContent = fileInput.files[0].name;
+      return;
+    }
+
+    selectionText.textContent = `${fileInput.files.length} files selected`;
   });
 
   window.addEventListener("popstate", () => {
