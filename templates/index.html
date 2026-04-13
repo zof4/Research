@@ -1394,6 +1394,22 @@
                 <button type="button" class="button button-danger" data-whiteboard-delete>Delete selected</button>
               </div>
 
+              <form method="post" action="{{ url_for('upload_file') }}" enctype="multipart/form-data" class="stack-form" data-async data-upload-form>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
+                <label class="field">
+                  <span>Upload while in board</span>
+                  <input type="file" name="file" multiple required class="sr-only" data-upload-input />
+                  <button type="button" class="button button-secondary button-block" data-upload-picker-trigger>Select files to upload</button>
+                  <span class="text-xs text-slate-400" data-upload-selection-text>No files selected</span>
+                </label>
+                <div class="upload-progress is-hidden" data-upload-progress aria-live="polite">
+                  <p class="upload-progress-label"><span data-upload-progress-text>Preparing upload…</span></p>
+                  <div class="progress" aria-hidden="true"><span data-upload-progress-bar style="width: 0%"></span></div>
+                </div>
+                <button type="submit" class="button button-primary button-block">Upload files</button>
+              </form>
+
               <form class="stack-form" data-whiteboard-editor>
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
                 <label class="field">
@@ -1425,13 +1441,25 @@
             </aside>
 
             <article class="panel whiteboard-surface">
-              <div class="whiteboard-toolbar">
+              <div class="whiteboard-toolbar stack-form">
                 <p class="eyebrow">Virtual board</p>
+                <div class="button-row">
+                  <button type="button" class="button button-secondary" data-whiteboard-view="canvas" aria-pressed="true">Canvas mode</button>
+                  <button type="button" class="button button-secondary" data-whiteboard-view="grid" aria-pressed="false">Grid mode</button>
+                </div>
+                <div class="button-row">
+                  <a class="button button-secondary" href="{{ ui.page_url('files_page', is_admin, selected_owner) }}" data-async-nav>Files</a>
+                  <a class="button button-secondary" href="{{ ui.page_url('text_page', is_admin, selected_owner) }}" data-async-nav>Notes</a>
+                  <a class="button button-secondary" href="{{ ui.page_url('reader_page', is_admin, selected_owner) }}" data-async-nav>Reader</a>
+                  <a class="button button-secondary" href="{{ ui.page_url('latex_page', is_admin, selected_owner) }}" data-async-nav>PDF</a>
+                  <a class="button button-secondary" href="{{ ui.page_url('html_page', is_admin, selected_owner) }}" data-async-nav>HTML</a>
+                </div>
                 <p class="panel-note" data-whiteboard-status>Select or add a card to begin.</p>
               </div>
               <div class="whiteboard-canvas" data-whiteboard-canvas>
                 <svg class="whiteboard-links" data-whiteboard-links aria-hidden="true"></svg>
               </div>
+              <div class="record-list is-hidden" data-whiteboard-grid></div>
             </article>
           </section>
           <script id="whiteboard-initial" type="application/json">{{ whiteboard_state|tojson }}</script>
