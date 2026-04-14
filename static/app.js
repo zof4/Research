@@ -435,21 +435,24 @@
   const getStoredAppearance = () => {
     let interfaceMode = "clean";
     let toneMode = "dark";
+    let paletteMode = "mono";
 
     try {
       interfaceMode = window.localStorage.getItem("dropper-interface") || interfaceMode;
       toneMode = window.localStorage.getItem("dropper-tone") || toneMode;
+      paletteMode = window.localStorage.getItem("dropper-palette") || paletteMode;
     } catch (_error) {
       // fall back to defaults
     }
 
-    return { interfaceMode, toneMode };
+    return { interfaceMode, toneMode, paletteMode };
   };
 
   const applyAppearance = () => {
-    const { interfaceMode, toneMode } = getStoredAppearance();
+    const { interfaceMode, toneMode, paletteMode } = getStoredAppearance();
     document.documentElement.dataset.interface = interfaceMode;
     document.documentElement.dataset.tone = toneMode;
+    document.documentElement.dataset.palette = paletteMode;
 
     document.querySelectorAll("[data-appearance-interface]").forEach((button) => {
       button.classList.toggle("is-active", button.getAttribute("data-appearance-interface") === interfaceMode);
@@ -457,6 +460,10 @@
 
     document.querySelectorAll("[data-appearance-tone]").forEach((button) => {
       button.classList.toggle("is-active", button.getAttribute("data-appearance-tone") === toneMode);
+    });
+
+    document.querySelectorAll("[data-appearance-palette]").forEach((button) => {
+      button.classList.toggle("is-active", button.getAttribute("data-appearance-palette") === paletteMode);
     });
   };
 
@@ -471,8 +478,13 @@
     document.addEventListener("click", (event) => {
       const interfaceButton = event.target.closest("[data-appearance-interface]");
       const toneButton = event.target.closest("[data-appearance-tone]");
+      const paletteButton = event.target.closest("[data-appearance-palette]");
 
-      if (!(interfaceButton instanceof HTMLButtonElement) && !(toneButton instanceof HTMLButtonElement)) {
+      if (
+        !(interfaceButton instanceof HTMLButtonElement) &&
+        !(toneButton instanceof HTMLButtonElement) &&
+        !(paletteButton instanceof HTMLButtonElement)
+      ) {
         return;
       }
 
@@ -484,6 +496,11 @@
       if (toneButton instanceof HTMLButtonElement) {
         const nextTone = toneButton.getAttribute("data-appearance-tone") || "dark";
         window.localStorage.setItem("dropper-tone", nextTone);
+      }
+
+      if (paletteButton instanceof HTMLButtonElement) {
+        const nextPalette = paletteButton.getAttribute("data-appearance-palette") || "mono";
+        window.localStorage.setItem("dropper-palette", nextPalette);
       }
 
       applyAppearance();

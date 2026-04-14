@@ -32,9 +32,11 @@
         try {
           document.documentElement.dataset.interface = localStorage.getItem("dropper-interface") || "clean";
           document.documentElement.dataset.tone = localStorage.getItem("dropper-tone") || "dark";
+          document.documentElement.dataset.palette = localStorage.getItem("dropper-palette") || "mono";
         } catch (_error) {
           document.documentElement.dataset.interface = "clean";
           document.documentElement.dataset.tone = "dark";
+          document.documentElement.dataset.palette = "mono";
         }
       })();
     </script>
@@ -321,6 +323,10 @@
                   <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
                   {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
                   <label class="field">
+                    <span>Folder (optional)</span>
+                    <input type="text" name="folder" list="file-folder-suggestions" maxlength="120" placeholder="examples/project-a" />
+                  </label>
+                  <label class="field">
                     <span>Choose files</span>
                     <input id="file-upload-input" type="file" name="file" multiple required class="sr-only" data-upload-input />
                     <button type="button" class="button button-secondary button-block" data-upload-picker-trigger>Select files to upload</button>
@@ -359,10 +365,16 @@
                 </div>
                 <label class="field">
                   <span>Search by name, owner, type, or shared user</span>
+                  <span>Also searches folder names.</span>
                   <input type="search" data-list-filter-input="files" placeholder="Start typing to filter files" />
                 </label>
               </article>
             </aside>
+            <datalist id="file-folder-suggestions">
+              {% for folder_name in file_folders %}
+              <option value="{{ folder_name }}"></option>
+              {% endfor %}
+            </datalist>
 
             <div class="workspace-main" data-files-live-region>
               {% if is_admin %}
@@ -378,7 +390,7 @@
                   {% if group.files %}
                   <div class="record-list" data-list-filter-list="files">
                     {% for file in group.files %}
-                    <article class="record" data-list-filter-item data-filter-text="{{ file.name }} {{ file.owner }} {{ file.type }} {{ file.shared_with|join(' ') }}">
+                    <article class="record" data-list-filter-item data-filter-text="{{ file.name }} {{ file.owner }} {{ file.type }} {{ file.folder }} {{ file.shared_with|join(' ') }}">
                       <div class="record-main">
                         <div class="record-heading">
                           <a class="record-title" href="{{ url_for('download_file', filename=file.name, owner=file.owner) }}" target="_blank" rel="noopener noreferrer">{{ file.name }}</a>
@@ -388,6 +400,9 @@
                           </div>
                         </div>
                         <p class="record-meta">{{ file.modified.strftime('%b %d, %Y') }} · {{ file.owner }}</p>
+                        {% if file.folder %}
+                        <p class="record-meta">Folder · {{ file.folder }}</p>
+                        {% endif %}
                         {% if file.shared_with %}
                         <div class="chip-row">
                           {% for shared_user in file.shared_with %}
@@ -417,6 +432,14 @@
                                   </select>
                                 </label>
                                 <button type="submit" class="button button-secondary">Share file</button>
+                              </form>
+                              <form method="post" action="{{ url_for('set_file_folder_route', filename=file.name, owner=file.owner) }}" class="stack-form" data-async>
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                                <label class="field">
+                                  <span>Folder</span>
+                                  <input type="text" name="folder" value="{{ file.folder }}" list="file-folder-suggestions" maxlength="120" placeholder="Leave empty for root" />
+                                </label>
+                                <button type="submit" class="button button-secondary">Save folder</button>
                               </form>
                               {% if file.shared_with %}
                               <div class="chip-action-list">
@@ -490,7 +513,7 @@
                 </div>
                 <div class="record-list" data-list-filter-list="files">
                   {% for file in files %}
-                  <article class="record" data-list-filter-item data-filter-text="{{ file.name }} {{ file.owner }} {{ file.type }} {{ file.shared_with|join(' ') }}">
+                  <article class="record" data-list-filter-item data-filter-text="{{ file.name }} {{ file.owner }} {{ file.type }} {{ file.folder }} {{ file.shared_with|join(' ') }}">
                     <div class="record-main">
                       <div class="record-heading">
                         <a class="record-title" href="{{ url_for('download_file', filename=file.name, owner=file.owner) }}" target="_blank" rel="noopener noreferrer">{{ file.name }}</a>
@@ -504,6 +527,9 @@
                         {{ file.modified.strftime('%b %d, %Y') }}
                         {% if file.owner != current_username %} · Shared by {{ file.owner }}{% endif %}
                       </p>
+                      {% if file.folder %}
+                      <p class="record-meta">Folder · {{ file.folder }}</p>
+                      {% endif %}
                       {% if file.shared_with %}
                       <div class="chip-row">
                         {% for shared_user in file.shared_with %}
@@ -534,6 +560,14 @@
                                 </select>
                               </label>
                               <button type="submit" class="button button-secondary">Share file</button>
+                            </form>
+                            <form method="post" action="{{ url_for('set_file_folder_route', filename=file.name, owner=file.owner) }}" class="stack-form" data-async>
+                              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                              <label class="field">
+                                <span>Folder</span>
+                                <input type="text" name="folder" value="{{ file.folder }}" list="file-folder-suggestions" maxlength="120" placeholder="Leave empty for root" />
+                              </label>
+                              <button type="submit" class="button button-secondary">Save folder</button>
                             </form>
                             {% if file.shared_with %}
                             <div class="chip-action-list">
