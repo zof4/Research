@@ -437,6 +437,7 @@ def ensure_user_paths(username: str) -> Dict[str, Path]:
         "hidden_files_file": data / "hidden_files.json",
         "file_shares_file": data / "file_shares.json",
         "public_file_links_file": data / "public_file_links.json",
+        "file_folders_file": data / "file_folders.json",
     }
 
 
@@ -616,6 +617,63 @@ def load_public_file_links(path: Path) -> Dict[str, str]:
             continue
         cleaned[filename] = token
     return cleaned
+
+
+def sanitize_folder_value(raw_value: str) -> str:
+    raw = str(raw_value or "").strip()
+    if not raw:
+        return ""
+    normalized = raw.replace("\\", "/")
+    parts = []
+    for segment in normalized.split("/"):
+        safe_segment = secure_filename(segment.strip())
+        if safe_segment:
+            parts.append(safe_segment)
+    return "/".join(parts)[:120]
+
+
+def load_file_folders(path: Path) -> Dict[str, str]:
+    if not path.exists():
+        return {}
+    try:
+        loaded = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(loaded, dict):
+        return {}
+    cleaned: Dict[str, str] = {}
+    for filename, folder in loaded.items():
+        if not isinstance(filename, str):
+            continue
+        safe_name = secure_filename(filename)
+        if safe_name != filename:
+            continue
+        safe_folder = sanitize_folder_value(folder)
+        if safe_folder:
+            cleaned[filename] = safe_folder
+    return cleaned
+
+
+def save_file_folders(path: Path, folders: Dict[str, str]) -> None:
+    normalized: Dict[str, str] = {}
+    for filename, folder in folders.items():
+        safe_name = secure_filename(str(filename))
+        if safe_name != filename:
+            continue
+        safe_folder = sanitize_folder_value(folder)
+        if safe_folder:
+            normalized[safe_name] = safe_folder
+    path.write_text(json.dumps(normalized, indent=2))
+
+
+def set_file_folder(path: Path, filename: str, folder: str) -> None:
+    folders = load_file_folders(path)
+    safe_folder = sanitize_folder_value(folder)
+    if safe_folder:
+        folders[filename] = safe_folder
+    else:
+        folders.pop(filename, None)
+    save_file_folders(path, folders)
 
 
 def save_public_file_links(path: Path, links: Dict[str, str]) -> None:
@@ -902,12 +960,14 @@ def get_file_listing(
     hidden_filenames: Optional[set] = None,
     shared_with_map: Optional[Dict[str, List[str]]] = None,
     public_links_map: Optional[Dict[str, str]] = None,
+    folder_map: Optional[Dict[str, str]] = None,
     viewer: Optional[str] = None,
 ) -> Tuple[List[Dict], int]:
     files = []
     total_bytes = 0
     shared_with_map = shared_with_map or {}
     public_links_map = public_links_map or {}
+    folder_map = folder_map or {}
     normalized_viewer = normalize_username(viewer or "")
 
     for path in iter_uploaded_files(directory):
@@ -924,6 +984,7 @@ def get_file_listing(
                 "shared_with": shared_with,
                 "public_token": public_links_map.get(path.name, ""),
                 "public_enabled": path.name in public_links_map,
+                "folder": folder_map.get(path.name, ""),
                 "is_shared_to_viewer": bool(
                     normalized_viewer and normalized_viewer in shared_with and owner != normalized_viewer
                 ),
@@ -1852,12 +1913,14 @@ def build_template_context(active_page: str) -> Dict:
                 hidden_files = set(load_hidden_files(paths["hidden_files_file"]))
                 user_file_shares = load_file_shares(paths["file_shares_file"])
                 user_public_links = load_public_file_links(paths["public_file_links_file"])
+                user_folders = load_file_folders(paths["file_folders_file"])
                 user_files, user_total = get_file_listing(
                     paths["uploads_dir"],
                     owner=owner,
                     hidden_filenames=hidden_files,
                     shared_with_map=user_file_shares,
                     public_links_map=user_public_links,
+                    folder_map=user_folders,
                 )
                 files.extend(user_files)
                 file_groups.append({"owner": owner, "files": user_files, "total_bytes": user_total})
@@ -1893,12 +1956,14 @@ def build_template_context(active_page: str) -> Dict:
             hidden_files = set(load_hidden_files(paths["hidden_files_file"]))
             file_shares = load_file_shares(paths["file_shares_file"])
             public_links = load_public_file_links(paths["public_file_links_file"])
+            file_folders = load_file_folders(paths["file_folders_file"])
             files, total_bytes = get_file_listing(
                 paths["uploads_dir"],
                 owner=username,
                 hidden_filenames=hidden_files,
                 shared_with_map=file_shares,
                 public_links_map=public_links,
+                folder_map=file_folders,
                 viewer=username,
             )
             shared_file_groups: List[Dict] = []
@@ -1911,12 +1976,14 @@ def build_template_context(active_page: str) -> Dict:
                 owner_hidden_files = set(load_hidden_files(owner_paths["hidden_files_file"]))
                 owner_file_shares = load_file_shares(owner_paths["file_shares_file"])
                 owner_public_links = load_public_file_links(owner_paths["public_file_links_file"])
+                owner_folders = load_file_folders(owner_paths["file_folders_file"])
                 owner_files, _owner_total = get_file_listing(
                     owner_paths["uploads_dir"],
                     owner=owner,
                     hidden_filenames=owner_hidden_files,
                     shared_with_map=owner_file_shares,
                     public_links_map=owner_public_links,
+                    folder_map=owner_folders,
                     viewer=username,
                 )
                 visible_shared_files = [item for item in owner_files if item.get("is_shared_to_viewer")]
@@ -2136,6 +2203,13 @@ def build_template_context(active_page: str) -> Dict:
         "whiteboard_seed_items": whiteboard_seed_items[:500],
         "max_chat_message_chars": MAX_CHAT_MESSAGE_CHARS,
         "workspace_counts": workspace_counts,
+        "file_folders": sorted(
+            {
+                file.get("folder", "")
+                for file in files
+                if isinstance(file, dict) and file.get("owner") == selected_owner and file.get("folder")
+            }
+        ),
         "global_search_items": global_search_items[:400],
         "global_search_query": global_search_query,
         "browse_url_input": browse_url_input,
@@ -2556,6 +2630,7 @@ def upload_file():
     imported_zip_files = 0
     bytes_written_total = 0
     uploaded_names: List[str] = []
+    target_folder = sanitize_folder_value(request.form.get("folder", ""))
 
     for upload in uploads:
         filename = secure_filename(upload.filename or "")
@@ -2582,6 +2657,7 @@ def upload_file():
         destination = paths["uploads_dir"] / final_name
         bytes_written = save_upload_with_limits(upload, destination, per_file_limit)
         set_file_hidden(paths["hidden_files_file"], final_name, False)
+        set_file_folder(paths["file_folders_file"], final_name, target_folder)
         uploaded_count += 1
         bytes_written_total += bytes_written
         remaining_bytes = max(remaining_bytes - bytes_written, 0)
@@ -3161,6 +3237,7 @@ def delete_file(filename: str):
     set_file_hidden(paths["hidden_files_file"], safe_name, False)
     clear_file_shares(paths["file_shares_file"], safe_name)
     set_public_file_link(paths["public_file_links_file"], safe_name, enabled=False)
+    set_file_folder(paths["file_folders_file"], safe_name, "")
     if is_json: return {"ok": True}
     flash(f"Deleted {safe_name}", "success")
     return redirect(url_for("files_page", owner=target_owner))
@@ -3221,6 +3298,27 @@ def share_file(filename: str):
 
     set_file_share(paths["file_shares_file"], safe_name, target_username, shared=True)
     flash(f"Shared {safe_name} with {target_username}.", "success")
+    return redirect(url_for("files_page", owner=target_owner))
+
+
+@app.post("/files/folder/<path:filename>")
+@login_required
+def set_file_folder_route(filename: str):
+    validate_csrf()
+    safe_name = secure_filename(filename)
+    if safe_name != filename:
+        raise NotFound()
+    paths, target_owner = get_target_user_paths()
+    target = paths["uploads_dir"] / safe_name
+    if not target.exists() or not target.is_file():
+        raise NotFound()
+    folder = request.form.get("folder", "")
+    set_file_folder(paths["file_folders_file"], safe_name, folder)
+    safe_folder = sanitize_folder_value(folder)
+    if safe_folder:
+        flash(f"Moved {safe_name} to folder: {safe_folder}.", "success")
+    else:
+        flash(f"Cleared folder for {safe_name}.", "success")
     return redirect(url_for("files_page", owner=target_owner))
 
 
@@ -3406,6 +3504,7 @@ def get_all_items():
             "updated": file.get("modified").replace(microsecond=0).isoformat() if hasattr(file.get("modified"), 'isoformat') else file.get("modified"),
             "shared_with": file.get("shared_with", []),
             "hidden": file.get("hidden", False),
+            "folder": file.get("folder", ""),
             "url": url_for("download_file", filename=file.get("name"), owner=file.get("owner"))
         })
 
@@ -3508,6 +3607,7 @@ def api_add():
         uploads = [item for item in request.files.getlist("file") if item and item.filename]
         if not uploads:
             return {"ok": False, "error": "No file provided"}, 400
+        target_folder = sanitize_folder_value(request.form.get("folder", ""))
 
         total_bytes = get_total_storage_bytes(paths["uploads_dir"])
         remaining_bytes = max(MAX_STORAGE_BYTES - total_bytes, 0)
@@ -3534,6 +3634,7 @@ def api_add():
             try:
                 save_upload_with_limits(upload, destination, per_file_limit)
                 set_file_hidden(paths["hidden_files_file"], final_name, False)
+                set_file_folder(paths["file_folders_file"], final_name, target_folder)
                 uploaded_names.append(final_name)
             except RequestEntityTooLarge:
                 return {"ok": False, "error": "File too large"}, 413
@@ -3620,6 +3721,7 @@ def api_delete():
             set_file_hidden(paths["hidden_files_file"], item_id, False)
             clear_file_shares(paths["file_shares_file"], item_id)
             set_public_file_link(paths["public_file_links_file"], item_id, enabled=False)
+            set_file_folder(paths["file_folders_file"], item_id, "")
     elif item_type == "html":
         removed = remove_history_item(paths["html_history_file"], item_id)
         if removed:
