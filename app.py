@@ -3521,7 +3521,8 @@ def get_all_items():
                 "shared_with": item.get("shared_with", []),
                 "hidden": item.get("hidden", False),
                 "comments": item.get("comments", []),
-                "references": item.get("references", [])
+                "references": item.get("references", []),
+                "url": url_for("view_text_entry", entry_id=item.get("id"), owner=group.get("owner")),
             })
 
     # Add reader pages
@@ -3566,7 +3567,7 @@ def get_all_items():
                 "updated": item.get("created"),
                 "html_name": item.get("html_name"),
                 "hidden": item.get("hidden", False),
-                "url": url_for("download_html_file", filename=item.get("html_name"), owner=group.get("owner"))
+                "url": url_for("html_ipad_viewer", file_id=item.get("id"), owner=group.get("owner")),
             })
 
     # Add Board messages
@@ -3594,7 +3595,7 @@ def get_all_items():
     # Sort by updated descending
     items.sort(key=lambda x: str(x.get("updated") or ""), reverse=True)
 
-    return {"ok": True, "items": items, "storage": context.get("storage", {}), "current_username": context.get("current_username"), "is_admin": context.get("is_admin")}
+    return {"ok": True, "items": items, "storage": context.get("storage", {}), "current_username": context.get("current_username"), "is_admin": context.get("is_admin"), "available_share_users": context.get("available_share_users", []), "file_folders": context.get("file_folders", [])}
 
 @app.post("/api/add")
 @login_required
@@ -3678,14 +3679,10 @@ def api_add():
     add_history_item(paths["text_history_file"], item, MAX_TEXT_HISTORY_ITEMS)
     return {"ok": True, "type": "note", "entry": item}
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", "8003"))
-    app.run(host="0.0.0.0", port=port)
-
 @app.post("/api/edit")
 @login_required
 def api_edit():
-    validate_csrf()
+    validate_csrf_token(request.headers.get("X-CSRFToken", ""))
     paths, target_owner = get_target_user_paths()
     data = request.json
     if not data: return {"ok": False, "error": "No data"}, 400
@@ -3704,7 +3701,7 @@ def api_edit():
 @app.post("/api/delete")
 @login_required
 def api_delete():
-    validate_csrf()
+    validate_csrf_token(request.headers.get("X-CSRFToken", ""))
     paths, target_owner = get_target_user_paths()
     data = request.json
     if not data: return {"ok": False, "error": "No data"}, 400
@@ -3736,3 +3733,70 @@ def api_delete():
             delete_reader_content(removed.get("content_filename"), paths["reader_dir"])
 
     return {"ok": True}
+
+
+@app.post("/api/file/share")
+@login_required
+def api_file_share():
+    validate_csrf_token(request.headers.get("X-CSRFToken", ""))
+    data = request.get_json(silent=True) or {}
+    filename = secure_filename(str(data.get("filename", "")))
+    username = normalize_username(str(data.get("username", "")))
+    shared = bool(data.get("shared", True))
+    if not filename or not username:
+        return {"ok": False, "error": "filename and username required"}, 400
+
+    paths, target_owner = get_target_user_paths()
+    target = paths["uploads_dir"] / filename
+    if not target.exists() or not target.is_file():
+        return {"ok": False, "error": "file not found"}, 404
+    if username == target_owner:
+        return {"ok": False, "error": "owner already has access"}, 400
+    if username not in managed_usernames():
+        return {"ok": False, "error": "user does not exist"}, 400
+
+    set_file_share(paths["file_shares_file"], filename, username, shared=shared)
+    return {"ok": True}
+
+
+@app.post("/api/file/public")
+@login_required
+def api_file_public():
+    validate_csrf_token(request.headers.get("X-CSRFToken", ""))
+    data = request.get_json(silent=True) or {}
+    filename = secure_filename(str(data.get("filename", "")))
+    enabled = bool(data.get("enabled", False))
+    if not filename:
+        return {"ok": False, "error": "filename required"}, 400
+
+    paths, _target_owner = get_target_user_paths()
+    target = paths["uploads_dir"] / filename
+    if not target.exists() or not target.is_file():
+        return {"ok": False, "error": "file not found"}, 404
+
+    token = set_public_file_link(paths["public_file_links_file"], filename, enabled=enabled)
+    return {"ok": True, "token": token if enabled else ""}
+
+
+@app.post("/api/file/folder")
+@login_required
+def api_file_folder():
+    validate_csrf_token(request.headers.get("X-CSRFToken", ""))
+    data = request.get_json(silent=True) or {}
+    filename = secure_filename(str(data.get("filename", "")))
+    folder = str(data.get("folder", ""))
+    if not filename:
+        return {"ok": False, "error": "filename required"}, 400
+
+    paths, _target_owner = get_target_user_paths()
+    target = paths["uploads_dir"] / filename
+    if not target.exists() or not target.is_file():
+        return {"ok": False, "error": "file not found"}, 404
+
+    set_file_folder(paths["file_folders_file"], filename, folder)
+    return {"ok": True, "folder": sanitize_folder_value(folder)}
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", "8003"))
+    app.run(host="0.0.0.0", port=port)
