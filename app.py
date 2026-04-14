@@ -3393,81 +3393,100 @@ def send_chat_message():
 def get_all_items():
     context = build_template_context("home")
     items = []
+    current_user = normalize_username(context.get("current_username", ""))
+    can_manage_all = bool(context.get("is_admin"))
 
     # Add files
     for file in context.get("files", []):
+        owner = normalize_username(file.get("owner", ""))
+        public_token = file.get("public_token") or ""
         items.append({
             "type": "file",
             "id": file.get("name"),
             "title": file.get("name"),
             "content": "",
             "size": file.get("size", 0),
-            "owner": file.get("owner", ""),
+            "owner": owner,
             "updated": file.get("modified").replace(microsecond=0).isoformat() if hasattr(file.get("modified"), 'isoformat') else file.get("modified"),
             "shared_with": file.get("shared_with", []),
             "hidden": file.get("hidden", False),
-            "url": url_for("download_file", filename=file.get("name"), owner=file.get("owner"))
+            "public_enabled": bool(file.get("public_enabled")),
+            "public_token": public_token,
+            "public_url": url_for("download_public_file", token=public_token, _external=True) if public_token else "",
+            "can_manage": can_manage_all or owner == current_user,
+            "url": url_for("download_file", filename=file.get("name"), owner=owner)
         })
 
     # Add notes
     for group in context.get("text_groups", []):
         for item in group.get("items", []):
+            owner = normalize_username(group.get("owner", ""))
             items.append({
                 "type": "note",
                 "id": item.get("id"),
                 "title": item.get("title") or "Untitled note",
                 "content": item.get("content", ""),
-                "owner": group.get("owner", ""),
+                "owner": owner,
                 "updated": item.get("updated") or item.get("created"),
                 "shared_with": item.get("shared_with", []),
                 "hidden": item.get("hidden", False),
                 "comments": item.get("comments", []),
-                "references": item.get("references", [])
+                "references": item.get("references", []),
+                "can_manage": can_manage_all or owner == current_user,
             })
 
     # Add reader pages
     for group in context.get("reader_groups", []):
         for item in group.get("items", []):
+            owner = normalize_username(group.get("owner", ""))
             items.append({
                 "type": "reader",
                 "id": item.get("id"),
                 "title": item.get("title") or "Untitled page",
                 "content": item.get("summary", ""),
-                "owner": group.get("owner", ""),
+                "owner": owner,
                 "updated": item.get("updated") or item.get("created"),
                 "source_label": item.get("source_label"),
                 "url": item.get("url"),
-                "hidden": item.get("hidden", False)
+                "hidden": item.get("hidden", False),
+                "shared_with": item.get("shared_with", []),
+                "can_manage": can_manage_all or owner == current_user,
             })
 
     # Add PDFs
     for group in context.get("latex_groups", []):
         for item in group.get("items", []):
+            owner = normalize_username(group.get("owner", ""))
             items.append({
                 "type": "pdf",
                 "id": item.get("id"),
                 "title": item.get("title") or "Untitled PDF",
                 "content": item.get("source", ""),
-                "owner": group.get("owner", ""),
+                "owner": owner,
                 "updated": item.get("created"),
                 "pdf_name": item.get("pdf_name"),
                 "hidden": item.get("hidden", False),
-                "url": url_for("download_latex_pdf", filename=item.get("pdf_name"), owner=group.get("owner"))
+                "shared_with": item.get("shared_with", []),
+                "can_manage": can_manage_all or owner == current_user,
+                "url": url_for("download_latex_pdf", filename=item.get("pdf_name"), owner=owner)
             })
 
     # Add HTML
     for group in context.get("html_groups", []):
         for item in group.get("items", []):
+            owner = normalize_username(group.get("owner", ""))
             items.append({
                 "type": "html",
                 "id": item.get("id"),
                 "title": item.get("title") or item.get("html_name") or "Untitled page",
                 "content": item.get("source", ""),
-                "owner": group.get("owner", ""),
+                "owner": owner,
                 "updated": item.get("created"),
                 "html_name": item.get("html_name"),
                 "hidden": item.get("hidden", False),
-                "url": url_for("download_html_file", filename=item.get("html_name"), owner=group.get("owner"))
+                "shared_with": item.get("shared_with", []),
+                "can_manage": can_manage_all or owner == current_user,
+                "url": url_for("download_html_file", filename=item.get("html_name"), owner=owner)
             })
 
     # Add Board messages
@@ -3495,7 +3514,7 @@ def get_all_items():
     # Sort by updated descending
     items.sort(key=lambda x: str(x.get("updated") or ""), reverse=True)
 
-    return {"ok": True, "items": items, "storage": context.get("storage", {}), "current_username": context.get("current_username"), "is_admin": context.get("is_admin")}
+    return {"ok": True, "items": items, "storage": context.get("storage", {}), "current_username": context.get("current_username"), "is_admin": context.get("is_admin"), "available_share_users": context.get("available_share_users", [])}
 
 @app.post("/api/add")
 @login_required
@@ -3634,3 +3653,77 @@ def api_delete():
             delete_reader_content(removed.get("content_filename"), paths["reader_dir"])
 
     return {"ok": True}
+
+
+@app.post("/api/item/access")
+@login_required
+def api_item_access():
+    validate_csrf()
+    paths, _target_owner = get_target_user_paths()
+    data = request.json or {}
+    item_id = str(data.get("id", "")).strip()
+    item_type = str(data.get("type", "")).strip().lower()
+    action = str(data.get("action", "")).strip().lower()
+    share_username = normalize_username(data.get("username", ""))
+
+    if not item_id or not item_type or not action:
+        return {"ok": False, "error": "Missing required fields"}, 400
+
+    if item_type == "file":
+        if action == "hide":
+            set_file_hidden(paths["hidden_files_file"], item_id, True)
+            return {"ok": True}
+        if action == "unhide":
+            set_file_hidden(paths["hidden_files_file"], item_id, False)
+            return {"ok": True}
+        if action == "share":
+            if not share_username:
+                return {"ok": False, "error": "Username required"}, 400
+            set_file_share(paths["file_shares_file"], item_id, share_username, shared=True)
+            return {"ok": True}
+        if action == "unshare":
+            if not share_username:
+                return {"ok": False, "error": "Username required"}, 400
+            set_file_share(paths["file_shares_file"], item_id, share_username, shared=False)
+            return {"ok": True}
+        if action == "enable_public":
+            token = set_public_file_link(paths["public_file_links_file"], item_id, enabled=True)
+            return {
+                "ok": True,
+                "public_enabled": True,
+                "public_token": token,
+                "public_url": url_for("download_public_file", token=token, _external=True) if token else "",
+            }
+        if action == "disable_public":
+            set_public_file_link(paths["public_file_links_file"], item_id, enabled=False)
+            return {"ok": True, "public_enabled": False, "public_token": "", "public_url": ""}
+        return {"ok": False, "error": "Unsupported file action"}, 400
+
+    history_map = {
+        "note": paths["text_history_file"],
+        "html": paths["html_history_file"],
+        "reader": paths["reader_history_file"],
+        "pdf": paths["latex_history_file"],
+    }
+    history_path = history_map.get(item_type)
+    if not history_path:
+        return {"ok": False, "error": "Unsupported item type"}, 400
+
+    if action == "hide":
+        updated = set_history_item_hidden(history_path, item_id, True)
+        return {"ok": bool(updated)}
+    if action == "unhide":
+        updated = set_history_item_hidden(history_path, item_id, False)
+        return {"ok": bool(updated)}
+    if action == "share":
+        if not share_username:
+            return {"ok": False, "error": "Username required"}, 400
+        updated = toggle_history_share(history_path, item_id, share_username, shared=True)
+        return {"ok": bool(updated)}
+    if action == "unshare":
+        if not share_username:
+            return {"ok": False, "error": "Username required"}, 400
+        updated = toggle_history_share(history_path, item_id, share_username, shared=False)
+        return {"ok": bool(updated)}
+
+    return {"ok": False, "error": "Unsupported action"}, 400
