@@ -20,18 +20,13 @@ def run(playwright):
     page.wait_for_load_state('networkidle')
 
     time.sleep(1)
+    page.screenshot(path="debug_after_login.png")
 
-    page.evaluate('''() => {
-        const btn = document.querySelector('#settings-btn');
-        if (btn) btn.click();
-    }''')
-
-    time.sleep(1)
-    page.screenshot(path="/home/jules/verification/screenshots/settings.png")
-
-    # Just read the modal state visually, no need to overthink it
     html = page.content()
-    print("Has modal in HTML?", "Manage your account" in html)
+    with open('vue_post_login.html', 'w') as f:
+        f.write(html)
+
+    print("Does the app actually load? '#app' in HTML:", 'id="app"' in html)
 
     browser.close()
 
