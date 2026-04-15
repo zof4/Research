@@ -6,37 +6,98 @@
   <title>Dropper</title>
   <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
   <style>
-    [v-cloak] { display: none; }
+    [v-cloak] { display: none !important; }
     :root { --accent: #6366f1; }
     .accent-bg { background-color: var(--accent); }
     .accent-text { color: var(--accent); }
     .accent-ring:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
-  </style>
+
+    .markdown-body h1 { font-size: 1.5em; font-weight: bold; margin-bottom: 0.5em; border-bottom: 1px solid #334155; padding-bottom: 0.2em; }
+    .markdown-body h2 { font-size: 1.3em; font-weight: bold; margin-bottom: 0.5em; }
+    .markdown-body p { margin-bottom: 1em; }
+    .markdown-body ul { list-style-type: disc; margin-left: 1.5em; margin-bottom: 1em; }
+    .markdown-body ol { list-style-type: decimal; margin-left: 1.5em; margin-bottom: 1em; }
+    .markdown-body code { background-color: #1e293b; padding: 0.2em 0.4em; border-radius: 3px; font-family: monospace; font-size: 0.9em; }
+    .markdown-body pre { background-color: #0f172a; padding: 1em; border-radius: 6px; overflow-x: auto; margin-bottom: 1em; border: 1px solid #1e293b; }
+    .markdown-body pre code { background-color: transparent; padding: 0; }
+    .markdown-body a { color: var(--accent); text-decoration: underline; }
+</style>
 </head>
 <body class="bg-slate-950 text-slate-200 min-h-screen">
   {% raw %}
-  <div id="app" v-cloak class="min-h-screen flex flex-col">
+  <div id="app" v-cloak class="min-h-screen flex flex-col" @dragover.prevent="dragOver" @dragleave.prevent="dragLeave" @drop.prevent="handleDrop">
+    <!-- Drag and Drop Overlay -->
+    <div v-if="isDragging" class="fixed inset-0 z-[100] bg-indigo-500/10 border-4 border-dashed border-indigo-500 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+      <div class="text-center">
+        <i class="ph ph-upload-simple text-6xl text-indigo-500 mb-4 inline-block"></i>
+        <h2 class="text-2xl font-bold text-white shadow-sm">Drop files to upload</h2>
+      </div>
+    </div>
     <input ref="quickUploadInput" type="file" multiple class="hidden" @change="handleQuickUploadPick" />
-    <header class="sticky top-0 z-30 bg-slate-900/90 backdrop-blur border-b border-slate-800">
-      <div class="max-w-7xl mx-auto px-3 sm:px-6 py-3 flex gap-2 items-center">
-        <button class="sm:hidden px-3 py-2 rounded bg-slate-800" @click="mobileMenu = !mobileMenu">☰</button>
+    <div class="flex-1 flex overflow-hidden">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-slate-900 border-r border-slate-800 flex-shrink-0 hidden sm:flex flex-col z-20">
+      <div class="p-4 border-b border-slate-800 flex items-center gap-3">
+        <div class="w-8 h-8 rounded bg-indigo-600 flex items-center justify-center text-white font-bold">D</div>
         <h1 class="font-bold text-lg">Dropper</h1>
-        <input v-model="search" placeholder="Search..." class="flex-1 bg-slate-800 rounded px-3 py-2 text-sm border border-slate-700" />
-        <button @click="promptUploadDialog" class="accent-bg text-white px-3 py-2 rounded text-sm">Upload</button>
-        <button @click="createReactPage" class="hidden sm:inline bg-slate-700 px-3 py-2 rounded text-sm">New React HTML</button>
-        <button @click="showPalette = true" class="bg-slate-800 px-3 py-2 rounded text-sm">Palette</button>
-        <button @click="showSettings = true" class="bg-slate-800 px-3 py-2 rounded text-sm">Settings</button>
       </div>
-      <div v-if="mobileMenu" class="sm:hidden px-3 pb-3 flex gap-2 flex-wrap">
-        <button @click="filter='all'" class="px-3 py-1 rounded bg-slate-800">All</button>
-        <button @click="filter='file'" class="px-3 py-1 rounded bg-slate-800">Files</button>
-        <button @click="filter='note'" class="px-3 py-1 rounded bg-slate-800">Notes</button>
-        <button @click="filter='html'" class="px-3 py-1 rounded bg-slate-800">HTML</button>
+      <div class="p-4">
+        <button @click="promptUploadDialog" class="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-medium flex items-center justify-center gap-2 transition">
+          <i class="ph ph-plus"></i> New Item
+        </button>
       </div>
-    </header>
+      <nav class="flex-1 overflow-y-auto px-3 py-2 space-y-1">
+        <button @click="filter='all'" :class="['w-full flex items-center gap-3 px-3 py-2 rounded text-sm transition', filter==='all' ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200']"><i class="ph ph-squares-four text-lg"></i> All Items</button>
+        <button @click="filter='file'" :class="['w-full flex items-center gap-3 px-3 py-2 rounded text-sm transition', filter==='file' ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200']"><i class="ph ph-file text-lg"></i> Files</button>
+        <button @click="filter='note'" :class="['w-full flex items-center gap-3 px-3 py-2 rounded text-sm transition', filter==='note' ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200']"><i class="ph ph-notebook text-lg"></i> Notes</button>
+        <button @click="filter='html'" :class="['w-full flex items-center gap-3 px-3 py-2 rounded text-sm transition', filter==='html' ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200']"><i class="ph ph-browsers text-lg"></i> HTML</button>
+        <button @click="filter='pdf'" :class="['w-full flex items-center gap-3 px-3 py-2 rounded text-sm transition', filter==='pdf' ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200']"><i class="ph ph-file-pdf text-lg"></i> PDFs</button>
+      </nav>
+      <div class="p-4 border-t border-slate-800 space-y-2">
+        <button @click="showSettings = true" class="w-full flex items-center gap-3 px-3 py-2 rounded text-sm text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition"><i class="ph ph-gear text-lg"></i> Settings</button>
+        <form method="post" action="/logout" class="block"><input type="hidden" name="csrf_token" :value="csrfToken"><button class="w-full flex items-center gap-3 px-3 py-2 rounded text-sm text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition"><i class="ph ph-sign-out text-lg"></i> Sign out</button></form>
+      </div>
+    </aside>
 
-    <main class="max-w-7xl mx-auto w-full px-3 sm:px-6 py-4 flex-1">
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col min-w-0 bg-slate-950 overflow-hidden">
+      <!-- Top Header -->
+      <header class="h-14 border-b border-slate-800 flex items-center justify-between px-4 sm:px-6 bg-slate-900/50 backdrop-blur z-10">
+        <div class="flex items-center gap-3">
+          <button class="sm:hidden text-slate-400 hover:text-white" @click="mobileMenu = !mobileMenu"><i class="ph ph-list text-xl"></i></button>
+          <div class="relative w-64 hidden sm:block">
+            <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
+            <input v-model="search" placeholder="Search items..." class="w-full bg-slate-800/50 border border-slate-700/50 rounded-full pl-9 pr-4 py-1.5 text-sm focus:outline-none focus:border-indigo-500 transition" />
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button @click="promptUploadDialog" class="sm:hidden w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white"><i class="ph ph-upload-simple"></i></button>
+          <button @click="openNoteEditor()" class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-700 transition" title="New Note"><i class="ph ph-pencil-simple"></i></button>
+          <button @click="createReactPage" class="hidden sm:flex w-8 h-8 rounded-full bg-slate-800 items-center justify-center text-slate-300 hover:text-white hover:bg-slate-700 transition" title="New React HTML"><i class="ph ph-atom"></i></button>
+        </div>
+      </header>
+
+      <!-- Mobile Menu & Search -->
+      <div v-if="mobileMenu" class="sm:hidden bg-slate-900 border-b border-slate-800 p-4 space-y-3 z-10">
+        <div class="relative w-full">
+            <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
+            <input v-model="search" placeholder="Search items..." class="w-full bg-slate-800 border border-slate-700 rounded pl-9 pr-4 py-2 text-sm focus:outline-none" />
+        </div>
+        <div class="flex gap-2 overflow-x-auto pb-1">
+            <button @click="setFilter('all')" :class="['px-3 py-1 rounded text-sm whitespace-nowrap', filter==='all'?'bg-indigo-600 text-white':'bg-slate-800 text-slate-300']">All</button>
+            <button @click="setFilter('file')" :class="['px-3 py-1 rounded text-sm whitespace-nowrap', filter==='file'?'bg-indigo-600 text-white':'bg-slate-800 text-slate-300']">Files</button>
+            <button @click="setFilter('note')" :class="['px-3 py-1 rounded text-sm whitespace-nowrap', filter==='note'?'bg-indigo-600 text-white':'bg-slate-800 text-slate-300']">Notes</button>
+            <button @click="setFilter('html')" :class="['px-3 py-1 rounded text-sm whitespace-nowrap', filter==='html'?'bg-indigo-600 text-white':'bg-slate-800 text-slate-300']">HTML</button>
+        </div>
+        <form method="post" action="/logout"><input type="hidden" name="csrf_token" :value="csrfToken"><button class="w-full px-3 py-2 text-left text-sm text-slate-400 hover:text-white">Sign out ({{current_username}})</button></form>
+      </div>
+
+      <!-- Main Workspace Scroll Area -->
+      <div class="flex-1 overflow-y-auto p-4 sm:p-6 pb-24">
       <div class="hidden sm:flex gap-2 mb-4">
         <button @click="filter='all'" class="px-3 py-1 rounded bg-slate-800">All</button>
         <button @click="filter='file'" class="px-3 py-1 rounded bg-slate-800">Files</button>
@@ -59,9 +120,11 @@
               <span class="text-xs uppercase text-slate-400">{{ item.type }}</span>
             </div>
             <p class="text-xs text-slate-500 mt-1">{{ formatDate(item.updated) }} <span v-if="item.folder">· {{ item.folder }}</span></p>
-            <p class="text-sm mt-2 text-slate-300 line-clamp-4">{{ item.content || 'No preview' }}</p>
+            <p v-if="item.type !== 'note'" class="text-sm mt-2 text-slate-300 line-clamp-4">{{ item.content || 'No preview' }}</p>
+            <div v-else class="text-sm mt-2 text-slate-300 line-clamp-4" v-html="renderMarkdown(item.content)"></div>
             <div class="mt-3 flex gap-2 flex-wrap">
-              <button v-if="item.url" @click="openItem(item)" class="px-2 py-1 bg-slate-800 rounded text-xs">Open</button>
+              <button v-if="item.url && item.type !== 'note'" @click="openItem(item)" class="px-2 py-1 bg-slate-800 rounded text-xs">Open</button>
+              <button v-if="item.type==='note'" @click="openNoteEditor(item)" class="px-2 py-1 bg-slate-800 rounded text-xs">Edit</button>
               <button v-if="item.type==='file' && settings.showPermissionButtons" @click="openPerms(item)" class="px-2 py-1 bg-slate-800 rounded text-xs">Share / Permissions</button>
               <button v-if="item.type==='file' && settings.showPermissionButtons" @click="openFolder(item)" class="px-2 py-1 bg-slate-800 rounded text-xs">Folder</button>
               <button @click="deleteItem(item)" class="px-2 py-1 bg-red-900/60 rounded text-xs">Delete</button>
@@ -79,9 +142,11 @@
                   <span class="text-xs uppercase text-slate-400">{{ item.type }}</span>
                 </div>
                 <p class="text-xs text-slate-500 mt-1">{{ formatDate(item.updated) }} <span v-if="item.folder">· {{ item.folder }}</span></p>
-                <p class="text-sm mt-2 text-slate-300 line-clamp-4">{{ item.content || 'No preview' }}</p>
+                <p v-if="item.type !== 'note'" class="text-sm mt-2 text-slate-300 line-clamp-4">{{ item.content || 'No preview' }}</p>
+            <div v-else class="text-sm mt-2 text-slate-300 line-clamp-4" v-html="renderMarkdown(item.content)"></div>
                 <div class="mt-3 flex gap-2 flex-wrap">
-                  <button v-if="item.url" @click="openItem(item)" class="px-2 py-1 bg-slate-800 rounded text-xs">Open</button>
+                  <button v-if="item.url && item.type !== 'note'" @click="openItem(item)" class="px-2 py-1 bg-slate-800 rounded text-xs">Open</button>
+              <button v-if="item.type==='note'" @click="openNoteEditor(item)" class="px-2 py-1 bg-slate-800 rounded text-xs">Edit</button>
                   <button v-if="item.type==='file' && settings.showPermissionButtons" @click="openPerms(item)" class="px-2 py-1 bg-slate-800 rounded text-xs">Share / Permissions</button>
                   <button v-if="item.type==='file' && settings.showPermissionButtons" @click="openFolder(item)" class="px-2 py-1 bg-slate-800 rounded text-xs">Folder</button>
                   <button @click="deleteItem(item)" class="px-2 py-1 bg-red-900/60 rounded text-xs">Delete</button>
@@ -91,7 +156,42 @@
           </div>
         </section>
       </template>
+    </div>
     </main>
+    </div>
+
+
+    <!-- Note Editor Modal -->
+    <transition name="fade">
+        <div v-if="noteEditor.isOpen" class="fixed inset-0 z-[60] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-0 sm:p-6" @click.self="closeNoteEditor">
+            <div class="bg-slate-900 border border-slate-800 sm:rounded-xl shadow-2xl w-full h-full sm:h-[80vh] sm:max-w-5xl flex flex-col overflow-hidden">
+                <div class="h-14 border-b border-slate-800 flex items-center justify-between px-4 bg-slate-800/50">
+                    <input v-model="noteEditor.title" class="bg-transparent border-none text-white font-medium focus:outline-none w-1/2" placeholder="Note Title" />
+                    <div class="flex items-center gap-2">
+                        <button @click="noteEditor.split = !noteEditor.split" class="hidden sm:block px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm text-white transition"><i class="ph" :class="noteEditor.split ? 'ph-columns' : 'ph-square-half'"></i></button>
+                        <button @click="saveNote" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-sm font-medium transition flex items-center gap-2"><i class="ph ph-floppy-disk"></i> Save</button>
+                        <button @click="closeNoteEditor" class="text-slate-400 hover:text-white p-1"><i class="ph ph-x text-lg"></i></button>
+                    </div>
+                </div>
+                <div class="flex-1 flex overflow-hidden flex-col sm:flex-row">
+                    <div class="flex-1 flex flex-col" :class="{ 'hidden sm:flex': !noteEditor.editMode && !noteEditor.split, 'border-r border-slate-800': noteEditor.split }">
+                        <div class="bg-slate-800/30 px-3 py-1 text-xs text-slate-500 border-b border-slate-800 flex justify-between sm:hidden">
+                            <span>Markdown Editor</span>
+                            <button @click="noteEditor.editMode = false" class="text-indigo-400">Preview</button>
+                        </div>
+                        <textarea v-model="noteEditor.content" class="flex-1 w-full bg-transparent p-4 text-sm text-slate-300 focus:outline-none resize-none font-mono" placeholder="Write in Markdown..."></textarea>
+                    </div>
+                    <div class="flex-1 flex flex-col" :class="{ 'hidden sm:flex': noteEditor.editMode && !noteEditor.split }">
+                         <div class="bg-slate-800/30 px-3 py-1 text-xs text-slate-500 border-b border-slate-800 flex justify-between sm:hidden">
+                            <span>Preview</span>
+                            <button @click="noteEditor.editMode = true" class="text-indigo-400">Edit</button>
+                        </div>
+                        <div class="flex-1 p-4 overflow-y-auto bg-slate-900 markdown-body prose prose-invert max-w-none" v-html="compiledMarkdown"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </transition>
 
     <div v-if="viewer" class="fixed inset-0 z-40 bg-black/80" @click.self="viewer=null">
       <div class="w-full h-full sm:p-6">
@@ -219,12 +319,25 @@
 
   <script>
     window.csrfToken = "{{ session.get('csrf_token', '') }}";
+    window.current_username = "{{ session.get('username', '') }}";
     const { createApp } = Vue;
     createApp({
       data() {
         return {
           items: [], loading: true, filter: 'all', search: '', sortMode: 'recent', mobileMenu: false,
-          viewer: null, showUpload: false, uploadFolder: '',
+
+          csrfToken: window.csrfToken,
+          isDragging: false,
+          current_username: '',
+          noteEditor: {
+              isOpen: false,
+              id: null,
+              title: '',
+              content: '',
+              editMode: true,
+              split: window.innerWidth > 640
+          },
+viewer: null, showUpload: false, uploadFolder: '',
           permItem: null, shareUsers: [], shareUsername: '',
           folderItem: null, folderDraft: '', folderOptions: [],
           showPalette: false, showSettings: false,
@@ -256,9 +369,14 @@
             groups[label].push(item);
           });
           return Object.entries(groups).map(([label, items]) => ({ label, items }));
+        },
+        compiledMarkdown() {
+            if (!this.noteEditor.content) return '<p class="text-slate-500 italic">Preview will appear here...</p>';
+            return DOMPurify.sanitize(marked.parse(this.noteEditor.content));
         }
       },
       mounted() {
+        this.current_username = window.current_username || '';
         const saved = localStorage.getItem('dropper-palette-color');
         if (saved) document.documentElement.style.setProperty('--accent', saved);
         this.loadSettings();
@@ -311,7 +429,54 @@
         },
         formatDate(v) { const d = new Date(v || 0); return isNaN(d) ? 'Unknown' : d.toLocaleString(); },
         openItem(item) { this.viewer = item; },
+
+        setFilter(f) {
+            this.filter = f;
+            if(window.innerWidth < 768) this.mobileMenu = false;
+        },
+        dragOver(e) { this.isDragging = true; },
+        dragLeave(e) { if (!e.currentTarget.contains(e.relatedTarget)) this.isDragging = false; },
+        handleDrop(e) {
+            this.isDragging = false;
+            const files = Array.from(e.dataTransfer.files);
+            if (files.length > 0) {
+                this.uploadFilesFromList(files);
+            }
+        },
+        openNoteEditor(item = null) {
+            if (item) {
+                this.noteEditor.id = item.id;
+                this.noteEditor.title = item.title;
+                this.noteEditor.content = item.content;
+            } else {
+                this.noteEditor.id = null;
+                this.noteEditor.title = '';
+                this.noteEditor.content = '';
+            }
+            this.noteEditor.isOpen = true;
+        },
+        closeNoteEditor() { this.noteEditor.isOpen = false; },
+        async saveNote() {
+            const payload = { type: 'note', text: this.noteEditor.content, title: this.noteEditor.title || 'Untitled Note' };
+            const endpoint = this.noteEditor.id ? '/api/edit' : '/api/add';
+            if (this.noteEditor.id) payload.id = this.noteEditor.id;
+            if (this.noteEditor.id) payload.content = this.noteEditor.content;
+
+            try {
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': window.csrfToken },
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                    await this.fetchItems();
+                    this.closeNoteEditor();
+                }
+            } catch (e) { console.error("Failed to save note", e); }
+        },
+
         openUploadModal() { this.showUpload = true; },
+        renderMarkdown(content) { return content ? DOMPurify.sanitize(marked.parse(content)) : ''; },
         promptUploadDialog() {
           this.$refs.quickUploadInput?.click();
         },
@@ -393,7 +558,7 @@
           }
         },
         async createReactPage() {
-          const tpl = `<!doctype html>\n<html>\n  <body>\n    <div id="root"></div>\n    <script type="module">\n      import React from 'https://esm.sh/react@18';\n      import { createRoot } from 'https://esm.sh/react-dom@18/client';\n      function App(){ return React.createElement('h1', null, 'React is working'); }\n      createRoot(document.getElementById('root')).render(React.createElement(App));\n    </script>\n  </body>\n</html>`;
+          const tpl = `<!doctype html>\n<html>\n  <body>\n    <div id="root"></div>\n    <script type="module">\n      import React from 'https://esm.sh/react@18';\n      import { createRoot } from 'https://esm.sh/react-dom@18/client';\n      function App(){ return React.createElement('h1', null, 'React is working'); }\n      createRoot(document.getElementById('root')).render(React.createElement(App));\n    <\/script>\n  </body>\n</html>`;
           await fetch('/api/add', {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': window.csrfToken },
             body: JSON.stringify({ text: tpl })

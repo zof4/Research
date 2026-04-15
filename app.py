@@ -2382,9 +2382,9 @@ def admin_delete_user():
 @app.get("/")
 def index():
     if not is_authenticated():
-        context = build_template_context("access")
-        context["active_page"] = "access"
-        return render_template("index.html", **context)
+
+
+        return render_template("access.html", csrf_token=get_or_create_csrf_token())
     context = build_template_context("home")
     return render_template("app_index.html", **context)
 
@@ -2427,7 +2427,7 @@ def chat_page():
 
 @app.get("/access")
 def access_page():
-    return render_template("index.html", **build_template_context("access"))
+    return render_template("access.html", csrf_token=get_or_create_csrf_token())
 
 
 
