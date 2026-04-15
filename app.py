@@ -2380,12 +2380,6 @@ def admin_delete_user():
 
 
 @app.get("/")
-@app.get("/files")
-@app.get("/text")
-@app.get("/reader")
-@app.get("/latex")
-@app.get("/html")
-@app.get("/")
 def index():
     if not is_authenticated():
         context = build_template_context("access")
@@ -2395,29 +2389,45 @@ def index():
     return render_template("app_index.html", **context)
 
 
-@app.get("/dummy_files")
-def files_page(**kwargs): return redirect(url_for("index"))
+@app.get("/files")
+@login_required
+def files_page():
+    return render_dashboard_page("files")
 
-@app.get("/dummy_text")
-def text_page(**kwargs): return redirect(url_for("index"))
+@app.get("/text")
+@login_required
+def text_page():
+    return render_dashboard_page("text")
 
-@app.get("/dummy_reader")
-def reader_page(**kwargs): return redirect(url_for("index"))
+@app.get("/reader")
+@login_required
+def reader_page():
+    return render_dashboard_page("reader")
 
-@app.get("/dummy_browse")
-def browse_page(**kwargs): return redirect(url_for("index"))
+@app.get("/browse")
+@login_required
+def browse_page():
+    return render_dashboard_page("browse")
 
-@app.get("/dummy_latex")
-def latex_page(**kwargs): return redirect(url_for("index"))
+@app.get("/latex")
+@login_required
+def latex_page():
+    return render_dashboard_page("latex")
 
-@app.get("/dummy_html")
-def html_page(**kwargs): return redirect(url_for("index"))
+@app.get("/html")
+@login_required
+def html_page():
+    context = build_template_context("html")
+    return render_template("html.html", **context)
 
-@app.get("/dummy_chat")
-def chat_page(**kwargs): return redirect(url_for("index"))
+@app.get("/chat")
+@login_required
+def chat_page():
+    return render_dashboard_page("chat")
 
 @app.get("/access")
-def access_page(): return render_template("index.html", **build_template_context("access"))
+def access_page():
+    return render_template("index.html", **build_template_context("access"))
 
 
 
@@ -3505,6 +3515,8 @@ def get_all_items():
             "shared_with": file.get("shared_with", []),
             "hidden": file.get("hidden", False),
             "folder": file.get("folder", ""),
+            "public_enabled": bool(file.get("public_enabled", False)),
+            "public_token": str(file.get("public_token", "")),
             "url": url_for("download_file", filename=file.get("name"), owner=file.get("owner"))
         })
 
