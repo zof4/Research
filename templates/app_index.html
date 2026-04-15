@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Dropper</title>
   <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='tailwind.css') }}" />
   <style>
     [v-cloak] { display: none; }
     :root { --accent: #6366f1; }
@@ -14,206 +14,445 @@
     .accent-ring:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-200 min-h-screen">
+<body class="bg-slate-950 text-slate-200 min-h-screen overflow-x-hidden selection:bg-indigo-500/30">
   {% raw %}
-  <div id="app" v-cloak class="min-h-screen flex flex-col">
+  <div id="app" v-cloak class="min-h-screen flex flex-col sm:flex-row">
     <input ref="quickUploadInput" type="file" multiple class="hidden" @change="handleQuickUploadPick" />
-    <header class="sticky top-0 z-30 bg-slate-900/90 backdrop-blur border-b border-slate-800">
-      <div class="max-w-7xl mx-auto px-3 sm:px-6 py-3 flex gap-2 items-center">
-        <button class="sm:hidden px-3 py-2 rounded bg-slate-800" @click="mobileMenu = !mobileMenu">☰</button>
-        <h1 class="font-bold text-lg">Dropper</h1>
-        <input v-model="search" placeholder="Search..." class="flex-1 bg-slate-800 rounded px-3 py-2 text-sm border border-slate-700" />
-        <button @click="promptUploadDialog" class="accent-bg text-white px-3 py-2 rounded text-sm">Upload</button>
-        <button @click="createReactPage" class="hidden sm:inline bg-slate-700 px-3 py-2 rounded text-sm">New React HTML</button>
-        <button @click="showPalette = true" class="bg-slate-800 px-3 py-2 rounded text-sm">Palette</button>
-        <button @click="showSettings = true" class="bg-slate-800 px-3 py-2 rounded text-sm">Settings</button>
+
+    <!-- Desktop Sidebar -->
+    <aside class="hidden sm:flex flex-col w-64 glass-panel border-r border-slate-800 h-screen sticky top-0 z-40 p-4">
+      <div class="flex items-center gap-3 mb-8 px-2">
+        <div class="w-8 h-8 rounded-lg accent-bg flex items-center justify-center shadow-lg shadow-indigo-500/20">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-white"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+        </div>
+        <h1 class="font-bold text-xl tracking-tight">Dropper</h1>
       </div>
-      <div v-if="mobileMenu" class="sm:hidden px-3 pb-3 flex gap-2 flex-wrap">
-        <button @click="filter='all'" class="px-3 py-1 rounded bg-slate-800">All</button>
-        <button @click="filter='file'" class="px-3 py-1 rounded bg-slate-800">Files</button>
-        <button @click="filter='note'" class="px-3 py-1 rounded bg-slate-800">Notes</button>
-        <button @click="filter='html'" class="px-3 py-1 rounded bg-slate-800">HTML</button>
+
+      <nav class="space-y-1 flex-1">
+        <button @click="filter='all'" :class="['w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-sm font-medium', filter==='all' ? 'bg-slate-800/80 text-white shadow-sm border border-slate-700/50' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40']">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+          Overview
+        </button>
+        <button @click="filter='file'" :class="['w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-sm font-medium', filter==='file' ? 'bg-slate-800/80 text-white shadow-sm border border-slate-700/50' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40']">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Files
+        </button>
+        <button @click="filter='note'" :class="['w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-sm font-medium', filter==='note' ? 'bg-slate-800/80 text-white shadow-sm border border-slate-700/50' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40']">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+          Notes
+        </button>
+        <button @click="filter='html'" :class="['w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-sm font-medium', filter==='html' ? 'bg-slate-800/80 text-white shadow-sm border border-slate-700/50' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40']">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          HTML
+        </button>
+      </nav>
+
+      <div class="mt-auto space-y-2 pt-4 border-t border-slate-800/50">
+        <button @click="promptUploadDialog" class="w-full flex items-center justify-center gap-2 accent-bg text-white px-4 py-2.5 rounded-xl text-sm font-medium shadow-lg shadow-indigo-500/10 hover:shadow-indigo-500/20 transition-all duration-300">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+          Upload
+        </button>
+        <div class="flex gap-2">
+          <button @click="showSettings = true" class="flex-1 flex items-center justify-center gap-2 bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 px-3 py-2 rounded-xl text-xs font-medium transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Mobile Header -->
+    <header class="sm:hidden sticky top-0 z-30 glass-panel border-b border-slate-800 px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <div class="w-7 h-7 rounded-md accent-bg flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-white"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+        </div>
+        <h1 class="font-bold text-lg">Dropper</h1>
+      </div>
+      <div class="flex items-center gap-2">
+        <button @click="showSettings = true" class="p-2 text-slate-400 hover:text-white rounded-lg">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
       </div>
     </header>
 
-    <main class="max-w-7xl mx-auto w-full px-3 sm:px-6 py-4 flex-1">
-      <div class="hidden sm:flex gap-2 mb-4">
-        <button @click="filter='all'" class="px-3 py-1 rounded bg-slate-800">All</button>
-        <button @click="filter='file'" class="px-3 py-1 rounded bg-slate-800">Files</button>
-        <button @click="filter='note'" class="px-3 py-1 rounded bg-slate-800">Notes</button>
-        <button @click="filter='html'" class="px-3 py-1 rounded bg-slate-800">HTML</button>
-        <select v-model="sortMode" class="ml-auto bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm">
-          <option value="recent">Most Recent</option>
-          <option value="day">Grouped by Day</option>
-        </select>
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col min-w-0 pb-20 sm:pb-0 h-screen overflow-y-auto">
+      <div class="max-w-6xl mx-auto w-full px-4 sm:px-8 pt-6 pb-12">
+        <!-- Top bar: Search & Sort -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+          <div class="relative w-full sm:max-w-md group">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-500 group-focus-within:text-indigo-400 transition-colors"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/></svg>
+            </div>
+            <input v-model="search" placeholder="Search files, notes..." class="block w-full pl-10 pr-3 py-2.5 bg-slate-900/50 border border-slate-800 rounded-xl text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner" />
+          </div>
+
+          <div class="flex items-center gap-3 self-end sm:self-auto">
+            <button @click="createReactPage" class="hidden sm:flex items-center gap-2 bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/50 px-3 py-2 rounded-lg text-sm font-medium transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-sky-400"><circle cx="12" cy="12" r="3"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(45 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(-45 12 12)"/></svg>
+              New React App
+            </button>
+            <div class="relative">
+              <select v-model="sortMode" class="appearance-none bg-slate-800/80 border border-slate-700/50 hover:bg-slate-700/80 rounded-lg pl-3 pr-8 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-colors cursor-pointer">
+                <option value="recent">Most Recent</option>
+                <option value="day">Grouped by Day</option>
+              </select>
+              <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400"><polyline points="6 9 12 15 18 9"/></svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      <div v-if="loading" class="py-20 flex flex-col items-center justify-center text-slate-500">
+        <svg class="animate-spin h-8 w-8 text-indigo-500 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+        <p>Loading workspace...</p>
+      </div>
+      <div v-else-if="displayItems.length===0" class="py-20 flex flex-col items-center justify-center text-slate-500">
+        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="mb-4 text-slate-700"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+        <p>No items found.</p>
       </div>
 
-      <div v-if="loading" class="py-20 text-center text-slate-500">Loading…</div>
-      <div v-else-if="displayItems.length===0" class="py-20 text-center text-slate-500">No items found.</div>
-
       <template v-else>
-        <section v-if="sortMode==='recent'" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <article v-for="item in displayItems" :key="item.type + '-' + item.id" class="bg-slate-900 border border-slate-800 rounded-xl p-3">
-            <div class="flex items-start justify-between gap-2">
-              <h3 class="font-semibold truncate">{{ item.title }}</h3>
-              <span class="text-xs uppercase text-slate-400">{{ item.type }}</span>
-            </div>
-            <p class="text-xs text-slate-500 mt-1">{{ formatDate(item.updated) }} <span v-if="item.folder">· {{ item.folder }}</span></p>
-            <p class="text-sm mt-2 text-slate-300 line-clamp-4">{{ item.content || 'No preview' }}</p>
-            <div class="mt-3 flex gap-2 flex-wrap">
-              <button v-if="item.url" @click="openItem(item)" class="px-2 py-1 bg-slate-800 rounded text-xs">Open</button>
-              <button v-if="item.type==='file' && settings.showPermissionButtons" @click="openPerms(item)" class="px-2 py-1 bg-slate-800 rounded text-xs">Share / Permissions</button>
-              <button v-if="item.type==='file' && settings.showPermissionButtons" @click="openFolder(item)" class="px-2 py-1 bg-slate-800 rounded text-xs">Folder</button>
-              <button @click="deleteItem(item)" class="px-2 py-1 bg-red-900/60 rounded text-xs">Delete</button>
-            </div>
-          </article>
+        <section v-if="sortMode==='recent'">
+          <transition-group name="list" tag="div" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 xl:gap-5">
+            <article v-for="item in displayItems" :key="item.type + '-' + item.id" class="bento-card group relative bg-slate-900/40 border border-slate-800/80 rounded-2xl p-5 overflow-hidden flex flex-col h-56">
+              <div class="absolute top-0 right-0 p-4 opacity-10 pointer-events-none group-hover:opacity-20 transition-opacity">
+                <!-- Icon based on type -->
+                <svg v-if="item.type==='file'" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                <svg v-else-if="item.type==='note'" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+                <svg v-else-if="item.type==='html'" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>
+              </div>
+
+              <div class="flex items-start justify-between gap-3 relative z-10 mb-2">
+                <h3 class="font-bold text-slate-100 truncate flex-1 leading-tight">{{ item.title }}</h3>
+                <span :class="['text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full border', getTypeColorClasses(item.type)]">{{ item.type }}</span>
+              </div>
+              <p class="text-[11px] font-medium text-slate-500 mb-3 relative z-10 flex items-center gap-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                {{ formatDate(item.updated) }}
+                <span v-if="item.folder" class="flex items-center gap-1 text-indigo-400 bg-indigo-500/10 px-1.5 rounded ml-1"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> {{ item.folder }}</span>
+              </p>
+
+              <div class="flex-1 overflow-hidden relative z-10">
+                <p class="text-sm text-slate-300/80 leading-relaxed line-clamp-3">{{ item.content || 'No preview available' }}</p>
+              </div>
+
+              <div class="mt-auto pt-4 flex gap-2 relative z-10 border-t border-slate-800/50 opacity-0 group-hover:opacity-100 transition-opacity focus-within:opacity-100">
+                <button v-if="item.url" @click="openItem(item)" class="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 rounded-lg text-xs font-medium transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
+                  Open
+                </button>
+                <div v-if="item.type==='file' && settings.showPermissionButtons" class="flex gap-1">
+                  <button @click="openPerms(item)" class="p-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors tooltip" title="Share / Permissions">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                  </button>
+                  <button @click="openFolder(item)" class="p-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors tooltip" title="Folder">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                  </button>
+                </div>
+                <button @click="deleteItem(item)" class="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg transition-colors tooltip" title="Delete">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                </button>
+              </div>
+            </article>
+          </transition-group>
         </section>
 
-        <section v-else class="space-y-5">
-          <div v-for="group in groupedByDay" :key="group.label">
-            <h2 class="text-sm uppercase tracking-wide text-slate-400 mb-2">{{ group.label }}</h2>
-            <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              <article v-for="item in group.items" :key="item.type + '-' + item.id" class="bg-slate-900 border border-slate-800 rounded-xl p-3">
-                <div class="flex items-start justify-between gap-2">
-                  <h3 class="font-semibold truncate">{{ item.title }}</h3>
-                  <span class="text-xs uppercase text-slate-400">{{ item.type }}</span>
+        <section v-else class="space-y-8">
+          <div v-for="group in groupedByDay" :key="group.label" class="relative">
+            <div class="sticky top-0 z-20 bg-slate-950/80 backdrop-blur-md py-2 mb-4 -mx-4 px-4 sm:mx-0 sm:px-0">
+              <h2 class="text-xs uppercase tracking-widest font-bold text-slate-400 flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full accent-bg"></span>
+                {{ group.label }}
+                <span class="ml-2 text-slate-600 font-normal normal-case">({{ group.items.length }})</span>
+              </h2>
+            </div>
+            <transition-group name="list" tag="div" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 xl:gap-5">
+              <article v-for="item in group.items" :key="item.type + '-' + item.id" class="bento-card group relative bg-slate-900/40 border border-slate-800/80 rounded-2xl p-5 overflow-hidden flex flex-col h-56">
+                <!-- Group item identical to above (DRY in vue usually via component, but we inline here) -->
+                <div class="absolute top-0 right-0 p-4 opacity-10 pointer-events-none group-hover:opacity-20 transition-opacity">
+                  <svg v-if="item.type==='file'" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <svg v-else-if="item.type==='note'" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+                  <svg v-else-if="item.type==='html'" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>
                 </div>
-                <p class="text-xs text-slate-500 mt-1">{{ formatDate(item.updated) }} <span v-if="item.folder">· {{ item.folder }}</span></p>
-                <p class="text-sm mt-2 text-slate-300 line-clamp-4">{{ item.content || 'No preview' }}</p>
-                <div class="mt-3 flex gap-2 flex-wrap">
-                  <button v-if="item.url" @click="openItem(item)" class="px-2 py-1 bg-slate-800 rounded text-xs">Open</button>
-                  <button v-if="item.type==='file' && settings.showPermissionButtons" @click="openPerms(item)" class="px-2 py-1 bg-slate-800 rounded text-xs">Share / Permissions</button>
-                  <button v-if="item.type==='file' && settings.showPermissionButtons" @click="openFolder(item)" class="px-2 py-1 bg-slate-800 rounded text-xs">Folder</button>
-                  <button @click="deleteItem(item)" class="px-2 py-1 bg-red-900/60 rounded text-xs">Delete</button>
+                <div class="flex items-start justify-between gap-3 relative z-10 mb-2">
+                  <h3 class="font-bold text-slate-100 truncate flex-1 leading-tight">{{ item.title }}</h3>
+                  <span :class="['text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full border', getTypeColorClasses(item.type)]">{{ item.type }}</span>
+                </div>
+                <p class="text-[11px] font-medium text-slate-500 mb-3 relative z-10 flex items-center gap-1.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  {{ formatDate(item.updated) }}
+                  <span v-if="item.folder" class="flex items-center gap-1 text-indigo-400 bg-indigo-500/10 px-1.5 rounded ml-1"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> {{ item.folder }}</span>
+                </p>
+                <div class="flex-1 overflow-hidden relative z-10">
+                  <p class="text-sm text-slate-300/80 leading-relaxed line-clamp-3">{{ item.content || 'No preview available' }}</p>
+                </div>
+                <div class="mt-auto pt-4 flex gap-2 relative z-10 border-t border-slate-800/50 opacity-0 group-hover:opacity-100 transition-opacity focus-within:opacity-100">
+                  <button v-if="item.url" @click="openItem(item)" class="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 rounded-lg text-xs font-medium transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
+                    Open
+                  </button>
+                  <div v-if="item.type==='file' && settings.showPermissionButtons" class="flex gap-1">
+                    <button @click="openPerms(item)" class="p-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button>
+                    <button @click="openFolder(item)" class="p-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></button>
+                  </div>
+                  <button @click="deleteItem(item)" class="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
                 </div>
               </article>
-            </div>
+            </transition-group>
           </div>
         </section>
       </template>
+      </div>
     </main>
 
-    <div v-if="viewer" class="fixed inset-0 z-40 bg-black/80" @click.self="viewer=null">
+    <!-- Mobile Bottom Navigation -->
+    <nav class="sm:hidden fixed bottom-0 left-0 right-0 glass-panel border-t border-slate-800/50 z-40 pb-safe">
+      <div class="flex items-center justify-around p-2">
+        <button @click="filter='all'" :class="['flex flex-col items-center p-2 rounded-xl transition-colors', filter==='all' ? 'text-white' : 'text-slate-500']">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :class="filter==='all' ? 'mb-1 text-indigo-400' : 'mb-1'"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+          <span class="text-[10px] font-medium">All</span>
+        </button>
+        <button @click="filter='file'" :class="['flex flex-col items-center p-2 rounded-xl transition-colors', filter==='file' ? 'text-white' : 'text-slate-500']">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :class="filter==='file' ? 'mb-1 text-indigo-400' : 'mb-1'"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span class="text-[10px] font-medium">Files</span>
+        </button>
+
+        <div class="relative -top-5">
+          <button @click="promptUploadDialog" class="w-12 h-12 rounded-full accent-bg text-white flex items-center justify-center shadow-lg shadow-indigo-500/30 hover:scale-105 active:scale-95 transition-transform border-4 border-slate-950">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+        </div>
+
+        <button @click="filter='note'" :class="['flex flex-col items-center p-2 rounded-xl transition-colors', filter==='note' ? 'text-white' : 'text-slate-500']">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :class="filter==='note' ? 'mb-1 text-indigo-400' : 'mb-1'"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+          <span class="text-[10px] font-medium">Notes</span>
+        </button>
+        <button @click="filter='html'" :class="['flex flex-col items-center p-2 rounded-xl transition-colors', filter==='html' ? 'text-white' : 'text-slate-500']">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :class="filter==='html' ? 'mb-1 text-indigo-400' : 'mb-1'"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          <span class="text-[10px] font-medium">HTML</span>
+        </button>
+      </div>
+    </nav>
+
+    <div v-if="viewer" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-sm transition-all" @click.self="viewer=null">
       <div class="w-full h-full sm:p-6">
         <iframe :src="viewer.url" class="w-full h-full bg-white rounded-none sm:rounded-xl"></iframe>
       </div>
     </div>
 
-    <div v-if="showUpload" class="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center" @click.self="showUpload=false">
-      <div class="bg-slate-900 border border-slate-700 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-4">
-        <h2 class="font-semibold mb-2">Upload files</h2>
-        <p class="text-xs text-slate-400 mb-3">Mobile-safe uploader modal.</p>
-        <input ref="uploadInput" type="file" multiple class="w-full text-sm" />
-        <input v-model="uploadFolder" placeholder="Folder (optional)" class="mt-2 w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm" />
-        <div class="mt-3 flex gap-2 justify-end">
-          <button @click="showUpload=false" class="px-3 py-2 bg-slate-800 rounded">Cancel</button>
-          <button @click="doUpload" class="px-3 py-2 accent-bg text-white rounded">Upload</button>
-        </div>
-      </div>
-    </div>
+    <transition name="fade">
+      <div v-if="showUpload" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="showUpload=false">
+        <transition name="slide-up" appear>
+          <div class="glass-panel border border-slate-700/50 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md p-6 shadow-2xl">
+            <div class="flex items-center gap-3 mb-6">
+              <div class="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+              </div>
+              <div>
+                <h2 class="font-bold text-lg text-slate-100">Upload files</h2>
+                <p class="text-xs text-slate-400">Add new content to your workspace</p>
+              </div>
+            </div>
 
-    <div v-if="permItem" class="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center" @click.self="permItem=null">
-      <div class="bg-slate-900 border border-slate-700 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg p-4">
-        <h2 class="font-semibold mb-2">Permissions: {{ permItem.title }}</h2>
-        <div class="space-y-3 text-sm">
-          <div class="flex gap-2">
-            <select v-model="shareUsername" class="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-2">
-              <option value="">Select user</option>
-              <option v-for="u in shareUsers" :key="u" :value="u">{{ u }}</option>
-            </select>
-            <button @click="shareFile(true)" class="px-3 py-2 bg-slate-700 rounded">Share</button>
-            <button @click="shareFile(false)" class="px-3 py-2 bg-slate-700 rounded">Revoke</button>
-          </div>
-          <div class="flex items-center justify-between bg-slate-800 rounded p-2">
-            <span>Public link</span>
-            <button @click="togglePublic" class="px-2 py-1 rounded bg-slate-700">{{ permItem.public_enabled ? 'Disable' : 'Enable' }}</button>
-          </div>
-          <p v-if="permItem.public_enabled" class="text-xs break-all">{{ publicUrl(permItem) }}</p>
-        </div>
-      </div>
-    </div>
+            <div class="space-y-4">
+              <div class="border-2 border-dashed border-slate-700 rounded-2xl p-6 flex flex-col items-center justify-center bg-slate-800/30 hover:bg-slate-800/50 transition-colors relative cursor-pointer group">
+                <input ref="uploadInput" type="file" multiple class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-slate-500 group-hover:text-indigo-400 transition-colors mb-2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                <p class="text-sm font-medium text-slate-300">Choose files to upload</p>
+                <p class="text-xs text-slate-500 mt-1">or drag and drop here</p>
+              </div>
 
-    <div v-if="folderItem" class="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center" @click.self="folderItem=null">
-      <div class="bg-slate-900 border border-slate-700 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-4">
-        <h2 class="font-semibold mb-2">Set folder</h2>
-        <input v-model="folderDraft" list="folder-options" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2" />
-        <datalist id="folder-options"><option v-for="f in folderOptions" :key="f" :value="f"></option></datalist>
-        <div class="mt-3 flex justify-end gap-2">
-          <button @click="folderItem=null" class="px-3 py-2 bg-slate-800 rounded">Cancel</button>
-          <button @click="saveFolder" class="px-3 py-2 accent-bg text-white rounded">Save</button>
-        </div>
-      </div>
-    </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Folder (Optional)</label>
+                <div class="relative">
+                  <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-500"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                  </div>
+                  <input v-model="uploadFolder" placeholder="e.g. Work, Personal" class="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50" />
+                </div>
+              </div>
+            </div>
 
-    <div v-if="showPalette" class="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center" @click.self="showPalette=false">
-      <div class="bg-slate-900 border border-slate-700 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-4">
-        <h2 class="font-semibold mb-2">Color palette</h2>
-        <div class="grid grid-cols-3 gap-2">
-          <button v-for="p in palettes" :key="p.name" @click="setPalette(p)" class="px-3 py-2 rounded text-white" :style="{ backgroundColor: p.value }">{{ p.name }}</button>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="showSettings" class="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center" @click.self="showSettings=false">
-      <div class="bg-slate-900 border border-slate-700 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg p-4">
-        <h2 class="font-semibold mb-2">Settings</h2>
-        <div class="space-y-3 text-sm">
-          <label class="block">
-            <span class="text-slate-400">Default sort</span>
-            <select v-model="sortMode" class="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-2">
-              <option value="recent">Most Recent</option>
-              <option value="day">Grouped by Day</option>
-            </select>
-          </label>
-          <div>
-            <p class="text-slate-400 mb-1">Theme accent</p>
-            <div class="grid grid-cols-3 gap-2">
-              <button
-                v-for="p in palettes"
-                :key="`setting-${p.name}`"
-                @click="setPalette(p)"
-                class="px-2 py-2 rounded text-white text-xs"
-                :style="{ backgroundColor: p.value }"
-              >{{ p.name }}</button>
+            <div class="mt-8 flex gap-3">
+              <button @click="showUpload=false" class="flex-1 px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-sm font-medium transition-colors">Cancel</button>
+              <button @click="doUpload" class="flex-1 px-4 py-3 accent-bg text-white rounded-xl text-sm font-medium shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/30 transition-all">Upload</button>
             </div>
           </div>
-          <div>
-            <p class="text-slate-400 mb-1">Jump to page</p>
-            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              <a href="/" class="bg-slate-800 px-3 py-2 rounded text-center">Overview</a>
-              <a href="/files" class="bg-slate-800 px-3 py-2 rounded text-center">Files</a>
-              <a href="/text" class="bg-slate-800 px-3 py-2 rounded text-center">Text</a>
-              <a href="/reader" class="bg-slate-800 px-3 py-2 rounded text-center">Reader</a>
-              <a href="/browse" class="bg-slate-800 px-3 py-2 rounded text-center">Browse</a>
-              <a href="/latex" class="bg-slate-800 px-3 py-2 rounded text-center">PDF</a>
-              <a href="/html" class="bg-slate-800 px-3 py-2 rounded text-center">HTML</a>
-              <a href="/chat" class="bg-slate-800 px-3 py-2 rounded text-center">Board</a>
-              <a href="/access" class="bg-slate-800 px-3 py-2 rounded text-center">Access</a>
-            </div>
-          </div>
-          <div>
-            <p class="text-slate-400 mb-1">Permissions + sharing controls</p>
-            <div class="space-y-2 bg-slate-800 rounded p-2">
-              <label class="flex items-center justify-between gap-2">
-                <span>Show sharing + folder buttons on files</span>
-                <input type="checkbox" v-model="settings.showPermissionButtons" />
-              </label>
-              <label class="flex items-center justify-between gap-2">
-                <span>Reopen upload modal after picker</span>
-                <input type="checkbox" v-model="settings.reopenUploadModal" />
-              </label>
-              <label class="flex items-center justify-between gap-2">
-                <span>Default to Files filter on load</span>
-                <input type="checkbox" v-model="settings.defaultFilesFilter" />
-              </label>
-            </div>
-          </div>
-          <div class="flex justify-end">
-            <button @click="showSettings = false" class="px-3 py-2 bg-slate-800 rounded">Close</button>
-          </div>
-        </div>
+        </transition>
       </div>
-    </div>
+    </transition>
+
+    <transition name="fade">
+      <div v-if="permItem" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="permItem=null">
+        <transition name="slide-up" appear>
+          <div class="glass-panel border border-slate-700/50 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg p-6 shadow-2xl">
+            <div class="flex items-center gap-3 mb-6">
+              <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+              </div>
+              <div class="flex-1 min-w-0">
+                <h2 class="font-bold text-lg text-slate-100 truncate">Share: {{ permItem.title }}</h2>
+                <p class="text-xs text-slate-400">Manage who can access this item</p>
+              </div>
+            </div>
+
+            <div class="space-y-6">
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Share with user</label>
+                <div class="flex gap-2">
+                  <div class="relative flex-1">
+                    <select v-model="shareUsername" class="w-full appearance-none bg-slate-900 border border-slate-700 rounded-xl px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer">
+                      <option value="">Select a user...</option>
+                      <option v-for="u in shareUsers" :key="u" :value="u">{{ u }}</option>
+                    </select>
+                    <div class="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-500"><polyline points="6 9 12 15 18 9"/></svg>
+                    </div>
+                  </div>
+                  <button @click="shareFile(true)" class="px-4 py-3 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-xl font-medium transition-colors border border-emerald-500/20">Add</button>
+                  <button @click="shareFile(false)" class="px-4 py-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-xl font-medium transition-colors border border-rose-500/20">Revoke</button>
+                </div>
+              </div>
+
+              <div class="bg-slate-900/50 border border-slate-800 rounded-2xl p-4">
+                <div class="flex items-center justify-between mb-2">
+                  <div>
+                    <h3 class="font-semibold text-sm">Public Link</h3>
+                    <p class="text-xs text-slate-500">Anyone with the link can view</p>
+                  </div>
+                  <button @click="togglePublic" :class="['px-3 py-1.5 rounded-lg text-xs font-bold transition-all', permItem.public_enabled ? 'bg-rose-500/10 text-rose-400 hover:bg-rose-500/20' : 'bg-slate-800 text-slate-300 hover:bg-slate-700']">
+                    {{ permItem.public_enabled ? 'Disable' : 'Enable Link' }}
+                  </button>
+                </div>
+                <div v-if="permItem.public_enabled" class="mt-3 flex gap-2 items-center bg-slate-950 rounded-xl p-2 border border-slate-800">
+                  <p class="text-xs text-slate-400 flex-1 break-all select-all font-mono px-2">{{ publicUrl(permItem) }}</p>
+                  <button class="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 transition-colors" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText); this.innerHTML='<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\' class=\'text-emerald-400\'><polyline points=\'20 6 9 17 4 12\'/></svg>'; setTimeout(()=>this.innerHTML='<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><rect x=\'9\' y=\'9\' width=\'13\' height=\'13\' rx=\'2\' ry=\'2\'/><path d=\'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\'/></svg>', 2000)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-6">
+              <button @click="permItem=null" class="w-full px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-sm font-medium transition-colors">Done</button>
+            </div>
+          </div>
+        </transition>
+      </div>
+    </transition>
+
+    <transition name="fade">
+      <div v-if="folderItem" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="folderItem=null">
+        <transition name="slide-up" appear>
+          <div class="glass-panel border border-slate-700/50 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md p-6 shadow-2xl">
+            <div class="flex items-center gap-3 mb-6">
+              <div class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              </div>
+              <div class="flex-1 min-w-0">
+                <h2 class="font-bold text-lg text-slate-100 truncate">Move to Folder</h2>
+                <p class="text-xs text-slate-400 truncate">{{ folderItem.title }}</p>
+              </div>
+            </div>
+
+            <div class="space-y-4">
+              <div class="relative">
+                <input v-model="folderDraft" list="folder-options" placeholder="Type or select a folder name..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-inner" />
+                <datalist id="folder-options"><option v-for="f in folderOptions" :key="f" :value="f"></option></datalist>
+              </div>
+              <p class="text-xs text-slate-500">Leaving this blank will remove the item from its current folder.</p>
+            </div>
+
+            <div class="mt-8 flex gap-3">
+              <button @click="folderItem=null" class="flex-1 px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-sm font-medium transition-colors">Cancel</button>
+              <button @click="saveFolder" class="flex-1 px-4 py-3 accent-bg text-white rounded-xl text-sm font-medium shadow-lg transition-all">Save Changes</button>
+            </div>
+          </div>
+        </transition>
+      </div>
+    </transition>
+
+    <transition name="fade">
+      <div v-if="showSettings" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="showSettings=false">
+        <transition name="slide-up" appear>
+          <div class="glass-panel border border-slate-700/50 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center gap-3 mb-6 sticky top-0 bg-slate-900/90 backdrop-blur pb-2 z-10 border-b border-slate-800/50 -mx-6 px-6 -mt-6 pt-6">
+              <div class="w-10 h-10 rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              </div>
+              <div>
+                <h2 class="font-bold text-lg text-slate-100">Settings</h2>
+                <p class="text-xs text-slate-400">Customize your workspace</p>
+              </div>
+              <button @click="showSettings=false" class="ml-auto p-2 bg-slate-800 hover:bg-slate-700 rounded-full text-slate-400 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            <div class="space-y-8 pb-4">
+              <section>
+                <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Theme Accent</h3>
+                <div class="grid grid-cols-3 gap-3">
+                  <button v-for="p in palettes" :key="`setting-${p.name}`" @click="setPalette(p)" class="relative h-12 rounded-xl text-white font-medium shadow-sm transition-transform hover:scale-105 active:scale-95 flex items-center justify-center overflow-hidden group" :style="{ backgroundColor: p.value }">
+                    <span class="relative z-10">{{ p.name }}</span>
+                    <div class="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  </button>
+                </div>
+              </section>
+
+              <section>
+                <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Preferences</h3>
+                <div class="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden divide-y divide-slate-800/50">
+                  <label class="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-800/30 transition-colors">
+                    <span class="text-sm font-medium">Show sharing options</span>
+                    <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                      <input type="checkbox" v-model="settings.showPermissionButtons" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-slate-700 appearance-none cursor-pointer transition-transform duration-200 ease-in-out" :class="{'translate-x-5 border-indigo-500': settings.showPermissionButtons}"/>
+                      <label class="toggle-label block overflow-hidden h-5 rounded-full bg-slate-700 cursor-pointer" :class="{'bg-indigo-500': settings.showPermissionButtons}"></label>
+                    </div>
+                  </label>
+                  <label class="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-800/30 transition-colors">
+                    <span class="text-sm font-medium">Keep upload modal open</span>
+                    <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                      <input type="checkbox" v-model="settings.reopenUploadModal" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-slate-700 appearance-none cursor-pointer transition-transform duration-200 ease-in-out" :class="{'translate-x-5 border-indigo-500': settings.reopenUploadModal}"/>
+                      <label class="toggle-label block overflow-hidden h-5 rounded-full bg-slate-700 cursor-pointer" :class="{'bg-indigo-500': settings.reopenUploadModal}"></label>
+                    </div>
+                  </label>
+                  <label class="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-800/30 transition-colors">
+                    <span class="text-sm font-medium">Default to Files filter</span>
+                    <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                      <input type="checkbox" v-model="settings.defaultFilesFilter" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-slate-700 appearance-none cursor-pointer transition-transform duration-200 ease-in-out" :class="{'translate-x-5 border-indigo-500': settings.defaultFilesFilter}"/>
+                      <label class="toggle-label block overflow-hidden h-5 rounded-full bg-slate-700 cursor-pointer" :class="{'bg-indigo-500': settings.defaultFilesFilter}"></label>
+                    </div>
+                  </label>
+                </div>
+              </section>
+
+              <section>
+                <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Navigation</h3>
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <a href="/files" class="bg-slate-800/50 hover:bg-slate-700/80 border border-slate-700/50 px-3 py-2 rounded-xl text-center text-sm transition-colors">Files Manager</a>
+                  <a href="/text" class="bg-slate-800/50 hover:bg-slate-700/80 border border-slate-700/50 px-3 py-2 rounded-xl text-center text-sm transition-colors">Text Editor</a>
+                  <a href="/reader" class="bg-slate-800/50 hover:bg-slate-700/80 border border-slate-700/50 px-3 py-2 rounded-xl text-center text-sm transition-colors">Reader</a>
+                  <a href="/browse" class="bg-slate-800/50 hover:bg-slate-700/80 border border-slate-700/50 px-3 py-2 rounded-xl text-center text-sm transition-colors">Web Proxy</a>
+                  <a href="/latex" class="bg-slate-800/50 hover:bg-slate-700/80 border border-slate-700/50 px-3 py-2 rounded-xl text-center text-sm transition-colors">LaTeX to PDF</a>
+                  <a href="/html" class="bg-slate-800/50 hover:bg-slate-700/80 border border-slate-700/50 px-3 py-2 rounded-xl text-center text-sm transition-colors">HTML Studio</a>
+                  <a href="/chat" class="bg-slate-800/50 hover:bg-slate-700/80 border border-slate-700/50 px-3 py-2 rounded-xl text-center text-sm transition-colors">Whiteboard</a>
+                  <a href="/access" class="col-span-2 sm:col-span-1 bg-slate-800/50 hover:bg-slate-700/80 border border-slate-700/50 px-3 py-2 rounded-xl text-center text-sm transition-colors text-slate-400 hover:text-slate-200">Access Control</a>
+                </div>
+              </section>
+            </div>
+
+            <div class="pt-4 border-t border-slate-800/50 mt-2">
+              <button @click="showSettings=false" class="w-full px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-sm font-medium transition-colors">Close Settings</button>
+            </div>
+          </div>
+        </transition>
+      </div>
+    </transition>
   </div>
   {% endraw %}
 
@@ -223,25 +462,32 @@
     createApp({
       data() {
         return {
-          items: [], loading: true, filter: 'all', search: '', sortMode: 'recent', mobileMenu: false,
+          items: [], loading: true, filter: 'all', search: '', sortMode: 'recent',
           viewer: null, showUpload: false, uploadFolder: '',
           permItem: null, shareUsers: [], shareUsername: '',
           folderItem: null, folderDraft: '', folderOptions: [],
-          showPalette: false, showSettings: false,
+          showSettings: false,
           settings: {
             showPermissionButtons: true,
             reopenUploadModal: true,
             defaultFilesFilter: false,
           },
           palettes: [
-            { name: 'Indigo', value: '#6366f1' }, { name: 'Emerald', value: '#10b981' }, { name: 'Rose', value: '#f43f5e' }
+            { name: 'Indigo', value: '#6366f1' }, { name: 'Emerald', value: '#10b981' }, { name: 'Rose', value: '#f43f5e' },
+            { name: 'Sky', value: '#38bdf8' }, { name: 'Violet', value: '#8b5cf6' }, { name: 'Amber', value: '#f59e0b' }
           ]
         }
       },
       computed: {
         displayItems() {
           let out = [...this.items];
-          if (this.filter !== 'all') out = out.filter(i => i.type === this.filter);
+          if (this.filter !== 'all') {
+            if (this.filter === 'file') {
+              out = out.filter(i => i.type === 'file' || i.type === 'pdf');
+            } else {
+              out = out.filter(i => i.type === this.filter);
+            }
+          }
           if (this.search.trim()) {
             const q = this.search.toLowerCase();
             out = out.filter(i => (i.title || '').toLowerCase().includes(q) || (i.content || '').toLowerCase().includes(q));
@@ -385,12 +631,19 @@
           this.folderItem = null;
           await this.fetchItems();
         },
+        getTypeColorClasses(type) {
+          switch(type) {
+            case 'file': return 'border-sky-500/20 text-sky-400 bg-sky-500/10';
+            case 'note': return 'border-amber-500/20 text-amber-400 bg-amber-500/10';
+            case 'html': return 'border-fuchsia-500/20 text-fuchsia-400 bg-fuchsia-500/10';
+            case 'reader': return 'border-emerald-500/20 text-emerald-400 bg-emerald-500/10';
+            case 'pdf': return 'border-rose-500/20 text-rose-400 bg-rose-500/10';
+            default: return 'border-slate-500/20 text-slate-400 bg-slate-500/10';
+          }
+        },
         setPalette(p) {
           document.documentElement.style.setProperty('--accent', p.value);
           localStorage.setItem('dropper-palette-color', p.value);
-          if (this.showPalette) {
-            this.showPalette = false;
-          }
         },
         async createReactPage() {
           const tpl = `<!doctype html>\n<html>\n  <body>\n    <div id="root"></div>\n    <script type="module">\n      import React from 'https://esm.sh/react@18';\n      import { createRoot } from 'https://esm.sh/react-dom@18/client';\n      function App(){ return React.createElement('h1', null, 'React is working'); }\n      createRoot(document.getElementById('root')).render(React.createElement(App));\n    </script>\n  </body>\n</html>`;

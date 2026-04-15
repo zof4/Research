@@ -1,0 +1,1618 @@
+commit 7f3a649cbc87ea73bb107b286199c8b01f4fa686
+Author: zof4 <aweiss@southern.edu>
+Date:   Tue Apr 14 17:21:47 2026 -0700
+
+    Merge pull request #60 from zof4/codex/revamp-dropper-app-ui-and-functionality
+
+diff --git a/templates/index.html b/templates/index.html
+new file mode 100644
+index 0000000..c0a7e20
+--- /dev/null
++++ b/templates/index.html
+@@ -0,0 +1,1606 @@
++{% import "_macros.html" as ui %}
++{% set page_titles = {
++  "home": "Overview",
++  "files": "Files",
++  "text": "Notes",
++  "reader": "Reader",
++  "browse": "Browse",
++  "latex": "PDF",
++  "html": "HTML Viewer",
++  "access": "Access",
++  "chat": "Board",
++} %}
++{% set page_descriptions = {
++  "home": "Everything important in one place, with the main tools one tap away.",
++  "files": "Upload, download, and share files without visual clutter.",
++  "text": "Save notes, share them, and keep editing simple.",
++  "reader": "Cache public pages and reopen them in a readable format.",
++  "browse": "Browse via the server proxy when direct access is blocked on your own network.",
++  "latex": "Render source into downloadable PDFs.",
++  "html": "Paste HTML/CSS/JS and save interactive static pages you can reopen and download.",
++  "access": "Manage your account and, if needed, admin workspace access.",
++  "chat": "Interactive whiteboard with draggable cards, section links, and comments.",
++} %}
++<!doctype html>
++<html lang="en">
++  <head>
++    <meta charset="UTF-8" />
++    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
++    <title>{{ page_titles.get(active_page, "Dropper") }} · Dropper</title>
++    <script>
++      (function () {
++        try {
++          document.documentElement.dataset.interface = localStorage.getItem("dropper-interface") || "clean";
++          document.documentElement.dataset.tone = localStorage.getItem("dropper-tone") || "dark";
++          document.documentElement.dataset.palette = localStorage.getItem("dropper-palette") || "mono";
++        } catch (_error) {
++          document.documentElement.dataset.interface = "clean";
++          document.documentElement.dataset.tone = "dark";
++          document.documentElement.dataset.palette = "mono";
++        }
++      })();
++    </script>
++    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
++  </head>
++  <body class="app-body page-{{ active_page }}">
++    <div class="app-shell">
++      <header class="site-header">
++        <a class="brand" href="{{ ui.page_url('index', is_admin, selected_owner) }}" data-async-nav>
++          <span class="brand-mark" aria-hidden="true">D</span>
++          <span class="brand-copy">
++            <strong>Dropper</strong>
++            <span>Fast transfer, reduced to the essentials.</span>
++          </span>
++        </a>
++
++        {% if is_authenticated %}
++        <nav class="primary-nav" aria-label="Primary">
++          {{ ui.nav_link('index', 'Overview', 'home', active_page, is_admin, selected_owner) }}
++          {{ ui.nav_link('files_page', 'Files', 'files', active_page, is_admin, selected_owner) }}
++          {{ ui.nav_link('text_page', 'Notes', 'text', active_page, is_admin, selected_owner) }}
++          {{ ui.nav_link('chat_page', 'Board', 'chat', active_page, is_admin, selected_owner) }}
++          {{ ui.nav_link('reader_page', 'Reader', 'reader', active_page, is_admin, selected_owner) }}
++          {{ ui.nav_link('browse_page', 'Browse', 'browse', active_page, is_admin, selected_owner) }}
++          {{ ui.nav_link('latex_page', 'PDF', 'latex', active_page, is_admin, selected_owner) }}
++          {{ ui.nav_link('html_page', 'HTML', 'html', active_page, is_admin, selected_owner) }}
++          {{ ui.nav_link('access_page', 'Access', 'access', active_page, is_admin, selected_owner) }}
++        </nav>
++        {% endif %}
++
++        <div class="header-search" data-header-search>
++          {% if is_authenticated %}
++          <button type="button" class="button button-secondary header-search-toggle" data-global-search-toggle aria-expanded="false" aria-controls="global-search-panel">
++            Search
++          </button>
++          <label class="field">
++            <span>Search</span>
++            <input type="search" data-global-search value="{{ global_search_query }}" placeholder="Search across files, notes, reader, PDFs, HTML pages, and board" />
++          </label>
++          <section id="global-search-panel" class="global-search-panel is-hidden" data-global-search-panel>
++            <div class="global-search-inner">
++              <p class="eyebrow">Workspace results</p>
++              <div class="global-search-results" data-global-search-results></div>
++            </div>
++          </section>
++          {% endif %}
++        </div>
++      </header>
++      {% if is_authenticated %}
++      <script id="global-search-index" type="application/json">{{ global_search_items|tojson }}</script>
++      {% endif %}
++
++      <div class="app-layout">
++        {% if is_authenticated %}
++        <aside class="sidebar">
++          <section class="sidebar-panel">
++            <p class="eyebrow">Workspace</p>
++            <h2>{% if is_admin %}Admin workspace{% else %}{{ current_username }}{% endif %}</h2>
++            <p class="sidebar-note">
++              {% if is_admin %}
++              You are managing <strong>{{ selected_owner }}</strong>.
++              {% else %}
++              Private storage with shared items folded into the same workspace.
++              {% endif %}
++            </p>
++          </section>
++
++          <nav class="sidebar-nav" aria-label="Sections">
++            {{ ui.nav_link('index', 'Overview', 'home', active_page, is_admin, selected_owner) }}
++            {{ ui.nav_link('files_page', 'Files', 'files', active_page, is_admin, selected_owner) }}
++            {{ ui.nav_link('text_page', 'Notes', 'text', active_page, is_admin, selected_owner) }}
++            {{ ui.nav_link('reader_page', 'Reader', 'reader', active_page, is_admin, selected_owner) }}
++            {{ ui.nav_link('browse_page', 'Browse', 'browse', active_page, is_admin, selected_owner) }}
++            {{ ui.nav_link('latex_page', 'PDF', 'latex', active_page, is_admin, selected_owner) }}
++            {{ ui.nav_link('html_page', 'HTML', 'html', active_page, is_admin, selected_owner) }}
++            {{ ui.nav_link('chat_page', 'Board', 'chat', active_page, is_admin, selected_owner) }}
++            {{ ui.nav_link('access_page', 'Access', 'access', active_page, is_admin, selected_owner) }}
++          </nav>
++
++          <section class="sidebar-panel">
++            <p class="eyebrow">Storage</p>
++            <p class="sidebar-metric">{{ human_size(storage.total_bytes) }}</p>
++            <div class="progress" aria-hidden="true">
++              <span style="width: {{ '%.2f'|format(storage.usage_percent) }}%"></span>
++            </div>
++            <p class="sidebar-note">
++              {% if storage.has_limit %}
++              {{ human_size(storage.remaining_bytes) }} remaining
++              {% else %}
++              Combined usage across every user
++              {% endif %}
++            </p>
++          </section>
++        </aside>
++        {% endif %}
++
++        <main class="page {% if not is_authenticated %}is-login{% endif %}">
++          {% with messages = get_flashed_messages(with_categories=true) %}
++          {% if messages %}
++          <div class="flash-stack">
++            {% for category, message in messages %}
++            <p class="flash-message {{ category }}">{{ message }}</p>
++            {% endfor %}
++          </div>
++          {% endif %}
++          {% endwith %}
++
++          {% if not is_authenticated %}
++          <section class="login-shell">
++            <article class="panel login-card">
++              <p class="eyebrow">Sign in</p>
++              <h1>Clean, fast device-to-device sharing.</h1>
++              <p class="lead">
++                Dropper keeps files, notes, cached pages, and PDFs in a simple black-and-white workspace that works on desktop and mobile.
++              </p>
++              {{ ui.appearance_controls() }}
++              <form method="post" action="{{ url_for('login') }}" class="stack-form" data-async>
++                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                <label class="field">
++                  <span>Username</span>
++                  <input type="text" name="username" autocomplete="username" required />
++                </label>
++                <label class="field">
++                  <span>Password</span>
++                  <input type="password" name="password" autocomplete="current-password" required />
++                </label>
++                <button type="submit" class="button button-primary button-block">Sign in</button>
++              </form>
++            </article>
++          </section>
++          {% elif active_page == 'home' %}
++          <section class="page-intro">
++            <div>
++              <p class="eyebrow">Overview</p>
++              <h1>{{ page_titles.get(active_page) }}</h1>
++              <p class="lead">{{ page_descriptions.get(active_page) }}</p>
++            </div>
++            <div class="page-intro-note">
++              {% if is_admin %}
++              <span>Current scope: {{ selected_owner }}</span>
++              {% else %}
++              <span>{{ human_size(storage.total_bytes) }} used</span>
++              {% endif %}
++            </div>
++          </section>
++
++          <section class="metric-grid">
++            {{ ui.metric_card("Visible files", workspace_counts.files, "Everything you can access right now.") }}
++            {{ ui.metric_card("Notes", workspace_counts.text, "Saved notes across your current view.") }}
++            {{ ui.metric_card("Cached pages", workspace_counts.reader, "Reader entries ready to reopen.") }}
++            {{ ui.metric_card("PDFs", workspace_counts.latex, "Rendered documents available for download.") }}
++            {{ ui.metric_card("HTML pages", workspace_counts.html, "Saved interactive static pages.") }}
++          </section>
++
++          <section class="tool-grid">
++            <a class="tool-card" href="{{ ui.page_url('files_page', is_admin, selected_owner) }}" data-async-nav>
++              <p class="eyebrow">Files</p>
++              <h2>Send and retrieve files</h2>
++              <p>{{ workspace_counts.files }} visible items with a single primary action per row.</p>
++            </a>
++            <a class="tool-card" href="{{ ui.page_url('text_page', is_admin, selected_owner) }}" data-async-nav>
++              <p class="eyebrow">Notes</p>
++              <h2>Write and share notes</h2>
++              <p>Simple editor, live preview, and less clutter around each note.</p>
++            </a>
++            <a class="tool-card" href="{{ ui.page_url('reader_page', is_admin, selected_owner) }}" data-async-nav>
++              <p class="eyebrow">Reader</p>
++              <h2>Open saved pages cleanly</h2>
++              <p>Cache public pages, then return to them in a readable layout.</p>
++            </a>
++            <a class="tool-card" href="{{ ui.page_url('latex_page', is_admin, selected_owner) }}" data-async-nav>
++              <p class="eyebrow">PDF</p>
++              <h2>Render source into PDFs</h2>
++              <p>Generate and download documents without leaving the workspace.</p>
++            </a>
++            <a class="tool-card" href="{{ ui.page_url('html_page', is_admin, selected_owner) }}" data-async-nav>
++              <p class="eyebrow">HTML</p>
++              <h2>Build static interactive pages</h2>
++              <p>Paste source, save it, open a sandboxed preview, and download the file.</p>
++            </a>
++          </section>
++
++          <section class="overview-grid">
++            <article class="panel">
++              <div class="section-heading">
++                <div>
++                  <p class="eyebrow">Recent files</p>
++                  <h2>Latest uploads</h2>
++                </div>
++                <a class="button button-secondary" href="{{ ui.page_url('files_page', is_admin, selected_owner) }}" data-async-nav>Open files</a>
++              </div>
++              {% if files %}
++              <div class="compact-list">
++                {% for file in files[:5] %}
++                <a class="compact-row" href="{{ url_for('download_file', filename=file.name, owner=file.owner) }}" target="_blank" rel="noopener noreferrer">
++                  <span class="compact-main">
++                    <strong>{{ file.name }}</strong>
++                    <span>{% if file.owner != current_username %}{{ file.owner }} · {% endif %}{{ file.modified.strftime('%b %d') }}</span>
++                  </span>
++                  <span class="compact-value">{{ human_size(file.size) }}</span>
++                </a>
++                {% endfor %}
++              </div>
++              {% else %}
++              <p class="empty-state">No files yet.</p>
++              {% endif %}
++            </article>
++
++            <article class="panel">
++              <div class="section-heading">
++                <div>
++                  <p class="eyebrow">Recent notes</p>
++                  <h2>Saved text</h2>
++                </div>
++                <a class="button button-secondary" href="{{ ui.page_url('text_page', is_admin, selected_owner) }}" data-async-nav>Open notes</a>
++              </div>
++              {% if text_history %}
++              <div class="compact-list">
++                {% for item in text_history[:4] %}
++                <article class="compact-row is-static">
++                  <span class="compact-main">
++                    <strong>{{ item.title }}</strong>
++                    <span>{{ summarize_text(item.content, 90) }}</span>
++                  </span>
++                  <span class="compact-value">{{ format_timestamp(item.created) }}</span>
++                </article>
++                {% endfor %}
++              </div>
++              {% else %}
++              <p class="empty-state">No notes saved yet.</p>
++              {% endif %}
++            </article>
++
++            <article class="panel panel-wide">
++              <div class="section-heading">
++                <div>
++                  <p class="eyebrow">Shared board</p>
++                  <h2>Quick messages</h2>
++                </div>
++              </div>
++              <div class="message-feed" id="chat-feed" data-chat-feed>
++                {% for message in chat_history[-5:] %}
++                <article class="message-card">
++                  <p class="message-meta"><strong>{{ message.author }}</strong> · {{ format_timestamp(message.created) }}</p>
++                  <p>{{ message.content }}</p>
++                </article>
++                {% endfor %}
++                {% if not chat_history %}
++                <p class="empty-state">No messages yet.</p>
++                {% endif %}
++              </div>
++              <form method="post" action="{{ url_for('send_chat_message') }}" class="stack-form" data-async>
++                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                <label class="field">
++                  <span>New message</span>
++                  <input type="text" name="message" maxlength="{{ max_chat_message_chars }}" placeholder="Add a short update" required />
++                </label>
++                <button type="submit" class="button button-primary">Send message</button>
++              </form>
++            </article>
++          </section>
++          {% elif active_page == 'files' %}
++          <section class="page-intro">
++            <div>
++              <p class="eyebrow">Files</p>
++              <h1>{{ page_titles.get(active_page) }}</h1>
++              <p class="lead">{{ page_descriptions.get(active_page) }}</p>
++            </div>
++            <div class="page-intro-note">
++              <span>{% if storage.has_limit %}{{ human_size(storage.remaining_bytes) }} free{% else %}Admin view{% endif %}</span>
++            </div>
++          </section>
++
++          <section class="workspace-grid">
++            <aside class="workspace-sidebar is-compact">
++              <article class="panel">
++                <div class="section-heading">
++                  <div>
++                    <p class="eyebrow">Upload</p>
++                    <h2>Add a file</h2>
++                  </div>
++                </div>
++                <form method="post" action="{{ url_for('upload_file') }}" enctype="multipart/form-data" class="stack-form" data-async data-upload-form>
++                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                  {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
++                  <label class="field">
++                    <span>Folder (optional)</span>
++                    <input type="text" name="folder" list="file-folder-suggestions" maxlength="120" placeholder="examples/project-a" />
++                  </label>
++                  <label class="field">
++                    <span>Choose files</span>
++                    <input id="file-upload-input" type="file" name="file" multiple required class="sr-only" data-upload-input />
++                    <button type="button" class="button button-secondary button-block" data-upload-picker-trigger>Select files to upload</button>
++                    <span class="text-xs text-slate-400" data-upload-selection-text>No files selected</span>
++                  </label>
++                  <div class="upload-progress is-hidden" data-upload-progress aria-live="polite">
++                    <p class="upload-progress-label"><span data-upload-progress-text>Preparing upload…</span></p>
++                    <div class="progress" aria-hidden="true"><span data-upload-progress-bar style="width: 0%"></span></div>
++                  </div>
++                  <button type="submit" class="button button-primary button-block">Upload files</button>
++                </form>
++              </article>
++
++              <article class="panel">
++                <p class="eyebrow">Usage</p>
++                <h2>Storage</h2>
++                <p class="sidebar-metric">{{ human_size(storage.total_bytes) }}</p>
++                <div class="progress" aria-hidden="true">
++                  <span style="width: {{ '%.2f'|format(storage.usage_percent) }}%"></span>
++                </div>
++                <p class="panel-note">
++                  {% if storage.has_limit %}
++                  {{ storage.usage_percent|round(0, 'floor')|int }}% used. {{ human_size(storage.remaining_bytes) }} remaining.
++                  {% else %}
++                  Viewing combined usage across all users.
++                  {% endif %}
++                </p>
++              </article>
++
++              <article class="panel">
++                <div class="section-heading">
++                  <div>
++                    <p class="eyebrow">Find</p>
++                    <h2>Filter files</h2>
++                  </div>
++                </div>
++                <label class="field">
++                  <span>Search by name, owner, type, or shared user</span>
++                  <span>Also searches folder names.</span>
++                  <input type="search" data-list-filter-input="files" placeholder="Start typing to filter files" />
++                </label>
++              </article>
++            </aside>
++            <datalist id="file-folder-suggestions">
++              {% for folder_name in file_folders %}
++              <option value="{{ folder_name }}"></option>
++              {% endfor %}
++            </datalist>
++
++            <div class="workspace-main" data-files-live-region>
++              {% if is_admin %}
++                {% for group in file_groups %}
++                <section class="panel">
++                  <div class="section-heading">
++                    <div>
++                      <p class="eyebrow">Owner</p>
++                      <h2>{{ group.owner }}</h2>
++                    </div>
++                    <p class="section-meta">{{ group.files|length }} files · {{ human_size(group.total_bytes) }}</p>
++                  </div>
++                  {% if group.files %}
++                  <div class="record-list" data-list-filter-list="files">
++                    {% for file in group.files %}
++                    <article class="record" data-list-filter-item data-filter-text="{{ file.name }} {{ file.owner }} {{ file.type }} {{ file.folder }} {{ file.shared_with|join(' ') }}">
++                      <div class="record-main">
++                        <div class="record-heading">
++                          <a class="record-title" href="{{ url_for('download_file', filename=file.name, owner=file.owner) }}" target="_blank" rel="noopener noreferrer">{{ file.name }}</a>
++                          <div class="tag-row">
++                            {% if file.hidden %}<span class="tag">Hidden</span>{% endif %}
++                            {% if file.public_enabled %}<span class="tag">Public link</span>{% endif %}
++                          </div>
++                        </div>
++                        <p class="record-meta">{{ file.modified.strftime('%b %d, %Y') }} · {{ file.owner }}</p>
++                        {% if file.folder %}
++                        <p class="record-meta">Folder · {{ file.folder }}</p>
++                        {% endif %}
++                        {% if file.shared_with %}
++                        <div class="chip-row">
++                          {% for shared_user in file.shared_with %}
++                          <span class="chip">{{ shared_user }}</span>
++                          {% endfor %}
++                        </div>
++                        {% endif %}
++                      </div>
++                      <div class="record-side">
++                        <p class="record-value">{{ human_size(file.size) }}</p>
++                        <div class="button-row">
++                          <a class="button button-primary" href="{{ url_for('download_file', filename=file.name, owner=file.owner) }}" target="_blank" rel="noopener noreferrer">Download</a>
++                          <details class="inline-details">
++                            <summary class="button button-secondary">Manage</summary>
++                            <div class="detail-panel">
++                              <form method="post" action="{{ url_for('share_file', filename=file.name, owner=file.owner) }}" class="stack-form" data-async>
++                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                <label class="field">
++                                  <span>Share with</span>
++                                  <select name="share_username" required>
++                                    <option value="">Select a user</option>
++                                    {% for share_user in available_share_users %}
++                                    {% if share_user != file.owner %}
++                                    <option value="{{ share_user }}">{{ share_user }}</option>
++                                    {% endif %}
++                                    {% endfor %}
++                                  </select>
++                                </label>
++                                <button type="submit" class="button button-secondary">Share file</button>
++                              </form>
++                              <form method="post" action="{{ url_for('set_file_folder_route', filename=file.name, owner=file.owner) }}" class="stack-form" data-async>
++                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                <label class="field">
++                                  <span>Folder</span>
++                                  <input type="text" name="folder" value="{{ file.folder }}" list="file-folder-suggestions" maxlength="120" placeholder="Leave empty for root" />
++                                </label>
++                                <button type="submit" class="button button-secondary">Save folder</button>
++                              </form>
++                              {% if file.shared_with %}
++                              <div class="chip-action-list">
++                                {% for shared_user in file.shared_with %}
++                                <form method="post" action="{{ url_for('unshare_file', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
++                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                  <input type="hidden" name="share_username" value="{{ shared_user }}" />
++                                  <button type="submit" class="chip-button">Remove {{ shared_user }}</button>
++                                </form>
++                                {% endfor %}
++                              </div>
++                              {% endif %}
++                              <div class="stack-form">
++                                <label class="field">
++                                  <span>Public link</span>
++                                  {% if file.public_enabled %}
++                                  <input type="text" readonly value="{{ url_for('download_public_file', token=file.public_token, _external=True) }}" onclick="this.select();" data-public-link-input />
++                                  {% else %}
++                                  <input type="text" readonly value="Public link disabled" data-public-link-input />
++                                  {% endif %}
++                                </label>
++                              </div>
++                              <div class="button-row">
++                                {% if file.public_enabled %}
++                                <form method="post" action="{{ url_for('disable_public_file_link', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
++                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                  <button type="submit" class="button button-secondary">Disable link</button>
++                                </form>
++                                {% else %}
++                                <form method="post" action="{{ url_for('enable_public_file_link', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
++                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                  <button type="submit" class="button button-secondary">Enable public link</button>
++                                </form>
++                                {% endif %}
++                                {% if file.hidden %}
++                                <form method="post" action="{{ url_for('unhide_file', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
++                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                  <button type="submit" class="button button-secondary">Show publicly</button>
++                                </form>
++                                {% else %}
++                                <form method="post" action="{{ url_for('hide_file', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
++                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                  <button type="submit" class="button button-secondary">Hide from guests</button>
++                                </form>
++                                {% endif %}
++                                <form method="post" action="{{ url_for('delete_file', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
++                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                  <button type="submit" class="button button-danger">Delete file</button>
++                                </form>
++                              </div>
++                            </div>
++                          </details>
++                        </div>
++                      </div>
++                    </article>
++                    {% endfor %}
++                  </div>
++                  {% else %}
++                  <p class="empty-state">No files for this user.</p>
++                  {% endif %}
++                </section>
++                {% endfor %}
++              {% elif files %}
++              <section class="panel">
++                <div class="section-heading">
++                  <div>
++                    <p class="eyebrow">Library</p>
++                    <h2>Visible files</h2>
++                  </div>
++                  <p class="section-meta">{{ files|length }} items</p>
++                </div>
++                <div class="record-list" data-list-filter-list="files">
++                  {% for file in files %}
++                  <article class="record" data-list-filter-item data-filter-text="{{ file.name }} {{ file.owner }} {{ file.type }} {{ file.folder }} {{ file.shared_with|join(' ') }}">
++                    <div class="record-main">
++                      <div class="record-heading">
++                        <a class="record-title" href="{{ url_for('download_file', filename=file.name, owner=file.owner) }}" target="_blank" rel="noopener noreferrer">{{ file.name }}</a>
++                        <div class="tag-row">
++                          {% if file.hidden %}<span class="tag">Hidden</span>{% endif %}
++                          {% if file.public_enabled %}<span class="tag">Public link</span>{% endif %}
++                          {% if file.is_shared_to_viewer %}<span class="tag">Shared</span>{% endif %}
++                        </div>
++                      </div>
++                      <p class="record-meta">
++                        {{ file.modified.strftime('%b %d, %Y') }}
++                        {% if file.owner != current_username %} · Shared by {{ file.owner }}{% endif %}
++                      </p>
++                      {% if file.folder %}
++                      <p class="record-meta">Folder · {{ file.folder }}</p>
++                      {% endif %}
++                      {% if file.shared_with %}
++                      <div class="chip-row">
++                        {% for shared_user in file.shared_with %}
++                        <span class="chip">{{ shared_user }}</span>
++                        {% endfor %}
++                      </div>
++                      {% endif %}
++                    </div>
++                    <div class="record-side">
++                      <p class="record-value">{{ human_size(file.size) }}</p>
++                      <div class="button-row">
++                        <a class="button button-primary" href="{{ url_for('download_file', filename=file.name, owner=file.owner) }}" target="_blank" rel="noopener noreferrer">Download</a>
++                        {% if is_admin or file.owner == current_username %}
++                        <details class="inline-details">
++                          <summary class="button button-secondary">Manage</summary>
++                          <div class="detail-panel">
++                            <form method="post" action="{{ url_for('share_file', filename=file.name, owner=file.owner) }}" class="stack-form" data-async>
++                              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                              <label class="field">
++                                <span>Share with</span>
++                                <select name="share_username" required>
++                                  <option value="">Select a user</option>
++                                  {% for share_user in available_share_users %}
++                                  {% if share_user != file.owner %}
++                                  <option value="{{ share_user }}">{{ share_user }}</option>
++                                  {% endif %}
++                                  {% endfor %}
++                                </select>
++                              </label>
++                              <button type="submit" class="button button-secondary">Share file</button>
++                            </form>
++                            <form method="post" action="{{ url_for('set_file_folder_route', filename=file.name, owner=file.owner) }}" class="stack-form" data-async>
++                              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                              <label class="field">
++                                <span>Folder</span>
++                                <input type="text" name="folder" value="{{ file.folder }}" list="file-folder-suggestions" maxlength="120" placeholder="Leave empty for root" />
++                              </label>
++                              <button type="submit" class="button button-secondary">Save folder</button>
++                            </form>
++                            {% if file.shared_with %}
++                            <div class="chip-action-list">
++                              {% for shared_user in file.shared_with %}
++                              <form method="post" action="{{ url_for('unshare_file', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
++                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                <input type="hidden" name="share_username" value="{{ shared_user }}" />
++                                <button type="submit" class="chip-button">Remove {{ shared_user }}</button>
++                              </form>
++                              {% endfor %}
++                            </div>
++                            {% endif %}
++                            <div class="stack-form">
++                              <label class="field">
++                                <span>Public link</span>
++                                {% if file.public_enabled %}
++                                <input type="text" readonly value="{{ url_for('download_public_file', token=file.public_token, _external=True) }}" onclick="this.select();" data-public-link-input />
++                                {% else %}
++                                <input type="text" readonly value="Public link disabled" data-public-link-input />
++                                {% endif %}
++                              </label>
++                            </div>
++                            <div class="button-row">
++                              {% if file.public_enabled %}
++                              <form method="post" action="{{ url_for('disable_public_file_link', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
++                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                <button type="submit" class="button button-secondary">Disable link</button>
++                              </form>
++                              {% else %}
++                              <form method="post" action="{{ url_for('enable_public_file_link', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
++                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                <button type="submit" class="button button-secondary">Enable public link</button>
++                              </form>
++                              {% endif %}
++                              {% if file.hidden %}
++                              <form method="post" action="{{ url_for('unhide_file', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
++                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                <button type="submit" class="button button-secondary">Show publicly</button>
++                              </form>
++                              {% else %}
++                              <form method="post" action="{{ url_for('hide_file', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
++                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                <button type="submit" class="button button-secondary">Hide from guests</button>
++                              </form>
++                              {% endif %}
++                              <form method="post" action="{{ url_for('delete_file', filename=file.name, owner=file.owner) }}" class="inline-form" data-async>
++                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                <button type="submit" class="button button-danger">Delete file</button>
++                              </form>
++                            </div>
++                          </div>
++                        </details>
++                        {% endif %}
++                      </div>
++                    </div>
++                  </article>
++                  {% endfor %}
++                </div>
++              </section>
++              {% else %}
++              <section class="panel">
++                <p class="empty-state">No files yet.</p>
++              </section>
++              {% endif %}
++            </div>
++          </section>
++          {% elif active_page == 'text' %}
++          <section class="page-intro">
++            <div>
++              <p class="eyebrow">Notes</p>
++              <h1>{{ page_titles.get(active_page) }}</h1>
++              <p class="lead">{{ page_descriptions.get(active_page) }}</p>
++            </div>
++            {% if is_authenticated and text_history %}
++            <form method="post" action="{{ url_for('clear_text_entries') }}" class="inline-form" data-async>
++              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++              <button type="submit" class="button button-danger">Clear all notes</button>
++            </form>
++            {% endif %}
++          </section>
++
++          <section class="workspace-grid">
++            <aside class="workspace-sidebar is-compact">
++              <article class="panel">
++                <div class="section-heading">
++                  <div>
++                    <p class="eyebrow">Compose</p>
++                    <h2>New note</h2>
++                  </div>
++                </div>
++                <form method="post" action="{{ url_for('save_text_entry') }}" class="stack-form text-editor-form" data-async>
++                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                  {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
++                  <label class="field">
++                    <span>Title</span>
++                    <input type="text" name="title" maxlength="120" placeholder="Optional title" />
++                  </label>
++                  <div class="text-toolbar" data-text-toolbar>
++                    <button type="button" class="button button-secondary toolbar-button" data-wrap="**">Bold</button>
++                    <button type="button" class="button button-secondary toolbar-button" data-wrap="*">Italic</button>
++                    <button type="button" class="button button-secondary toolbar-button" data-wrap="`">Code</button>
++                    <button type="button" class="button button-secondary toolbar-button" data-prefix="- ">List</button>
++                    <button type="button" class="button button-secondary toolbar-button" data-insert-template="reference">Ref block</button>
++                    <button type="button" class="button button-secondary toolbar-button" data-insert-template="whiteboard">Whiteboard</button>
++                  </div>
++                  <details class="inline-details">
++                    <summary class="button button-secondary">How whiteboard works</summary>
++                    <div class="detail-panel prose-block">
++                      <p>The whiteboard button inserts a structured markdown template inside your note.</p>
++                      <ul>
++                        <li><strong>Node:</strong> the idea or section you are mapping.</li>
++                        <li><strong>Linked doc:</strong> file, URL, or note tied to that node.</li>
++                        <li><strong>Citation:</strong> page/section evidence for traceability.</li>
++                        <li><strong>Open question:</strong> unresolved item to revisit.</li>
++                      </ul>
++                      <p>
++                        For a full drag-and-link canvas, the next step is a dedicated Board panel with movable cards, connection lines,
++                        and inline comments that sync back to notes.
++                      </p>
++                    </div>
++                  </details>
++                  <label class="field">
++                    <span>Content</span>
++                    <textarea name="content" rows="10" placeholder="Write or paste text here." required></textarea>
++                  </label>
++                  <details class="inline-details">
++                    <summary class="button button-secondary">Preview</summary>
++                    <div class="detail-panel">
++                      <div class="formatted-preview prose-block" data-text-preview>Start typing to preview formatting.</div>
++                    </div>
++                  </details>
++                  <button type="submit" class="button button-primary button-block">Save note</button>
++                </form>
++              </article>
++
++              <article class="panel">
++                <div class="section-heading">
++                  <div>
++                    <p class="eyebrow">Find</p>
++                    <h2>Filter notes</h2>
++                  </div>
++                </div>
++                <label class="field">
++                  <span>Search by title, content, owner, or shared user</span>
++                  <input type="search" data-list-filter-input="notes" placeholder="Start typing to filter notes" />
++                </label>
++              </article>
++            </aside>
++
++            <div class="workspace-main">
++              {% if text_groups %}
++                {% for group in text_groups %}
++                <section class="panel">
++                  <div class="section-heading">
++                    <div>
++                      <p class="eyebrow">Owner</p>
++                      <h2>{{ group.owner }}</h2>
++                    </div>
++                    <p class="section-meta">{{ group['items']|length }} notes</p>
++                  </div>
++                  {% if group['items'] %}
++                  <div class="record-list" data-list-filter-list="notes">
++                    {% for item in group['items'] %}
++                    <article class="record" data-list-filter-item data-filter-text="{{ item.title }} {{ item.content }} {{ group.owner }} {{ item.shared_with|join(' ') }}">
++                      <div class="record-main">
++                        <div class="record-heading">
++                          <h3 class="record-title">{{ item.title }}</h3>
++                          <div class="tag-row">
++                            {% if item.hidden %}<span class="tag">Hidden</span>{% endif %}
++                            {% if group.owner != current_username %}<span class="tag">Shared</span>{% endif %}
++                          </div>
++                        </div>
++                        <p class="record-meta">{{ format_timestamp(item.created) }}</p>
++                        <p class="record-summary">{{ summarize_text(item.content, 220) }}</p>
++                        {% if item.shared_with %}
++                        <div class="chip-row">
++                          {% for shared_user in item.shared_with %}
++                          <span class="chip">{{ shared_user }}</span>
++                          {% endfor %}
++                        </div>
++                        {% endif %}
++                      </div>
++                      <div class="record-side">
++                        <div class="button-row">
++                          <a class="button button-primary" href="{{ url_for('view_text_entry', entry_id=item.id, owner=group.owner) }}">Read note</a>
++                          {% if is_admin or group.owner == current_username %}
++                          <details class="inline-details">
++                            <summary class="button button-secondary">Manage</summary>
++                            <div class="detail-panel">
++                              <form method="post" action="{{ url_for('edit_text_entry', entry_id=item.id) }}" class="stack-form text-editor-form" data-async>
++                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
++                                <label class="field">
++                                  <span>Title</span>
++                                  <input type="text" name="title" maxlength="120" value="{{ item.title }}" />
++                                </label>
++                                <label class="field">
++                                  <span>Content</span>
++                                  <textarea name="content" rows="8" required>{{ item.content }}</textarea>
++                                </label>
++                                <button type="submit" class="button button-secondary">Save changes</button>
++                              </form>
++                              <form method="post" action="{{ url_for('share_text_entry', entry_id=item.id) }}" class="stack-form" data-async>
++                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
++                                <label class="field">
++                                  <span>Share with</span>
++                                  <select name="share_username" required>
++                                    <option value="">Select a user</option>
++                                    {% for share_user in available_share_users %}
++                                    {% if share_user != group.owner %}
++                                    <option value="{{ share_user }}">{{ share_user }}</option>
++                                    {% endif %}
++                                    {% endfor %}
++                                  </select>
++                                </label>
++                                <button type="submit" class="button button-secondary">Share note</button>
++                              </form>
++                              {% if item.shared_with %}
++                              <div class="chip-action-list">
++                                {% for shared_user in item.shared_with %}
++                                <form method="post" action="{{ url_for('unshare_text_entry', entry_id=item.id) }}" class="inline-form" data-async>
++                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                  {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
++                                  <input type="hidden" name="share_username" value="{{ shared_user }}" />
++                                  <button type="submit" class="chip-button">Remove {{ shared_user }}</button>
++                                </form>
++                                {% endfor %}
++                              </div>
++                              {% endif %}
++                              <form method="post" action="{{ url_for('comment_text_entry', entry_id=item.id) }}" class="stack-form" data-async>
++                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
++                                <label class="field">
++                                  <span>Add comment</span>
++                                  <input type="text" name="comment" maxlength="500" required />
++                                </label>
++                                <button type="submit" class="button button-secondary">Save comment</button>
++                              </form>
++                              <form method="post" action="{{ url_for('add_text_entry_reference', entry_id=item.id) }}" class="stack-form" data-async>
++                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
++                                <label class="field">
++                                  <span>Document label</span>
++                                  <input type="text" name="reference_label" maxlength="140" placeholder="Spec, contract, memo..." />
++                                </label>
++                                <label class="field">
++                                  <span>Document URL</span>
++                                  <input type="url" name="reference_url" placeholder="https://..." />
++                                </label>
++                                <label class="field">
++                                  <span>Section citation</span>
++                                  <input type="text" name="reference_citation" maxlength="180" placeholder="Section 3.2, page 19" />
++                                </label>
++                                <label class="field">
++                                  <span>Why this matters</span>
++                                  <input type="text" name="reference_comment" maxlength="500" placeholder="Short annotation for this note" />
++                                </label>
++                                <button type="submit" class="button button-secondary">Link reference</button>
++                              </form>
++                              <div class="button-row">
++                                {% if item.hidden %}
++                                <form method="post" action="{{ url_for('unhide_text_entry', entry_id=item.id) }}" class="inline-form" data-async>
++                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                  {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
++                                  <button type="submit" class="button button-secondary">Show publicly</button>
++                                </form>
++                                {% else %}
++                                <form method="post" action="{{ url_for('hide_text_entry', entry_id=item.id) }}" class="inline-form" data-async>
++                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                  {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
++                                  <button type="submit" class="button button-secondary">Hide from guests</button>
++                                </form>
++                                {% endif %}
++                                <form method="post" action="{{ url_for('delete_text_entry', entry_id=item.id) }}" class="inline-form" data-async>
++                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                  {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
++                                  <button type="submit" class="button button-danger">Delete note</button>
++                                </form>
++                              </div>
++                            </div>
++                          </details>
++                          {% endif %}
++                        </div>
++                        {% if item.comments %}
++                        <details class="inline-details">
++                          <summary class="button button-secondary">Comments ({{ item.comments|length }})</summary>
++                          <div class="detail-panel comment-list">
++                            {% for comment in item.comments %}
++                            <article class="comment-card">
++                              <p class="message-meta"><strong>{{ comment.author }}</strong> · {{ format_timestamp(comment.created) }}</p>
++                              <p>{{ comment.content }}</p>
++                            </article>
++                            {% endfor %}
++                          </div>
++                        </details>
++                        {% endif %}
++                        {% if item.references %}
++                        <details class="inline-details">
++                          <summary class="button button-secondary">References ({{ item.references|length }})</summary>
++                          <div class="detail-panel reference-list">
++                            {% for reference in item.references %}
++                            <article class="compact-row is-static">
++                              <span class="compact-main">
++                                <strong>{% if reference.url %}<a href="{{ reference.url }}" target="_blank" rel="noopener noreferrer">{{ reference.label or reference.url }}</a>{% else %}{{ reference.label or "Reference" }}{% endif %}</strong>
++                                <span>{% if reference.citation %}{{ reference.citation }}{% endif %}{% if reference.comment %} · {{ reference.comment }}{% endif %}</span>
++                              </span>
++                              <span class="compact-value">{{ reference.author }} · {{ format_timestamp(reference.created) }}</span>
++                            </article>
++                            {% endfor %}
++                          </div>
++                        </details>
++                        {% endif %}
++                      </div>
++                    </article>
++                    {% endfor %}
++                  </div>
++                  {% else %}
++                  <p class="empty-state">No notes saved.</p>
++                  {% endif %}
++                </section>
++                {% endfor %}
++              {% else %}
++              <section class="panel">
++                <p class="empty-state">No notes saved yet.</p>
++              </section>
++              {% endif %}
++            </div>
++          </section>
++          {% elif active_page == 'reader' %}
++          <section class="page-intro">
++            <div>
++              <p class="eyebrow">Reader</p>
++              <h1>{{ page_titles.get(active_page) }}</h1>
++              <p class="lead">{{ page_descriptions.get(active_page) }}</p>
++            </div>
++            {% if is_authenticated and reader_history %}
++            <form method="post" action="{{ url_for('clear_reader_entries') }}" class="inline-form" data-async>
++              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++              <button type="submit" class="button button-danger">Clear cached pages</button>
++            </form>
++            {% endif %}
++          </section>
++
++          <section class="workspace-grid">
++            <aside class="workspace-sidebar is-compact">
++              <article class="panel">
++                <div class="section-heading">
++                  <div>
++                    <p class="eyebrow">Cache</p>
++                    <h2>Save a page</h2>
++                  </div>
++                </div>
++                <form method="post" action="{{ url_for('save_reader_entry') }}" class="stack-form" data-async>
++                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                  {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
++                  <label class="field">
++                    <span>URL</span>
++                    <input type="text" name="url" inputmode="url" autocomplete="url" placeholder="https://example.com/article" required />
++                  </label>
++                  <label class="field">
++                    <span>Mode</span>
++                    <select name="reader_mode">
++                      <option value="auto" selected>Auto</option>
++                      <option value="html">HTML only</option>
++                      <option value="json">Reddit JSON only</option>
++                      <option value="proxy">Proxy text mode</option>
++                    </select>
++                  </label>
++                  <button type="submit" class="button button-primary button-block">Cache page</button>
++                </form>
++              </article>
++
++              <article class="panel">
++                <div class="section-heading">
++                  <div>
++                    <p class="eyebrow">Live</p>
++                    <h2>Open without saving</h2>
++                  </div>
++                </div>
++                <form method="get" action="{{ url_for('live_reader') }}" class="stack-form">
++                  {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
++                  <label class="field">
++                    <span>URL</span>
++                    <input type="text" name="url" inputmode="url" autocomplete="url" placeholder="https://example.com/article" required />
++                  </label>
++                  <label class="field">
++                    <span>Mode</span>
++                    <select name="reader_mode">
++                      <option value="auto" selected>Auto</option>
++                      <option value="html">HTML only</option>
++                      <option value="json">Reddit JSON only</option>
++                      <option value="proxy">Proxy text mode</option>
++                    </select>
++                  </label>
++                  <button type="submit" class="button button-secondary button-block">Open live reader</button>
++                </form>
++              </article>
++
++              <article class="panel">
++                <div class="section-heading">
++                  <div>
++                    <p class="eyebrow">Find</p>
++                    <h2>Filter pages</h2>
++                  </div>
++                </div>
++                <label class="field">
++                  <span>Search by title, source, author, or summary</span>
++                  <input type="search" data-list-filter-input="reader" placeholder="Start typing to filter cached pages" />
++                </label>
++              </article>
++            </aside>
++
++            <div class="workspace-main">
++              {% if reader_groups %}
++                {% for group in reader_groups %}
++                <section class="panel">
++                  <div class="section-heading">
++                    <div>
++                      <p class="eyebrow">Owner</p>
++                      <h2>{{ group.owner }}</h2>
++                    </div>
++                    <p class="section-meta">{{ group['items']|length }} pages</p>
++                  </div>
++                  {% if group['items'] %}
++                  <div class="record-list" data-list-filter-list="reader">
++                    {% for item in group['items'] %}
++                    <article class="record" data-list-filter-item data-filter-text="{{ item.title }} {{ item.source_label }} {{ item.author or '' }} {{ item.summary or '' }} {{ group.owner }}">
++                      <div class="record-main">
++                        <div class="record-heading">
++                          <h3 class="record-title">{{ item.title }}</h3>
++                          <div class="tag-row">
++                            {% if item.hidden %}<span class="tag">Hidden</span>{% endif %}
++                          </div>
++                        </div>
++                        <p class="record-meta">
++                          {{ item.source_label }}
++                          {% if item.author %} · {{ item.author }}{% endif %}
++                          {% if item.word_count %} · {{ item.word_count }} words{% endif %}
++                          {% if item.reader_mode_used %} · {{ item.reader_mode_used|upper }}{% endif %}
++                          · Updated {{ format_timestamp(item.updated) }}
++                        </p>
++                        {% if item.summary %}
++                        <p class="record-summary">{{ item.summary }}</p>
++                        {% endif %}
++                      </div>
++                      <div class="record-side">
++                        <div class="button-row">
++                          {% if is_admin %}
++                          <a class="button button-primary" href="{{ url_for('view_reader_entry', entry_id=item.id, owner=group.owner) }}">Open</a>
++                          {% else %}
++                          <a class="button button-primary" href="{{ url_for('view_reader_entry', entry_id=item.id) }}">Open</a>
++                          {% endif %}
++                          <a class="button button-secondary" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Source</a>
++                          <details class="inline-details">
++                            <summary class="button button-secondary">Manage</summary>
++                            <div class="detail-panel">
++                              <form method="post" action="{{ url_for('refresh_reader_entry', entry_id=item.id) }}" class="stack-form" data-async>
++                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
++                                <input type="hidden" name="reader_mode" value="{{ item.reader_mode_used or 'auto' }}" />
++                                <button type="submit" class="button button-secondary">Refresh cache</button>
++                              </form>
++                              <div class="button-row">
++                                {% if item.hidden %}
++                                <form method="post" action="{{ url_for('unhide_reader_entry', entry_id=item.id) }}" class="inline-form" data-async>
++                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                  {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
++                                  <button type="submit" class="button button-secondary">Show publicly</button>
++                                </form>
++                                {% else %}
++                                <form method="post" action="{{ url_for('hide_reader_entry', entry_id=item.id) }}" class="inline-form" data-async>
++                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                  {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
++                                  <button type="submit" class="button button-secondary">Hide from guests</button>
++                                </form>
++                                {% endif %}
++                                <form method="post" action="{{ url_for('delete_reader_entry', entry_id=item.id) }}" class="inline-form" data-async>
++                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                  {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
++                                  <button type="submit" class="button button-danger">Delete page</button>
++                                </form>
++                              </div>
++                            </div>
++                          </details>
++                        </div>
++                      </div>
++                    </article>
++                    {% endfor %}
++                  </div>
++                  {% else %}
++                  <p class="empty-state">No cached pages.</p>
++                  {% endif %}
++                </section>
++                {% endfor %}
++              {% else %}
++              <section class="panel">
++                <p class="empty-state">No cached pages yet.</p>
++              </section>
++              {% endif %}
++            </div>
++          </section>
++          {% elif active_page == 'browse' %}
++          <section class="page-intro">
++            <div>
++              <p class="eyebrow">Browse</p>
++              <h1>{{ page_titles.get(active_page) }}</h1>
++              <p class="lead">{{ page_descriptions.get(active_page) }}</p>
++            </div>
++          </section>
++
++          <section class="panel stack">
++            <form method="get" action="{{ url_for('browse_page') }}" class="stack-form">
++              {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
++              <label class="field">
++                <span>URL</span>
++                <input type="text" name="url" inputmode="url" autocomplete="url" value="{{ browse_url_input }}" placeholder="https://example.com" required />
++              </label>
++              <button type="submit" class="button button-primary">Open proxied browser</button>
++            </form>
++            {% if browse_url_input %}
++            <div class="browser-frame-wrap">
++              <iframe
++                class="browser-frame"
++                src="{{ url_for('browse_proxy', url=browse_url_input) }}"
++                title="Proxied browsing session"
++                loading="eager"
++                referrerpolicy="no-referrer"
++              ></iframe>
++            </div>
++            {% else %}
++            <p class="empty-state">Enter a URL to open a server-proxied browsing session.</p>
++            {% endif %}
++          </section>
++          {% elif active_page == 'latex' %}
++          <section class="page-intro">
++            <div>
++              <p class="eyebrow">PDF</p>
++              <h1>{{ page_titles.get(active_page) }}</h1>
++              <p class="lead">{{ page_descriptions.get(active_page) }}</p>
++            </div>
++            <div class="page-intro-note">
++              <span>Renderer: {{ pdflatex_bin }}</span>
++            </div>
++          </section>
++
++          <section class="workspace-grid">
++            <aside class="workspace-sidebar is-compact">
++              <article class="panel">
++                <div class="section-heading">
++                  <div>
++                    <p class="eyebrow">Render</p>
++                    <h2>New PDF</h2>
++                  </div>
++                </div>
++                <form method="post" action="{{ url_for('save_latex_entry') }}" class="stack-form" data-async>
++                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                  {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
++                  <label class="field">
++                    <span>Title</span>
++                    <input type="text" name="title" maxlength="120" placeholder="Optional title" />
++                  </label>
++                  <label class="field">
++                    <span>Source</span>
++                    <textarea name="source" rows="12" maxlength="{{ max_latex_chars }}" placeholder="Example: \section*{Hello} $E=mc^2$" required></textarea>
++                  </label>
++                  <button type="submit" class="button button-primary button-block">Render PDF</button>
++                </form>
++              </article>
++
++              {% if latex_history %}
++              <article class="panel">
++                <form method="post" action="{{ url_for('clear_latex_entries') }}" class="inline-form" data-async>
++                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                  <button type="submit" class="button button-danger">Clear all PDFs</button>
++                </form>
++              </article>
++              {% endif %}
++
++              <article class="panel">
++                <div class="section-heading">
++                  <div>
++                    <p class="eyebrow">Find</p>
++                    <h2>Filter PDFs</h2>
++                  </div>
++                </div>
++                <label class="field">
++                  <span>Search by title, source, or owner</span>
++                  <input type="search" data-list-filter-input="pdfs" placeholder="Start typing to filter PDFs" />
++                </label>
++              </article>
++            </aside>
++
++            <div class="workspace-main">
++              {% if latex_groups %}
++                {% for group in latex_groups %}
++                <section class="panel">
++                  <div class="section-heading">
++                    <div>
++                      <p class="eyebrow">Owner</p>
++                      <h2>{{ group.owner }}</h2>
++                    </div>
++                    <p class="section-meta">{{ group['items']|length }} PDFs</p>
++                  </div>
++                  {% if group['items'] %}
++                  <div class="record-list" data-list-filter-list="pdfs">
++                    {% for item in group['items'] %}
++                    <article class="record" data-list-filter-item data-filter-text="{{ item.title }} {{ item.source }} {{ group.owner }}">
++                      <div class="record-main">
++                        <div class="record-heading">
++                          <h3 class="record-title">{{ item.title }}</h3>
++                          <div class="tag-row">
++                            {% if item.hidden %}<span class="tag">Hidden</span>{% endif %}
++                          </div>
++                        </div>
++                        <p class="record-meta">{{ format_timestamp(item.created) }}</p>
++                        <p class="record-summary">{{ summarize_text(item.source, 180) }}</p>
++                      </div>
++                      <div class="record-side">
++                        <div class="button-row">
++                          <a class="button button-primary" href="{{ url_for('download_latex_pdf', filename=item.pdf_name) }}">Download PDF</a>
++                          <details class="inline-details">
++                            <summary class="button button-secondary">Manage</summary>
++                            <div class="detail-panel">
++                              <details class="inline-details nested-details">
++                                <summary class="button button-secondary">View source</summary>
++                                <div class="detail-panel">
++                                  <pre class="history-pre">{{ item.source }}</pre>
++                                </div>
++                              </details>
++                              <div class="button-row">
++                                {% if item.hidden %}
++                                <form method="post" action="{{ url_for('unhide_latex_entry', entry_id=item.id) }}" class="inline-form" data-async>
++                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                  {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
++                                  <button type="submit" class="button button-secondary">Show publicly</button>
++                                </form>
++                                {% else %}
++                                <form method="post" action="{{ url_for('hide_latex_entry', entry_id=item.id) }}" class="inline-form" data-async>
++                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                  {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
++                                  <button type="submit" class="button button-secondary">Hide from guests</button>
++                                </form>
++                                {% endif %}
++                                <form method="post" action="{{ url_for('delete_latex_entry', entry_id=item.id) }}" class="inline-form" data-async>
++                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                  {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
++                                  <button type="submit" class="button button-danger">Delete PDF</button>
++                                </form>
++                              </div>
++                            </div>
++                          </details>
++                        </div>
++                      </div>
++                    </article>
++                    {% endfor %}
++                  </div>
++                  {% else %}
++                  <p class="empty-state">No PDFs yet.</p>
++                  {% endif %}
++                </section>
++                {% endfor %}
++              {% else %}
++              <section class="panel">
++                <p class="empty-state">No PDFs yet.</p>
++              </section>
++              {% endif %}
++            </div>
++          </section>
++          {% elif active_page == 'html' %}
++          <section class="page-intro">
++            <div>
++              <p class="eyebrow">HTML</p>
++              <h1>{{ page_titles.get(active_page) }}</h1>
++              <p class="lead">{{ page_descriptions.get(active_page) }}</p>
++            </div>
++          </section>
++
++          <section class="workspace-grid">
++            <aside class="workspace-sidebar is-compact">
++              <article class="panel">
++                <div class="section-heading">
++                  <div>
++                    <p class="eyebrow">Create</p>
++                    <h2>New HTML page</h2>
++                  </div>
++                </div>
++                <form method="post" action="{{ url_for('save_html_entry') }}" class="stack-form" data-async>
++                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                  {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
++                  <label class="field">
++                    <span>Title</span>
++                    <input type="text" name="title" maxlength="120" placeholder="Optional title" />
++                  </label>
++                  <label class="field">
++                    <span>HTML/CSS/JS source</span>
++                    <textarea name="source" rows="14" maxlength="{{ max_html_chars }}" placeholder="<!doctype html>..." required></textarea>
++                  </label>
++                  <button type="submit" class="button button-primary button-block">Save page</button>
++                </form>
++              </article>
++
++              {% if html_history %}
++              <article class="panel">
++                <form method="post" action="{{ url_for('clear_html_entries') }}" class="inline-form" data-async>
++                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                  {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
++                  <button type="submit" class="button button-danger">Clear all HTML pages</button>
++                </form>
++              </article>
++              {% endif %}
++            </aside>
++
++            <div class="workspace-main">
++              {% if html_groups %}
++                {% for group in html_groups %}
++                <section class="panel">
++                  <div class="section-heading">
++                    <div>
++                      <p class="eyebrow">Owner</p>
++                      <h2>{{ group.owner }}</h2>
++                    </div>
++                    <p class="section-meta">{{ group['items']|length }} pages</p>
++                  </div>
++                  {% if group['items'] %}
++                  <div class="record-list">
++                    {% for item in group['items'] %}
++                    <article class="record">
++                      <div class="record-main">
++                        <div class="record-heading">
++                          <h3 class="record-title">{{ item.title or item.html_name }}</h3>
++                          <div class="tag-row">
++                            {% if item.hidden %}<span class="tag">Hidden</span>{% endif %}
++                          </div>
++                        </div>
++                        <p class="record-meta">{{ format_timestamp(item.created) }} · {{ item.html_name }}</p>
++                        <p class="record-summary">{{ summarize_text(item.source, 180) }}</p>
++                      </div>
++                      <div class="record-side">
++                        <div class="button-row">
++                          {% if is_admin %}
++                          <a class="button button-primary" href="{{ url_for('view_html_entry', entry_id=item.id, owner=group.owner) }}">Open preview</a>
++                          <a class="button button-secondary" href="{{ url_for('download_html_file', filename=item.html_name, owner=group.owner) }}">Download</a>
++                          {% else %}
++                          <a class="button button-primary" href="{{ url_for('view_html_entry', entry_id=item.id) }}">Open preview</a>
++                          <a class="button button-secondary" href="{{ url_for('download_html_file', filename=item.html_name) }}">Download</a>
++                          {% endif %}
++                          <details class="inline-details">
++                            <summary class="button button-secondary">Manage</summary>
++                            <div class="detail-panel">
++                              <details class="inline-details nested-details">
++                                <summary class="button button-secondary">View source</summary>
++                                <div class="detail-panel">
++                                  <pre class="history-pre">{{ item.source }}</pre>
++                                </div>
++                              </details>
++                              <div class="button-row">
++                                {% if item.hidden %}
++                                <form method="post" action="{{ url_for('unhide_html_entry', entry_id=item.id) }}" class="inline-form" data-async>
++                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                  {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
++                                  <button type="submit" class="button button-secondary">Show publicly</button>
++                                </form>
++                                {% else %}
++                                <form method="post" action="{{ url_for('hide_html_entry', entry_id=item.id) }}" class="inline-form" data-async>
++                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                  {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
++                                  <button type="submit" class="button button-secondary">Hide from guests</button>
++                                </form>
++                                {% endif %}
++                                <form method="post" action="{{ url_for('delete_html_entry', entry_id=item.id) }}" class="inline-form" data-async>
++                                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                                  {% if is_admin %}<input type="hidden" name="owner" value="{{ group.owner }}" />{% endif %}
++                                  <button type="submit" class="button button-danger">Delete page</button>
++                                </form>
++                              </div>
++                            </div>
++                          </details>
++                        </div>
++                      </div>
++                    </article>
++                    {% endfor %}
++                  </div>
++                  {% else %}
++                  <p class="empty-state">No HTML pages yet.</p>
++                  {% endif %}
++                </section>
++                {% endfor %}
++              {% else %}
++              <section class="panel">
++                <p class="empty-state">No HTML pages yet.</p>
++              </section>
++              {% endif %}
++            </div>
++          </section>
++          {% elif active_page == 'chat' %}
++          <section class="page-intro">
++            <div>
++              <p class="eyebrow">Board</p>
++              <h1>{{ page_titles.get(active_page) }}</h1>
++              <p class="lead">{{ page_descriptions.get(active_page) }}</p>
++            </div>
++            <div class="page-intro-note">
++              <span>
++                {% if whiteboard_state.updated %}
++                Last saved {{ format_timestamp(whiteboard_state.updated) }} by {{ whiteboard_state.updated_by or "unknown" }}
++                {% else %}
++                No board saved yet
++                {% endif %}
++              </span>
++            </div>
++          </section>
++
++          <section class="whiteboard-layout" data-whiteboard-root>
++            <aside class="panel whiteboard-controls">
++              <div class="section-heading">
++                <div>
++                  <p class="eyebrow">Cards</p>
++                  <h2>Build the board</h2>
++                </div>
++              </div>
++              <p class="panel-note">Drag cards on the canvas. Select a card to edit section + comments. Use “Start link” then click another card to connect.</p>
++              <div class="stack-form">
++                <label class="field">
++                  <span>Add from files/notes/reader/pdf</span>
++                  <select data-whiteboard-seed>
++                    <option value="">Choose an item</option>
++                    {% for item in whiteboard_seed_items %}
++                    <option value="{{ item.id }}">{{ item.type|upper }} · {{ item.title }}</option>
++                    {% endfor %}
++                  </select>
++                </label>
++                <button type="button" class="button button-secondary" data-whiteboard-add-seed>Add selected item</button>
++                <button type="button" class="button button-secondary" data-whiteboard-add-custom>Add custom card</button>
++                <button type="button" class="button button-secondary" data-whiteboard-link>Start link</button>
++                <button type="button" class="button button-danger" data-whiteboard-delete>Delete selected</button>
++              </div>
++
++              <form method="post" action="{{ url_for('upload_file') }}" enctype="multipart/form-data" class="stack-form" data-async data-upload-form>
++                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
++                <label class="field">
++                  <span>Upload while in board</span>
++                  <input type="file" name="file" multiple required class="sr-only" data-upload-input />
++                  <button type="button" class="button button-secondary button-block" data-upload-picker-trigger>Select files to upload</button>
++                  <span class="text-xs text-slate-400" data-upload-selection-text>No files selected</span>
++                </label>
++                <div class="upload-progress is-hidden" data-upload-progress aria-live="polite">
++                  <p class="upload-progress-label"><span data-upload-progress-text>Preparing upload…</span></p>
++                  <div class="progress" aria-hidden="true"><span data-upload-progress-bar style="width: 0%"></span></div>
++                </div>
++                <button type="submit" class="button button-primary button-block">Upload files</button>
++              </form>
++
++              <form class="stack-form" data-whiteboard-editor>
++                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                <label class="field">
++                  <span>Card title</span>
++                  <input type="text" name="title" maxlength="160" />
++                </label>
++                <label class="field">
++                  <span>Section reference (page / heading / paragraph)</span>
++                  <input type="text" name="section" maxlength="240" />
++                </label>
++                <label class="field">
++                  <span>Comment</span>
++                  <textarea name="comment" rows="4" maxlength="1200"></textarea>
++                </label>
++                <label class="field">
++                  <span>Type</span>
++                  <select name="type">
++                    <option value="custom">Custom</option>
++                    <option value="file">File</option>
++                    <option value="note">Note</option>
++                    <option value="reader">Reader</option>
++                    <option value="pdf">PDF</option>
++                  </select>
++                </label>
++              </form>
++              <div class="button-row">
++                <button type="button" class="button button-primary" data-whiteboard-save>Save board</button>
++              </div>
++            </aside>
++
++            <article class="panel whiteboard-surface">
++              <div class="whiteboard-toolbar stack-form">
++                <p class="eyebrow">Virtual board</p>
++                <div class="button-row">
++                  <button type="button" class="button button-secondary" data-whiteboard-view="canvas" aria-pressed="true">Canvas mode</button>
++                  <button type="button" class="button button-secondary" data-whiteboard-view="grid" aria-pressed="false">Grid mode</button>
++                </div>
++                <div class="button-row">
++                  <a class="button button-secondary" href="{{ ui.page_url('files_page', is_admin, selected_owner) }}" data-async-nav>Files</a>
++                  <a class="button button-secondary" href="{{ ui.page_url('text_page', is_admin, selected_owner) }}" data-async-nav>Notes</a>
++                  <a class="button button-secondary" href="{{ ui.page_url('reader_page', is_admin, selected_owner) }}" data-async-nav>Reader</a>
++                  <a class="button button-secondary" href="{{ ui.page_url('latex_page', is_admin, selected_owner) }}" data-async-nav>PDF</a>
++                  <a class="button button-secondary" href="{{ ui.page_url('html_page', is_admin, selected_owner) }}" data-async-nav>HTML</a>
++                </div>
++                <p class="panel-note" data-whiteboard-status>Select or add a card to begin.</p>
++              </div>
++              <div class="whiteboard-canvas" data-whiteboard-canvas>
++                <svg class="whiteboard-links" data-whiteboard-links aria-hidden="true"></svg>
++              </div>
++              <div class="record-list is-hidden" data-whiteboard-grid></div>
++            </article>
++          </section>
++          <script id="whiteboard-initial" type="application/json">{{ whiteboard_state|tojson }}</script>
++          <script id="whiteboard-seeds" type="application/json">{{ whiteboard_seed_items|tojson }}</script>
++          {% elif active_page == 'access' %}
++          <section class="page-intro">
++            <div>
++              <p class="eyebrow">Access</p>
++              <h1>{{ page_titles.get(active_page) }}</h1>
++              <p class="lead">{{ page_descriptions.get(active_page) }}</p>
++            </div>
++          </section>
++
++          <section class="settings-grid">
++            <article class="panel">
++              <p class="eyebrow">Session</p>
++              <h2>{% if is_admin %}Admin{% else %}{{ current_username }}{% endif %}</h2>
++              <p class="panel-note">Sessions stay active for {{ login_days }} days unless you sign out.</p>
++              <form method="post" action="{{ url_for('logout') }}" class="inline-form" data-async>
++                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
++                <button type="submit" class="button button-primary">Sign out</button>
++              </form>
++            </article>
++
++            <article class="panel">
++              <p class="eyebrow">Storage</p>
++              <h2>{{ human_size(storage.total_bytes) }}</h2>
++              <div class="progress" aria-hidden="true">
++                <span style="width: {{ '%.2f'|format(storage.usage_percent) }}%"></span>
++              </div>
++              <p class="panel-note">
++                {% if storage.has_limit %}
++                {{ human_size(storage.remaining_bytes) }} remaining in the current space.
++                {% else %}
++                Admin view across all users.
++                {% endif %}
++              </p>
++            </article>
++
++            <article class="panel">
++              <p class="eyebrow">Appearance</p>
++              <h2>Visual preferences</h2>
++              <p class="panel-note">Use the clean base UI or your alternate draft, then switch between dark and light.</p>
++              {{ ui.appearance_controls() }}
++            </article>
++
++            {% if is_admin %}
++            <article class="panel">
++              <p class="eyebrow">Scope</p>
++              <h2>Switch user</h2>
++              <form method="get" action="{{ url_for('access_page') }}" class="stack-form" data-async>
++                <label class="field">
++                  <span>Current owner</span>
++                  <select id="owner-select" name="owner">
++                    {% for username in manageable_users %}
++                    <option value="{{ username }}" {% if username == selected_owner %}selected{% endif %}>{{ username }}</option>
++                    {% endfor %}
++                  </select>
++                </label>
++                <button type="submit" class="button button-primary">Switch workspace</button>
++              </form>
++            </article>
++
++            <article class="panel">
++              <p class="eyebrow">Users</p>
++              <h2>Create or reset</h2>
++              <form method="post" action="{{ url_for('admin_create_user') }}" class="stack-form" data-async>
++                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                <label class="field">
++                  <span>Username</span>
++                  <input type="text" name="new_username" required />
++                </label>
++                <label class="field">
++                  <span>Initial password</span>
++                  <input type="password" name="new_password" required />
++                </label>
++                <button type="submit" class="button button-primary">Create or reset user</button>
++              </form>
++            </article>
++
++            <article class="panel">
++              <p class="eyebrow">Users</p>
++              <h2>Update password</h2>
++              <form method="post" action="{{ url_for('admin_update_user_password') }}" class="stack-form" data-async>
++                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                <label class="field">
++                  <span>Username</span>
++                  <input type="text" name="target_username" value="{{ selected_owner if selected_owner != 'admin' else '' }}" required />
++                </label>
++                <label class="field">
++                  <span>New password</span>
++                  <input type="password" name="target_password" required />
++                </label>
++                <button type="submit" class="button button-secondary">Update password</button>
++              </form>
++            </article>
++
++            <article class="panel">
++              <p class="eyebrow">Users</p>
++              <h2>Delete account</h2>
++              <form method="post" action="{{ url_for('admin_delete_user') }}" class="stack-form" data-async>
++                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
++                <label class="field">
++                  <span>Username</span>
++                  <input type="text" name="target_username" value="{{ selected_owner if selected_owner != 'admin' else '' }}" required />
++                </label>
++                <button type="submit" class="button button-danger">Delete user</button>
++              </form>
++            </article>
++            {% endif %}
++          </section>
++          {% endif %}
++        </main>
++      </div>
++
++      {% if is_authenticated %}
++      <nav class="mobile-nav" aria-label="Mobile">
++        {{ ui.nav_link('index', 'Overview', 'home', active_page, is_admin, selected_owner, True) }}
++        {{ ui.nav_link('files_page', 'Files', 'files', active_page, is_admin, selected_owner, True) }}
++        {{ ui.nav_link('text_page', 'Notes', 'text', active_page, is_admin, selected_owner, True) }}
++        {{ ui.nav_link('chat_page', 'Board', 'chat', active_page, is_admin, selected_owner, True) }}
++        {{ ui.nav_link('reader_page', 'Reader', 'reader', active_page, is_admin, selected_owner, True) }}
++        {{ ui.nav_link('browse_page', 'Browse', 'browse', active_page, is_admin, selected_owner, True) }}
++        {{ ui.nav_link('html_page', 'HTML', 'html', active_page, is_admin, selected_owner, True) }}
++        {{ ui.nav_link('access_page', 'Access', 'access', active_page, is_admin, selected_owner, True) }}
++      </nav>
++      {% endif %}
++    </div>
++    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
++  </body>
++</html>
