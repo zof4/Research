@@ -450,6 +450,10 @@
           <div class="editor-panel" id="editor-panel">
             <div class="bg-slate-800 text-xs text-slate-400 px-4 py-1 border-b border-slate-700 flex justify-between items-center">
               <span>Source Code</span>
+              <div class="flex gap-2">
+                <button id="btn-copy-all" class="hover:text-slate-200 transition-colors cursor-pointer" title="Copy code">Copy</button>
+                <button id="btn-delete-all" class="hover:text-red-400 transition-colors cursor-pointer" title="Clear code">Clear</button>
+              </div>
             </div>
             <textarea id="code-editor"></textarea>
           </div>
@@ -487,6 +491,12 @@
           </button>
         </div>
       </main>
+    </div></div>
+
+        <div class="mt-6 flex justify-end">
+          <button class="btn btn-secondary" onclick="document.getElementById('share-modal').classList.remove('active')">Close</button>
+        </div>
+      </div>
     </div>
 
     <!-- Inject Library Modal -->
@@ -530,8 +540,11 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/htmlmixed/htmlmixed.min.js"></script>
 
     <script>
-      const csrfToken = "{{ csrf_token }}";
-      const htmlHistoryData = JSON.parse(document.getElementById('html-data').textContent || '[]');
+      console.log("Step 1");
+const csrfToken = "{{ csrf_token }}";
+      console.log("Step 2");
+const htmlHistoryData = JSON.parse(document.getElementById('html-data').textContent || '[]');
+console.log("Step 3");
 
       let files = htmlHistoryData;
       let currentFileId = null;
@@ -578,43 +591,10 @@
   <h1>Interactive System</h1>
   <div class="box">
     Content goes here
-  </div>
+  </div></div>
 
-    <!-- Share Modal -->
-    <div id="share-modal" class="modal">
-      <div class="modal-box w-11/12 max-w-md">
-        <h3 class="font-bold text-lg mb-4 text-slate-800">Share Options</h3>
-
-        <div class="space-y-4">
-          <!-- Public Link -->
-          <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
-            <div class="flex items-center justify-between mb-2">
-              <h4 class="font-semibold text-slate-700">Public Link</h4>
-              <button id="btn-toggle-public" class="text-sm font-medium text-blue-600 hover:text-blue-700">Enable</button>
-            </div>
-            <p id="public-link-status" class="text-xs text-slate-500 mb-2">Not shared publicly</p>
-            <div id="public-link-url" class="text-xs p-2 bg-white border border-slate-200 rounded break-all hidden select-all text-slate-600"></div>
-          </div>
-
-          <!-- Share with User -->
-          <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
-            <h4 class="font-semibold text-slate-700 mb-2">Share with User</h4>
-            <div class="flex gap-2 mb-3">
-              <input type="text" id="share-username-input" placeholder="Username" class="input input-bordered input-sm flex-1 text-slate-800" />
-              <button id="btn-share-user" class="btn btn-primary btn-sm">Share</button>
-            </div>
-
-            <div class="mt-4">
-              <h5 class="text-xs font-semibold text-slate-500 uppercase mb-2">Shared With</h5>
-              <div id="shared-users-list" class="space-y-1">
-                <!-- Users injected here -->
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="modal-action">
-          <button class="btn btn-sm" onclick="document.getElementById('share-modal').classList.remove('active')">Close</button>
+        <div class="mt-6 flex justify-end">
+          <button class="btn btn-secondary" onclick="document.getElementById('share-modal').classList.remove('active')">Close</button>
         </div>
       </div>
     </div>
@@ -631,21 +611,8 @@
       };
       // Initialization
 
-      document.getElementById('btn-copy-all').addEventListener('click', () => {
-        const source = editor.getValue();
-        navigator.clipboard.writeText(source).then(() => {
-          showToast('Copied to clipboard!');
-        });
-      });
-
-      document.getElementById('btn-delete-all').addEventListener('click', () => {
-        if (confirm('Are you sure you want to clear the entire document?')) {
-          editor.setValue('');
-        }
-      });
-
-      document.getElementById('btn-toggle-public').addEventListener('click', togglePublicLink);
-      document.getElementById('btn-share-user').addEventListener('click', shareWithUser);
+      document.getElementById('btn-toggle-public')?.addEventListener('click', togglePublicLink);
+      document.getElementById('btn-share-user')?.addEventListener('click', shareWithUser);
 
       const origLoadFile = loadFile;
       loadFile = function(id) {
@@ -766,6 +733,28 @@
       }
 
       // Initialization
+      document.getElementById('btn-copy-all')?.addEventListener('click', () => {
+        const source = editor.getValue();
+        navigator.clipboard.writeText(source).then(() => showToast('Copied to clipboard!'));
+      });
+
+      document.getElementById('btn-delete-all')?.addEventListener('click', () => {
+        if (confirm('Are you sure you want to clear the entire document?')) {
+          editor.setValue('');
+        }
+      });
+
+      document.getElementById('btn-copy-all')?.addEventListener('click', () => {
+        const source = editor.getValue();
+        navigator.clipboard.writeText(source).then(() => showToast('Copied to clipboard!'));
+      });
+
+      document.getElementById('btn-delete-all')?.addEventListener('click', () => {
+        if (confirm('Are you sure you want to clear the entire document?')) {
+          editor.setValue('');
+        }
+      });
+
       function init() {
         // Init CodeMirror
         editor = CodeMirror.fromTextArea(elements.codeEditor, {
@@ -959,15 +948,15 @@
         // Delay initial resize to ensure layout is done
         setTimeout(resizeCanvas, 100);
 
-        elements.drawingCanvas.addEventListener('mousedown', startDrawing);
-        elements.drawingCanvas.addEventListener('mousemove', draw);
-        elements.drawingCanvas.addEventListener('mouseup', stopDrawing);
-        elements.drawingCanvas.addEventListener('mouseout', stopDrawing);
+        elements.drawingCanvas?.addEventListener('mousedown', startDrawing);
+        elements.drawingCanvas?.addEventListener('mousemove', draw);
+        elements.drawingCanvas?.addEventListener('mouseup', stopDrawing);
+        elements.drawingCanvas?.addEventListener('mouseout', stopDrawing);
 
         // Touch support
-        elements.drawingCanvas.addEventListener('touchstart', handleTouchStart, {passive: false});
-        elements.drawingCanvas.addEventListener('touchmove', handleTouchMove, {passive: false});
-        elements.drawingCanvas.addEventListener('touchend', stopDrawing);
+        elements.drawingCanvas?.addEventListener('touchstart', handleTouchStart, {passive: false});
+        elements.drawingCanvas?.addEventListener('touchmove', handleTouchMove, {passive: false});
+        elements.drawingCanvas?.addEventListener('touchend', stopDrawing);
       }
 
       function getPos(e) {
@@ -1058,16 +1047,16 @@
 
       // Event Listeners Setup
       function setupEventListeners() {
-        elements.btnToggleSidebar.addEventListener('click', () => {
+        elements.btnToggleSidebar?.addEventListener('click', () => {
           elements.sidebar.classList.toggle('hidden');
           setTimeout(() => editor.refresh(), 350);
         });
 
-        elements.btnNewFile.addEventListener('click', createNewFile);
+        elements.btnNewFile?.addEventListener('click', createNewFile);
 
-        elements.btnSave.addEventListener('click', saveCurrentFile);
+        elements.btnSave?.addEventListener('click', saveCurrentFile);
 
-        elements.btnPresent.addEventListener('click', () => {
+        elements.btnPresent?.addEventListener('click', () => {
           elements.appRoot.classList.add('presentation-mode');
           elements.sidebar.classList.add('hidden');
           setTimeout(() => {
@@ -1076,7 +1065,7 @@
           }, 100);
         });
 
-        elements.btnExitPresent.addEventListener('click', () => {
+        elements.btnExitPresent?.addEventListener('click', () => {
           elements.appRoot.classList.remove('presentation-mode');
           elements.sidebar.classList.remove('hidden');
           // Turn off drawing mode if it was on
@@ -1084,33 +1073,33 @@
           setTimeout(() => editor.refresh(), 100);
         });
 
-        elements.btnDrawToggle.addEventListener('click', toggleDrawingMode);
-        elements.btnClearDraw.addEventListener('click', clearCanvas);
+        elements.btnDrawToggle?.addEventListener('click', toggleDrawingMode);
+        elements.btnClearDraw?.addEventListener('click', clearCanvas);
 
-        elements.colorButtons.forEach(btn => {
+        elements.colorButtons?.forEach(btn => {
           btn.addEventListener('click', (e) => {
-            elements.colorButtons.forEach(b => b.classList.remove('active'));
+            elements.colorButtons?.forEach(b => b.classList.remove('active'));
             e.target.classList.add('active');
             drawColor = e.target.dataset.color;
           });
         });
 
-        elements.btnInject.addEventListener('click', () => {
+        elements.btnInject?.addEventListener('click', () => {
           elements.injectModal.classList.add('active');
         });
 
-        elements.btnCloseInject.addEventListener('click', () => {
+        elements.btnCloseInject?.addEventListener('click', () => {
           elements.injectModal.classList.remove('active');
         });
 
-        elements.btnInjectLibs.forEach(btn => {
+        elements.btnInjectLibs?.forEach(btn => {
           btn.addEventListener('click', (e) => {
             injectLibrary(e.target.dataset.lib);
           });
         });
 
         // Close modal on click outside
-        elements.injectModal.addEventListener('click', (e) => {
+        elements.injectModal?.addEventListener('click', (e) => {
           if (e.target === elements.injectModal) {
             elements.injectModal.classList.remove('active');
           }
@@ -1122,27 +1111,27 @@
     </script>
 
     <!-- Share Modal -->
-    <div id="share-modal" class="modal">
-      <div class="modal-box w-11/12 max-w-md">
-        <h3 class="font-bold text-lg mb-4 text-slate-800">Share Options</h3>
+    <div id="share-modal" class="modal-overlay">
+      <div class="modal">
+        <h3 class="font-bold text-lg mb-4 text-slate-100">Share Options</h3>
 
         <div class="space-y-4">
           <!-- Public Link -->
-          <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
+          <div class="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50">
             <div class="flex items-center justify-between mb-2">
-              <h4 class="font-semibold text-slate-700">Public Link</h4>
-              <button id="btn-toggle-public" class="text-sm font-medium text-blue-600 hover:text-blue-700">Enable</button>
+              <h4 class="font-semibold text-slate-300">Public Link</h4>
+              <button id="btn-toggle-public" class="text-sm font-medium text-indigo-400 hover:text-indigo-300">Enable</button>
             </div>
             <p id="public-link-status" class="text-xs text-slate-500 mb-2">Not shared publicly</p>
-            <div id="public-link-url" class="text-xs p-2 bg-white border border-slate-200 rounded break-all hidden select-all text-slate-600"></div>
+            <div id="public-link-url" class="text-xs p-2 bg-slate-900 border border-slate-700/50 rounded-lg break-all hidden select-all text-slate-300 font-mono"></div>
           </div>
 
           <!-- Share with User -->
-          <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
-            <h4 class="font-semibold text-slate-700 mb-2">Share with User</h4>
+          <div class="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50">
+            <h4 class="font-semibold text-slate-300 mb-2">Share with User</h4>
             <div class="flex gap-2 mb-3">
-              <input type="text" id="share-username-input" placeholder="Username" class="input input-bordered input-sm flex-1 text-slate-800" />
-              <button id="btn-share-user" class="btn btn-primary btn-sm">Share</button>
+              <input type="text" id="share-username-input" placeholder="Username" class="bg-slate-900 border border-slate-700/50 text-slate-200 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5" />
+              <button id="btn-share-user" class="btn btn-primary">Share</button>
             </div>
 
             <div class="mt-4">
@@ -1154,8 +1143,8 @@
           </div>
         </div>
 
-        <div class="modal-action">
-          <button class="btn btn-sm" onclick="document.getElementById('share-modal').classList.remove('active')">Close</button>
+        <div class="mt-6 flex justify-end">
+          <button class="btn btn-secondary" onclick="document.getElementById('share-modal').classList.remove('active')">Close</button>
         </div>
       </div>
     </div>
