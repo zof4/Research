@@ -2426,8 +2426,9 @@ def chat_page():
     return render_dashboard_page("chat")
 
 @app.get("/access")
+@login_required
 def access_page():
-    return render_template("index.html", **build_template_context("access"))
+    return render_dashboard_page("access")
 
 
 
