@@ -550,6 +550,7 @@ console.log("Step 3");
       let currentFileId = null;
       let editor = null;
       let previewUpdateTimeout = null;
+      let isLiveEditing = false;
 
       // DOM Elements
       const elements = {
@@ -769,6 +770,16 @@ console.log("Step 3");
         });
 
         editor.on("change", () => {
+          if (isLiveEditing) {
+            isLiveEditing = false;
+            clearTimeout(previewUpdateTimeout);
+            previewUpdateTimeout = setTimeout(() => {
+              if (currentFileId) {
+                saveCurrentFile(true); // auto-save silently
+              }
+            }, 500);
+            return;
+          }
           clearTimeout(previewUpdateTimeout);
           previewUpdateTimeout = setTimeout(() => {
             updatePreview();
@@ -871,7 +882,35 @@ console.log("Step 3");
       }
 
       function updatePreview() {
-        const source = editor.getValue();
+        let source = editor.getValue();
+
+        const liveEditScript = `
+<script class="live-edit-script">
+  (function() {
+    document.addEventListener("DOMContentLoaded", function() {
+      document.body.contentEditable = "true";
+      let timeout;
+      document.body.addEventListener('input', function() {
+        clearTimeout(timeout);
+        timeout = setTimeout(function() {
+          let clone = document.documentElement.cloneNode(true);
+          let scripts = clone.querySelectorAll('.live-edit-script');
+          scripts.forEach(s => s.remove());
+          let body = clone.querySelector('body');
+          if (body) body.removeAttribute('contenteditable');
+          window.parent.postMessage({ type: 'live-edit-save', source: '<!doctype html>\\n' + clone.outerHTML }, '*');
+        }, 500);
+      });
+    });
+  })();
+<\/script>`;
+
+        if (source.includes('</body>')) {
+          source = source.replace('</body>', liveEditScript + '\n</body>');
+        } else {
+          source += liveEditScript;
+        }
+
         elements.previewFrame.srcdoc = source;
       }
 
@@ -1107,6 +1146,13 @@ console.log("Step 3");
         elements.injectModal?.addEventListener('click', (e) => {
           if (e.target === elements.injectModal) {
             elements.injectModal.classList.remove('active');
+          }
+        });
+
+        window.addEventListener('message', (event) => {
+          if (event.data && event.data.type === 'live-edit-save') {
+            isLiveEditing = true;
+            editor.setValue(event.data.source);
           }
         });
       }
