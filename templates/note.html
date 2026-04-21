@@ -38,32 +38,10 @@
   </head>
   <body class="bg-slate-950 text-slate-200 min-h-screen selection:bg-amber-500/30 overflow-x-hidden">
 
-    <!-- Premium Header -->
-    <header class="sticky top-0 z-30 bg-slate-900/80 backdrop-blur-md border-b border-slate-800">
-      <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <a href="{% if is_admin %}{{ url_for('text_page', owner=entry_owner) }}{% else %}{{ url_for('text_page') }}{% endif %}" class="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center hover:bg-amber-500/30 transition-colors tooltip" title="Back to Notes">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-          </a>
-          <div class="hidden sm:block">
-            <p class="text-[10px] uppercase tracking-wider font-bold text-slate-500 leading-tight">Note View</p>
-            <p class="font-semibold text-slate-200 leading-tight truncate max-w-[200px]">{{ entry.title }}</p>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('raw-content').textContent).then(() => { const b = this; const prev = b.innerHTML; b.innerHTML = '<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'14\' height=\'14\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\' class=\'text-emerald-400\'><polyline points=\'20 6 9 17 4 12\'/></svg> Copied'; setTimeout(() => b.innerHTML = prev, 2000); })" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5" title="Copy entire note">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            <span class="hidden sm:inline">Copy Text</span>
-          </button>
-        </div>
-      </div>
-    </header>
-
-    <main class="max-w-3xl mx-auto px-4 py-8 sm:py-12 pb-24">
+    <main class="w-full h-full p-4 sm:p-8">
       {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
-      <div class="mb-8 space-y-2">
+      <div class="mb-6 space-y-2">
         {% for category, message in messages %}
           <div class="p-3 {{ 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' if category == 'success' else 'bg-rose-500/10 border-rose-500/20 text-rose-400' }} border rounded-xl text-sm flex items-start gap-2">
             {% if category == 'success' %}
@@ -79,14 +57,20 @@
       {% endwith %}
 
       <!-- Note Editor/Viewer -->
-      <article class="bg-slate-900/40 border border-slate-800/80 rounded-3xl p-6 sm:p-12 shadow-2xl backdrop-blur-sm relative mb-8">
-        <header class="border-b border-slate-800/60 pb-6 mb-8 relative z-10">
-          <h1 class="text-3xl sm:text-4xl font-bold tracking-tight text-slate-100 mb-4 leading-tight">{{ entry.title }}</h1>
-          <div class="flex flex-wrap items-center gap-3 text-xs sm:text-sm font-medium text-slate-400 inline-flex">
-            <span class="flex items-center gap-1.5"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-500"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>{{ entry_owner }}</span>
-            <span class="text-slate-700">&bull;</span>
-            <time datetime="{{ entry.updated or entry.created }}" class="flex items-center gap-1.5"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-500"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>{{ format_timestamp(entry.updated or entry.created) }}</time>
+      <article class="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-10 shadow-2xl relative mb-8">
+        <header class="border-b border-slate-800/60 pb-6 mb-8 relative z-10 flex justify-between items-start">
+          <div>
+            <h1 class="text-3xl sm:text-4xl font-bold tracking-tight text-slate-100 mb-4 leading-tight">{{ entry.title }}</h1>
+            <div class="flex flex-wrap items-center gap-3 text-xs sm:text-sm font-medium text-slate-400 inline-flex">
+              <span class="flex items-center gap-1.5"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-500"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>{{ entry_owner }}</span>
+              <span class="text-slate-700">&bull;</span>
+              <time datetime="{{ entry.updated or entry.created }}" class="flex items-center gap-1.5"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-500"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>{{ format_timestamp(entry.updated or entry.created) }}</time>
+            </div>
           </div>
+          <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('raw-content').textContent).then(() => { const b = this; const prev = b.innerHTML; b.innerHTML = '<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'14\' height=\'14\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\' class=\'text-emerald-400\'><polyline points=\'20 6 9 17 4 12\'/></svg> Copied'; setTimeout(() => b.innerHTML = prev, 2000); })" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 shrink-0" title="Copy entire note">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <span class="hidden sm:inline">Copy Text</span>
+          </button>
         </header>
 
         {% if is_admin or entry_owner == current_username %}
