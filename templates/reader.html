@@ -3,119 +3,137 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>{{ entry.title }} · Dropper</title>
+    <title>{{ entry.title }} · Dropper Reader</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='tailwind.css') }}" />
     <script>
       (function () {
         try {
           document.documentElement.dataset.interface = localStorage.getItem("dropper-interface") || "clean";
           document.documentElement.dataset.tone = localStorage.getItem("dropper-tone") || "dark";
-        } catch (_error) {
-          document.documentElement.dataset.interface = "clean";
-          document.documentElement.dataset.tone = "dark";
-        }
+          document.documentElement.dataset.palette = localStorage.getItem("dropper-palette") || "mono";
+        } catch (_error) {}
       })();
     </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+    <style>
+      .prose-custom p { margin-bottom: 1.5em; line-height: 1.75; }
+      .prose-custom h1, .prose-custom h2, .prose-custom h3 { margin-top: 2em; margin-bottom: 1em; font-weight: 700; color: #f8fafc; }
+      .prose-custom h1 { font-size: 2.25rem; }
+      .prose-custom h2 { font-size: 1.875rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem; }
+      .prose-custom h3 { font-size: 1.5rem; }
+      .prose-custom a { color: #818cf8; text-decoration: underline; text-underline-offset: 2px; }
+      .prose-custom blockquote { border-left: 4px solid #4f46e5; padding-left: 1.5em; color: #cbd5e1; font-style: italic; background: rgba(30, 41, 59, 0.5); padding: 1rem 1.5rem; border-radius: 0 0.75rem 0.75rem 0; margin-bottom: 1.5em; }
+      .prose-custom pre { background: #0f172a; padding: 1.25em; border-radius: 0.75rem; overflow-x: auto; font-family: monospace; font-size: 0.875rem; margin-bottom: 1.5em; border: 1px solid rgba(255,255,255,0.05); }
+      .prose-custom code { background: #1e293b; padding: 0.2em 0.4em; border-radius: 0.375rem; font-family: monospace; font-size: 0.875em; color: #e2e8f0; }
+      .prose-custom pre code { background: transparent; padding: 0; color: inherit; }
+      .prose-custom ul { list-style-type: disc; }
+      .prose-custom ol { list-style-type: decimal; }
+      .prose-custom ul, .prose-custom ol { padding-left: 1.5em; margin-bottom: 1.5em; }
+      .prose-custom li { margin-bottom: 0.5em; }
+      .prose-custom img { max-width: 100%; border-radius: 0.75rem; margin-bottom: 1.5em; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+      .prose-custom hr { border: 0; height: 1px; background: rgba(255,255,255,0.1); margin: 2em 0; }
+      .reader-comments { margin-top: 2rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 2rem; }
+      .reader-comment { background: rgba(30, 41, 59, 0.4); border-radius: 0.75rem; padding: 1rem; margin-bottom: 1rem; border: 1px solid rgba(255,255,255,0.05); }
+      .reader-comment-meta { font-size: 0.875rem; color: #94a3b8; margin-bottom: 0.75rem; font-weight: 500; }
+      .reader-replies { margin-left: 1rem; padding-left: 1rem; border-left: 2px solid rgba(255,255,255,0.1); margin-top: 1rem; }
+    </style>
   </head>
-  <body class="app-body reader-page">
-    <div class="reader-shell">
-      <header class="reader-topbar">
-        <div class="reader-topbar-inner">
-          <a class="button button-secondary" href="{% if is_admin %}{{ url_for('reader_page', owner=selected_owner) }}{% else %}{{ url_for('reader_page') }}{% endif %}">Back to reader</a>
-          <div class="reader-heading">
-            <p class="eyebrow">Reader {% if is_live_view %}live view{% else %}cached view{% endif %}</p>
-            <h1>{{ entry.title }}</h1>
-            <p class="lead">
-              {{ entry.source_label }}
-              {% if entry.author %} · {{ entry.author }}{% endif %}
-              {% if entry.word_count %} · {{ entry.word_count }} words{% endif %}
-              {% if entry.reader_mode_used %} · {{ entry.reader_mode_used|upper }}{% endif %}
-            </p>
-          </div>
-          <div class="button-row">
-            <a class="button button-primary" href="{{ entry.url }}" target="_blank" rel="noopener noreferrer">Open source</a>
-            {% if not is_live_view %}
-            <form method="post" action="{{ url_for('refresh_reader_entry', entry_id=entry.id) }}" class="inline-form">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-              {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
-              <input type="hidden" name="reader_mode" value="{{ entry.reader_mode_used or 'auto' }}" />
-              <button type="submit" class="button button-secondary">Refresh cache</button>
-            </form>
-            <form method="post" action="{{ url_for('delete_reader_entry', entry_id=entry.id) }}" class="inline-form">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-              {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
-              <button type="submit" class="button button-danger">Delete page</button>
-            </form>
-            {% endif %}
-          </div>
-        </div>
-      </header>
+  <body class="bg-slate-950 text-slate-200 min-h-screen selection:bg-emerald-500/30 overflow-x-hidden">
 
-      <main class="reader-main">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        <div class="flash-stack">
-          {% for category, message in messages %}
-          <p class="flash-message {{ category }}">{{ message }}</p>
-          {% endfor %}
-        </div>
-        {% endif %}
-        {% endwith %}
-
-        <article class="panel reader-panel">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">Content</p>
-              <h2>{{ entry.title }}</h2>
-            </div>
-            <p class="section-meta">Updated {{ format_timestamp(entry.updated) }}</p>
-          </div>
-          <section class="reader-prose">
-            {{ content_html|safe }}
-          </section>
-        </article>
-      </main>
-    </div>
-    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
-
-    <!-- Share Modal -->
-    <div id="share-modal" class="modal">
-      <div class="modal-box w-11/12 max-w-md">
-        <h3 class="font-bold text-lg mb-4 text-slate-800">Share Options</h3>
-
-        <div class="space-y-4">
-          <!-- Public Link -->
-          <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
-            <div class="flex items-center justify-between mb-2">
-              <h4 class="font-semibold text-slate-700">Public Link</h4>
-              <button id="btn-toggle-public" class="text-sm font-medium text-blue-600 hover:text-blue-700">Enable</button>
-            </div>
-            <p id="public-link-status" class="text-xs text-slate-500 mb-2">Not shared publicly</p>
-            <div id="public-link-url" class="text-xs p-2 bg-white border border-slate-200 rounded break-all hidden select-all text-slate-600"></div>
-          </div>
-
-          <!-- Share with User -->
-          <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
-            <h4 class="font-semibold text-slate-700 mb-2">Share with User</h4>
-            <div class="flex gap-2 mb-3">
-              <input type="text" id="share-username-input" placeholder="Username" class="input input-bordered input-sm flex-1 text-slate-800" />
-              <button id="btn-share-user" class="btn btn-primary btn-sm">Share</button>
-            </div>
-
-            <div class="mt-4">
-              <h5 class="text-xs font-semibold text-slate-500 uppercase mb-2">Shared With</h5>
-              <div id="shared-users-list" class="space-y-1">
-                <!-- Users injected here -->
-              </div>
-            </div>
+    <!-- Premium Header -->
+    <header class="sticky top-0 z-30 bg-slate-900/80 backdrop-blur-md border-b border-slate-800">
+      <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <a href="{% if is_admin %}{{ url_for('reader_page', owner=selected_owner) }}{% else %}{{ url_for('reader_page') }}{% endif %}" class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center hover:bg-emerald-500/30 transition-colors tooltip" title="Back to Library">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          </a>
+          <div class="hidden sm:block">
+            <p class="text-[10px] uppercase tracking-wider font-bold text-slate-500 leading-tight">Reader {% if is_live_view %}Live{% else %}Cached{% endif %}</p>
+            <p class="font-semibold text-slate-200 leading-tight truncate max-w-[200px]">{{ entry.title }}</p>
           </div>
         </div>
 
-        <div class="modal-action">
-          <button class="btn btn-sm" onclick="document.getElementById('share-modal').classList.remove('active')">Close</button>
+        <div class="flex items-center gap-2">
+          <a href="{{ entry.url }}" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5" title="View Original">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
+            <span class="hidden sm:inline">Source</span>
+          </a>
+
+          {% if not is_live_view %}
+          <form method="post" action="{{ url_for('refresh_reader_entry', entry_id=entry.id) }}" class="m-0" data-async>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
+            <input type="hidden" name="reader_mode" value="{{ entry.reader_mode_used or 'auto' }}" />
+            <button type="submit" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors" title="Refresh Content">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            </button>
+          </form>
+
+          <form method="post" action="{{ url_for('delete_reader_entry', entry_id=entry.id) }}" class="m-0" data-async>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            {% if is_admin %}<input type="hidden" name="owner" value="{{ selected_owner }}" />{% endif %}
+            <button type="submit" class="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg transition-colors" title="Delete Page">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+            </button>
+          </form>
+          {% endif %}
         </div>
       </div>
-    </div>
+    </header>
 
+    <main class="max-w-3xl mx-auto px-4 py-8 sm:py-12 pb-24">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+      <div class="mb-8 space-y-2">
+        {% for category, message in messages %}
+          <div class="p-3 {{ 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' if category == 'success' else 'bg-rose-500/10 border-rose-500/20 text-rose-400' }} border rounded-xl text-sm flex items-start gap-2">
+            {% if category == 'success' %}
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 shrink-0"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            {% else %}
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            {% endif %}
+            <span>{{ message }}</span>
+          </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% endwith %}
+
+      <article class="bg-slate-900/40 border border-slate-800/80 rounded-3xl p-6 sm:p-12 shadow-2xl backdrop-blur-sm relative">
+        <!-- Abstract Decoration -->
+        <div class="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
+          <svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        </div>
+
+        <header class="border-b border-slate-800/60 pb-8 mb-10 relative z-10">
+          <h1 class="text-3xl sm:text-5xl font-bold tracking-tight text-slate-100 mb-6 leading-tight">{{ entry.title }}</h1>
+
+          <div class="flex flex-wrap items-center gap-3 sm:gap-4 text-xs sm:text-sm font-medium text-slate-400 bg-slate-950/50 p-3 sm:p-4 rounded-2xl border border-slate-800/50 inline-flex">
+            <span class="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-inner flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              {{ entry.source_label }}
+            </span>
+
+            {% if entry.author %}
+            <span class="flex items-center gap-1.5"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-500"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>{{ entry.author }}</span>
+            <span class="text-slate-700">&bull;</span>
+            {% endif %}
+
+            <time datetime="{{ entry.updated }}" class="flex items-center gap-1.5"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-500"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>{{ format_timestamp(entry.updated) }}</time>
+
+            {% if entry.word_count %}
+            <span class="text-slate-700 hidden sm:inline">&bull;</span>
+            <span class="flex items-center gap-1.5"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-500"><path d="M2 12h20"/><path d="M2 6h20"/><path d="M2 18h20"/></svg>{{ entry.word_count }} words</span>
+            {% endif %}
+          </div>
+        </header>
+
+        <div class="prose-custom text-slate-300 text-lg relative z-10">
+          {{ content_html|safe }}
+        </div>
+      </article>
+    </main>
+
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
   </body>
 </html>

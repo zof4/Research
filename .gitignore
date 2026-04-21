@@ -6,3 +6,7 @@ uploads/*
 *.log
 debug_*.png
 debug_*.html
+node_modules/
+app_output.log
+test_output.txt
+screenshot*.png
