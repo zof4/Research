@@ -8,6 +8,8 @@ import shutil
 import socket
 import subprocess
 import tempfile
+import threading
+import time
 import zipfile
 from datetime import datetime, timedelta, timezone
 from functools import wraps
@@ -82,7 +84,7 @@ MAX_TEXT_HISTORY_ITEMS = int(os.environ.get("QUICKDROP_MAX_TEXT_HISTORY", "25"))
 MAX_LATEX_HISTORY_ITEMS = int(os.environ.get("QUICKDROP_MAX_LATEX_HISTORY", "15"))
 MAX_LATEX_CHARS = int(os.environ.get("QUICKDROP_MAX_LATEX_CHARS", "12000"))
 MAX_HTML_HISTORY_ITEMS = int(os.environ.get("QUICKDROP_MAX_HTML_HISTORY", "25"))
-MAX_HTML_CHARS = int(os.environ.get("QUICKDROP_MAX_HTML_CHARS", "300000"))
+MAX_HTML_CHARS = int(os.environ.get("QUICKDROP_MAX_HTML_CHARS", "2000000"))
 MAX_READER_HISTORY_ITEMS = int(os.environ.get("QUICKDROP_MAX_READER_HISTORY", "20"))
 MAX_READER_FETCH_BYTES = int(os.environ.get("QUICKDROP_MAX_READER_FETCH_BYTES", str(2 * 1024 * 1024)))
 READER_FETCH_TIMEOUT = int(os.environ.get("QUICKDROP_READER_FETCH_TIMEOUT", "20"))
@@ -123,6 +125,8 @@ FORBIDDEN_LATEX_TOKENS = {
     "\\usepackage{shellesc}",
     "\\immediate",
 }
+HTML_REVISION_LOCK = threading.Lock()
+LAST_HTML_REVISION = 0
 CONTENT_SELECTORS = (
     "article",
     "main",
@@ -1208,11 +1212,14 @@ def save_html_viewer_entry(
     safe_title = secure_filename(title) or f"html-page-{uuid4().hex[:8]}"
     html_name = ensure_unique_filename(html_dir, f"{safe_title}.html")
     (html_dir / html_name).write_text(source, encoding="utf-8")
+    revision = next_html_revision(0)
     item = {
         "id": uuid4().hex,
         "title": title,
         "html_name": html_name,
         "created": now_iso(),
+        "updated": now_iso(),
+        "revision": revision,
         "source": source,
     }
     add_history_item(html_history_file, item, MAX_HTML_HISTORY_ITEMS)
@@ -1235,6 +1242,34 @@ def read_html_content(filename: str, html_dir: Path) -> str:
     if not path.exists() or not path.is_file():
         return ""
     return path.read_text(encoding="utf-8", errors="replace")
+
+
+def parse_html_revision(raw_value: object) -> int:
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return 0
+    return value if value > 0 else 0
+
+
+def next_html_revision(previous_revision: object) -> int:
+    global LAST_HTML_REVISION
+    previous = parse_html_revision(previous_revision)
+    with HTML_REVISION_LOCK:
+        now_candidate = time.time_ns()
+        next_revision = max(previous + 1, LAST_HTML_REVISION + 1, now_candidate)
+        LAST_HTML_REVISION = next_revision
+        return next_revision
+
+
+def serialize_html_entry(entry: Dict, html_dir: Path) -> Dict:
+    source = read_html_content(entry.get("html_name", ""), html_dir) or str(entry.get("source", ""))
+    revision = parse_html_revision(entry.get("revision"))
+    return {
+        **entry,
+        "source": source,
+        "revision": revision,
+    }
 
 
 def normalize_reader_url(raw_url: str) -> str:
@@ -2504,8 +2539,7 @@ def html_ipad_viewer():
     html_history = load_history(paths["html_history_file"])
 
     # Pre-load the sources for all items so the SPA has it
-    for item in html_history:
-        item["source"] = read_html_content(item.get("html_name", ""), paths["html_dir"]) or str(item.get("source", ""))
+    html_history = [serialize_html_entry(item, paths["html_dir"]) for item in html_history]
 
     return render_template(
         "ipad_viewer.html",
@@ -2534,10 +2568,12 @@ def save_html_ipad_viewer():
         title = data.get("title", "").strip() or "html-page"
         source = data.get("source", "").strip()
         entry_id = data.get("id", "").strip()
+        base_revision = parse_html_revision(data.get("base_revision"))
     else:
         title = request.form.get("title", "").strip() or "html-page"
         source = request.form.get("source", "").strip()
         entry_id = request.form.get("id", "").strip()
+        base_revision = parse_html_revision(request.form.get("base_revision"))
 
     if not source:
         if request.is_json:
@@ -2552,31 +2588,53 @@ def save_html_ipad_viewer():
     if entry_id:
         entry = find_history_item(paths["html_history_file"], entry_id)
         if entry:
+            stored_entry = serialize_html_entry(entry, paths["html_dir"])
+            current_revision = parse_html_revision(stored_entry.get("revision"))
+            if base_revision and current_revision > base_revision and stored_entry.get("source", "") != source:
+                return {
+                    "ok": False,
+                    "error": "Conflict: remote changes were saved first.",
+                    "conflict": True,
+                    "entry": stored_entry,
+                }, 409
+
             html_name = entry.get("html_name")
             if html_name:
                 (paths["html_dir"] / html_name).write_text(source, encoding="utf-8")
 
+            next_revision = next_html_revision(current_revision)
             updated_entry = update_history_item(
                 paths["html_history_file"],
                 entry_id,
                 {
                     "title": title[:120],
                     "updated": now_iso(),
+                    "revision": next_revision,
                     "source": source
                 },
             )
             if request.is_json:
-                return {"ok": True, "entry": updated_entry}
+                return {"ok": True, "entry": serialize_html_entry(updated_entry or entry, paths["html_dir"])}
             flash("HTML page updated.", "success")
             return redirect(url_for("html_page", owner=target_owner))
 
     html_name, entry = save_html_viewer_entry(title, source, paths["html_dir"], paths["html_history_file"])
 
     if request.is_json:
-        return {"ok": True, "entry": entry}
+        return {"ok": True, "entry": serialize_html_entry(entry, paths["html_dir"])}
 
     flash(f"Saved HTML page: {html_name}", "success")
     return redirect(url_for("html_page", owner=target_owner))
+
+
+@app.get("/html/ipad-viewer/state/<entry_id>")
+@login_required
+def html_ipad_viewer_state(entry_id: str):
+    paths, _target_owner = get_target_user_paths()
+    entry = find_history_item(paths["html_history_file"], entry_id)
+    if not entry:
+        return {"ok": False, "error": "Not found"}, 404
+    return {"ok": True, "entry": serialize_html_entry(entry, paths["html_dir"])}
 
 
 @app.get("/html/view/<entry_id>")
@@ -3250,9 +3308,7 @@ def public_html_viewer(token: str):
         raise NotFound()
 
     # Create a single item list for the viewer
-    html_history = [entry]
-    for item in html_history:
-        item["source"] = read_html_content(item.get("html_name", ""), paths["html_dir"]) or str(item.get("source", ""))
+    html_history = [serialize_html_entry(entry, paths["html_dir"])]
 
     return render_template(
         "ipad_viewer.html",
@@ -3284,6 +3340,7 @@ def public_html_save(token: str):
     data = request.get_json()
     title = data.get("title", "").strip() or "html-page"
     source = data.get("source", "").strip()
+    base_revision = parse_html_revision(data.get("base_revision"))
 
     if not source:
         return {"ok": False, "error": "HTML source cannot be empty."}, 400
@@ -3293,21 +3350,45 @@ def public_html_save(token: str):
     entry = find_history_item(paths["html_history_file"], entry_id)
     if not entry:
         return {"ok": False, "error": "Not found"}, 404
+    stored_entry = serialize_html_entry(entry, paths["html_dir"])
+    current_revision = parse_html_revision(stored_entry.get("revision"))
+    if base_revision and current_revision > base_revision and stored_entry.get("source", "") != source:
+        return {
+            "ok": False,
+            "error": "Conflict: remote changes were saved first.",
+            "conflict": True,
+            "entry": stored_entry,
+        }, 409
 
     html_name = entry.get("html_name")
     if html_name:
         (paths["html_dir"] / html_name).write_text(source, encoding="utf-8")
 
+    next_revision = next_html_revision(current_revision)
     updated_entry = update_history_item(
         paths["html_history_file"],
         entry_id,
         {
             "title": title[:120],
             "updated": now_iso(),
+            "revision": next_revision,
             "source": source
         },
     )
-    return {"ok": True, "entry": updated_entry}
+    return {"ok": True, "entry": serialize_html_entry(updated_entry or entry, paths["html_dir"])}
+
+
+@app.get("/p/html/<token>/state")
+def public_html_state(token: str):
+    hit = find_public_file_by_token(token)
+    if not hit:
+        return {"ok": False, "error": "Not found"}, 404
+    owner, entry_id, _permission = hit
+    paths = ensure_user_paths(owner)
+    entry = find_history_item(paths["html_history_file"], entry_id)
+    if not entry:
+        return {"ok": False, "error": "Not found"}, 404
+    return {"ok": True, "entry": serialize_html_entry(entry, paths["html_dir"])}
 
 
 @app.post("/html/delete/<entry_id>")
