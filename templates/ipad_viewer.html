@@ -423,9 +423,6 @@
       <main class="main-content">
         <!-- Top Bar -->
         <header class="top-bar">
-          <button class="btn-icon" id="btn-back" title="Back">
-             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-          </button>
           <button class="btn-icon" id="btn-toggle-sidebar" title="Toggle Sidebar">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
           </button>
@@ -545,9 +542,6 @@
     <script>
       console.log("Step 1");
 const csrfToken = "{{ csrf_token }}";
-const isPublicView = {{ 'true' if is_public_view else 'false' }};
-const publicPermission = "{{ public_permission | default('') }}";
-const publicToken = "{{ public_token | default('') }}";
       console.log("Step 2");
 const htmlHistoryData = JSON.parse(document.getElementById('html-data').textContent || '[]');
 console.log("Step 3");
@@ -643,20 +637,21 @@ console.log("Step 3");
         if (file.is_public) {
           publicBtn.textContent = 'Disable';
           publicBtn.classList.add('text-red-400');
-          publicStatus.textContent = `Publicly accessible (${file.public_permission || 'viewer'})`;
+          publicStatus.textContent = 'Publicly accessible';
 
           const baseUrl = window.location.origin;
-          const link = `${baseUrl}/p/html/${file.public_token}`;
+          {% if is_admin %}
+          const link = `${baseUrl}/p/html/${file.id}?owner={{ selected_owner }}`;
+          {% else %}
+          const link = `${baseUrl}/p/html/${file.id}`;
+          {% endif %}
           publicUrl.textContent = link;
           publicUrl.classList.remove('hidden');
-          document.getElementById('public-permission-select').value = file.public_permission || 'viewer';
-          document.getElementById('public-permission-select').disabled = true;
         } else {
           publicBtn.textContent = 'Enable';
           publicBtn.classList.remove('text-red-400');
           publicStatus.textContent = 'Not shared publicly';
           publicUrl.classList.add('hidden');
-          document.getElementById('public-permission-select').disabled = false;
         }
 
         const sharedUsersContainer = document.getElementById('shared-users-list');
@@ -678,24 +673,14 @@ console.log("Step 3");
         if (!currentFileId) return;
         const file = getActiveFile();
         const action = file.is_public ? 'disable' : 'enable';
-        const permission = document.getElementById('public-permission-select').value;
 
         try {
           const response = await fetch(`/html/public/${currentFileId}/${action}`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-            body: JSON.stringify({permission: permission})
+            headers: {'X-CSRFToken': csrfToken}
           });
           if (response.ok) {
-            const data = await response.json();
             file.is_public = !file.is_public;
-            if (file.is_public) {
-                file.public_token = data.token;
-                file.public_permission = data.permission;
-            } else {
-                file.public_token = null;
-                file.public_permission = null;
-            }
             updateShareModal();
             showToast(`Public link ${file.is_public ? 'enabled' : 'disabled'}`);
           }
@@ -772,26 +757,6 @@ console.log("Step 3");
       });
 
       function init() {
-        document.getElementById('btn-back')?.addEventListener('click', () => {
-             if (window.parent !== window) {
-                 window.parent.postMessage({type: 'close-viewer'}, '*');
-             } else {
-                 window.history.back();
-             }
-        });
-
-        if (isPublicView) {
-            elements.sidebar.classList.add('hidden');
-            if (publicPermission !== 'editor') {
-                 elements.btnSave.style.display = 'none';
-                 elements.btnDrawToggle.style.display = 'none';
-                 elements.btnClearDraw.style.display = 'none';
-                 document.getElementById('color-picker').style.display = 'none';
-                 document.getElementById('editor-panel').style.display = 'none';
-                 document.getElementById('btn-inject').style.display = 'none';
-            }
-        }
-
         // Init CodeMirror
         editor = CodeMirror.fromTextArea(elements.codeEditor, {
           mode: "htmlmixed",
@@ -925,8 +890,7 @@ console.log("Step 3");
     document.addEventListener("DOMContentLoaded", function() {
       document.body.contentEditable = "true";
       let timeout;
-
-      const saveContent = function() {
+      document.body.addEventListener('input', function() {
         clearTimeout(timeout);
         timeout = setTimeout(function() {
           let clone = document.documentElement.cloneNode(true);
@@ -936,20 +900,7 @@ console.log("Step 3");
           if (body) body.removeAttribute('contenteditable');
           window.parent.postMessage({ type: 'live-edit-save', source: '<!doctype html>\\n' + clone.outerHTML }, '*');
         }, 500);
-      };
-
-      document.body.addEventListener('input', saveContent);
-
-      const observer = new MutationObserver((mutations) => {
-          let shouldSave = false;
-          mutations.forEach(mutation => {
-              if (mutation.type === 'childList' || mutation.type === 'attributes' || mutation.type === 'characterData') {
-                  shouldSave = true;
-              }
-          });
-          if (shouldSave) saveContent();
       });
-      observer.observe(document.body, { attributes: true, childList: true, subtree: true, characterData: true });
     });
   })();
 <\/script>`;
@@ -986,17 +937,11 @@ console.log("Step 3");
         }
 
         try {
-          let url;
-          if (isPublicView) {
-              url = `/p/html/${publicToken}/save`;
-          } else {
-              {% if is_admin %}
-              url = "{{ url_for('save_html_ipad_viewer', owner=selected_owner) }}";
-              {% else %}
-              url = "{{ url_for('save_html_ipad_viewer') }}";
-              {% endif %}
-          }
-
+          {% if is_admin %}
+          const url = "{{ url_for('save_html_ipad_viewer', owner=selected_owner) }}";
+          {% else %}
+          const url = "{{ url_for('save_html_ipad_viewer') }}";
+          {% endif %}
           const response = await fetch(url, {
             method: 'POST',
             headers: {
@@ -1230,14 +1175,7 @@ console.log("Step 3");
           <div class="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50">
             <div class="flex items-center justify-between mb-2">
               <h4 class="font-semibold text-slate-300">Public Link</h4>
-              <div class="flex gap-2 items-center">
-                  <select id="public-permission-select" class="bg-slate-900 border border-slate-700 text-xs text-slate-300 rounded px-2 py-1">
-                      <option value="viewer">Viewer</option>
-                      <option value="commenter">Commenter</option>
-                      <option value="editor">Editor</option>
-                  </select>
-                  <button id="btn-toggle-public" class="text-sm font-medium text-indigo-400 hover:text-indigo-300">Enable</button>
-              </div>
+              <button id="btn-toggle-public" class="text-sm font-medium text-indigo-400 hover:text-indigo-300">Enable</button>
             </div>
             <p id="public-link-status" class="text-xs text-slate-500 mb-2">Not shared publicly</p>
             <div id="public-link-url" class="text-xs p-2 bg-slate-900 border border-slate-700/50 rounded-lg break-all hidden select-all text-slate-300 font-mono"></div>

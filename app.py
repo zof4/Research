@@ -597,7 +597,7 @@ def clear_file_shares(path: Path, filename: str) -> None:
     save_file_shares(path, shares)
 
 
-def load_public_file_links(path: Path) -> Dict[str, Dict[str, str]]:
+def load_public_file_links(path: Path) -> Dict[str, str]:
     if not path.exists():
         return {}
     try:
@@ -606,20 +606,16 @@ def load_public_file_links(path: Path) -> Dict[str, Dict[str, str]]:
         return {}
     if not isinstance(loaded, dict):
         return {}
-    cleaned: Dict[str, Dict[str, str]] = {}
-    for filename, token_data in loaded.items():
-        if not isinstance(filename, str):
+    cleaned: Dict[str, str] = {}
+    for filename, token in loaded.items():
+        if not isinstance(filename, str) or not isinstance(token, str):
             continue
         safe_name = secure_filename(filename)
         if safe_name != filename:
             continue
-        if isinstance(token_data, str):
-            if token_data:
-                cleaned[filename] = {"token": token_data, "permission": "viewer"}
-        elif isinstance(token_data, dict):
-            token = token_data.get("token", "")
-            if token:
-                cleaned[filename] = token_data
+        if not token:
+            continue
+        cleaned[filename] = token
     return cleaned
 
 
@@ -645,7 +641,7 @@ def load_file_folders(path: Path) -> Dict[str, str]:
         return {}
     if not isinstance(loaded, dict):
         return {}
-    cleaned: Dict[str, Dict[str, str]] = {}
+    cleaned: Dict[str, str] = {}
     for filename, folder in loaded.items():
         if not isinstance(filename, str):
             continue
@@ -680,20 +676,17 @@ def set_file_folder(path: Path, filename: str, folder: str) -> None:
     save_file_folders(path, folders)
 
 
-def save_public_file_links(path: Path, links: Dict[str, Dict[str, str]]) -> None:
+def save_public_file_links(path: Path, links: Dict[str, str]) -> None:
     path.write_text(json.dumps(links, indent=2))
 
 
-def set_public_file_link(path: Path, filename: str, enabled: bool, permission: str = "viewer") -> Optional[str]:
+def set_public_file_link(path: Path, filename: str, enabled: bool) -> Optional[str]:
     links = load_public_file_links(path)
     if enabled:
-        token_data = links.get(filename)
-        if not token_data:
+        token = links.get(filename)
+        if not token:
             token = secrets.token_urlsafe(24)
-            links[filename] = {"token": token, "permission": permission}
-        else:
-            token = token_data["token"]
-            links[filename] = {"token": token, "permission": permission}
+            links[filename] = token
         save_public_file_links(path, links)
         return token
     links.pop(filename, None)
@@ -701,17 +694,16 @@ def set_public_file_link(path: Path, filename: str, enabled: bool, permission: s
     return None
 
 
-def find_public_file_by_token(token: str) -> Optional[Tuple[str, str, str]]:
+def find_public_file_by_token(token: str) -> Optional[Tuple[str, str]]:
     normalized_token = token.strip()
     if not normalized_token:
         return None
     for owner in managed_usernames():
         owner_paths = ensure_user_paths(owner)
         public_links = load_public_file_links(owner_paths["public_file_links_file"])
-        for filename, token_data in public_links.items():
-            stored_token = token_data.get("token", "")
-            if stored_token and secrets.compare_digest(stored_token, normalized_token):
-                return owner, filename, token_data.get("permission", "viewer")
+        for filename, stored_token in public_links.items():
+            if secrets.compare_digest(stored_token, normalized_token):
+                return owner, filename
     return None
 
 
@@ -967,7 +959,7 @@ def get_file_listing(
     owner: str,
     hidden_filenames: Optional[set] = None,
     shared_with_map: Optional[Dict[str, List[str]]] = None,
-    public_links_map: Optional[Dict[str, Dict[str, str]]] = None,
+    public_links_map: Optional[Dict[str, str]] = None,
     folder_map: Optional[Dict[str, str]] = None,
     viewer: Optional[str] = None,
 ) -> Tuple[List[Dict], int]:
@@ -990,7 +982,7 @@ def get_file_listing(
                 "owner": owner,
                 "hidden": path.name in (hidden_filenames or set()),
                 "shared_with": shared_with,
-                "public_token": public_links_map.get(path.name, {}).get("token", ""),
+                "public_token": public_links_map.get(path.name, ""),
                 "public_enabled": path.name in public_links_map,
                 "folder": folder_map.get(path.name, ""),
                 "is_shared_to_viewer": bool(
@@ -2730,7 +2722,7 @@ def edit_text_entry(entry_id: str):
 
     if not content:
         flash("Text transfer cannot be empty.", "error")
-        return redirect(url_for("view_text_entry", entry_id=entry_id, owner=target_owner))
+        return redirect(url_for("text_page", owner=target_owner))
     item = update_history_item(
         paths["text_history_file"],
         entry_id,
@@ -2743,7 +2735,7 @@ def edit_text_entry(entry_id: str):
     if item is None:
         raise NotFound()
     flash("Text snippet updated.", "success")
-    return redirect(url_for("view_text_entry", entry_id=entry_id, owner=target_owner))
+    return redirect(url_for("text_page", owner=target_owner))
 
 
 @app.post("/text/share/<entry_id>")
@@ -2754,19 +2746,19 @@ def share_text_entry(entry_id: str):
     target_username = normalize_username(request.form.get("share_username", ""))
     if not target_username:
         flash("Choose a user to share with.", "error")
-        return redirect(url_for("view_text_entry", entry_id=entry_id, owner=target_owner))
+        return redirect(url_for("text_page", owner=target_owner))
     if target_username == target_owner:
         flash("This item is already visible to its owner.", "error")
-        return redirect(url_for("view_text_entry", entry_id=entry_id, owner=target_owner))
+        return redirect(url_for("text_page", owner=target_owner))
     if target_username not in managed_usernames():
         flash("User does not exist.", "error")
-        return redirect(url_for("view_text_entry", entry_id=entry_id, owner=target_owner))
+        return redirect(url_for("text_page", owner=target_owner))
 
     item = toggle_history_share(paths["text_history_file"], entry_id, target_username, shared=True)
     if item is None:
         raise NotFound()
     flash(f"Shared text item with {target_username}.", "success")
-    return redirect(url_for("view_text_entry", entry_id=entry_id, owner=target_owner))
+    return redirect(url_for("text_page", owner=target_owner))
 
 
 @app.post("/text/unshare/<entry_id>")
@@ -2777,16 +2769,16 @@ def unshare_text_entry(entry_id: str):
     target_username = normalize_username(request.form.get("share_username", ""))
     if not target_username:
         flash("Choose a user to remove.", "error")
-        return redirect(url_for("view_text_entry", entry_id=entry_id, owner=target_owner))
+        return redirect(url_for("text_page", owner=target_owner))
     if target_username == target_owner:
         flash("Owner access cannot be removed.", "error")
-        return redirect(url_for("view_text_entry", entry_id=entry_id, owner=target_owner))
+        return redirect(url_for("text_page", owner=target_owner))
 
     item = toggle_history_share(paths["text_history_file"], entry_id, target_username, shared=False)
     if item is None:
         raise NotFound()
     flash(f"Removed {target_username} from text item sharing.", "success")
-    return redirect(url_for("view_text_entry", entry_id=entry_id, owner=target_owner))
+    return redirect(url_for("text_page", owner=target_owner))
 
 
 @app.post("/text/comment/<entry_id>")
@@ -2797,10 +2789,10 @@ def comment_text_entry(entry_id: str):
     content = request.form.get("comment", "").strip()
     if not content:
         flash("Comment cannot be empty.", "error")
-        return redirect(url_for("view_text_entry", entry_id=entry_id, owner=target_owner))
+        return redirect(url_for("text_page", owner=target_owner))
     if len(content) > 500:
         flash("Comment is too long (500 chars max).", "error")
-        return redirect(url_for("view_text_entry", entry_id=entry_id, owner=target_owner))
+        return redirect(url_for("text_page", owner=target_owner))
 
     comment = {
         "id": uuid4().hex,
@@ -2812,7 +2804,7 @@ def comment_text_entry(entry_id: str):
     if item is None:
         raise NotFound()
     flash("Comment added.", "success")
-    return redirect(url_for("view_text_entry", entry_id=entry_id, owner=target_owner))
+    return redirect(url_for("text_page", owner=target_owner))
 
 
 @app.post("/text/reference/<entry_id>")
@@ -2827,10 +2819,10 @@ def add_text_entry_reference(entry_id: str):
 
     if not (label or url):
         flash("Reference needs a label or URL.", "error")
-        return redirect(url_for("view_text_entry", entry_id=entry_id, owner=target_owner))
+        return redirect(url_for("text_page", owner=target_owner))
     if url and not re.match(r"^https?://", url, flags=re.IGNORECASE):
         flash("Reference URL must start with http:// or https://.", "error")
-        return redirect(url_for("view_text_entry", entry_id=entry_id, owner=target_owner))
+        return redirect(url_for("text_page", owner=target_owner))
 
     reference = {
         "id": uuid4().hex,
@@ -2846,7 +2838,7 @@ def add_text_entry_reference(entry_id: str):
         raise NotFound()
 
     flash("Reference linked to note.", "success")
-    return redirect(url_for("view_text_entry", entry_id=entry_id, owner=target_owner))
+    return redirect(url_for("text_page", owner=target_owner))
 
 
 @app.post("/latex")
@@ -3173,143 +3165,6 @@ def clear_latex_entries():
 
 
 
-@app.post("/html/public/<entry_id>/enable")
-@login_required
-def enable_public_html_link(entry_id: str):
-    is_json = request.is_json or request.headers.get("Accept") == "application/json"
-    if is_json:
-        token = request.headers.get("X-CSRFToken", "")
-        data = request.get_json() or {}
-        permission = data.get("permission", "viewer")
-    else:
-        token = request.form.get("csrf_token", "")
-        permission = request.form.get("permission", "viewer")
-    validate_csrf_token(token)
-
-    paths, target_owner = get_target_user_paths()
-    entry = find_history_item(paths["html_history_file"], entry_id)
-    if not entry:
-        if is_json: return {"ok": False, "error": "Not found"}, 404
-        raise NotFound()
-
-    link_token = set_public_file_link(paths["public_file_links_file"], entry_id, enabled=True, permission=permission)
-
-    updated_entry = update_history_item(
-        paths["html_history_file"],
-        entry_id,
-        {
-            "is_public": True,
-            "public_token": link_token,
-            "public_permission": permission
-        },
-    )
-
-    if is_json: return {"ok": True, "token": link_token, "permission": permission}
-    flash(f"Public link enabled.", "success")
-    return redirect(url_for("html_page", owner=target_owner))
-
-@app.post("/html/public/<entry_id>/disable")
-@login_required
-def disable_public_html_link(entry_id: str):
-    is_json = request.is_json or request.headers.get("Accept") == "application/json"
-    if is_json:
-        token = request.headers.get("X-CSRFToken", "")
-    else:
-        token = request.form.get("csrf_token", "")
-    validate_csrf_token(token)
-
-    paths, target_owner = get_target_user_paths()
-    entry = find_history_item(paths["html_history_file"], entry_id)
-    if not entry:
-        if is_json: return {"ok": False, "error": "Not found"}, 404
-        raise NotFound()
-
-    set_public_file_link(paths["public_file_links_file"], entry_id, enabled=False)
-    updated_entry = update_history_item(
-        paths["html_history_file"],
-        entry_id,
-        {
-            "is_public": False,
-            "public_token": None,
-            "public_permission": None
-        },
-    )
-    if is_json: return {"ok": True}
-    flash(f"Public link disabled.", "success")
-    return redirect(url_for("html_page", owner=target_owner))
-
-@app.get("/p/html/<token>")
-def public_html_viewer(token: str):
-    hit = find_public_file_by_token(token)
-    if not hit:
-        raise NotFound()
-    owner, entry_id, permission = hit
-    paths = ensure_user_paths(owner)
-    entry = find_history_item(paths["html_history_file"], entry_id)
-    if not entry:
-        raise NotFound()
-
-    # Create a single item list for the viewer
-    html_history = [entry]
-    for item in html_history:
-        item["source"] = read_html_content(item.get("html_name", ""), paths["html_dir"]) or str(item.get("source", ""))
-
-    return render_template(
-        "ipad_viewer.html",
-        is_authenticated=False,
-        is_admin=False,
-        current_username=None,
-        selected_owner=owner,
-        html_history=html_history,
-        csrf_token="",
-        is_public_view=True,
-        public_permission=permission,
-        public_token=token
-    )
-
-@app.post("/p/html/<token>/save")
-def public_html_save(token: str):
-    hit = find_public_file_by_token(token)
-    if not hit:
-        return {"ok": False, "error": "Not found"}, 404
-    owner, entry_id, permission = hit
-    if permission != "editor":
-        return {"ok": False, "error": "Permission denied"}, 403
-
-    paths = ensure_user_paths(owner)
-
-    if not request.is_json:
-        return {"ok": False, "error": "JSON expected"}, 400
-
-    data = request.get_json()
-    title = data.get("title", "").strip() or "html-page"
-    source = data.get("source", "").strip()
-
-    if not source:
-        return {"ok": False, "error": "HTML source cannot be empty."}, 400
-    if len(source) > MAX_HTML_CHARS:
-        return {"ok": False, "error": f"HTML source is too large. Limit: {MAX_HTML_CHARS} characters."}, 400
-
-    entry = find_history_item(paths["html_history_file"], entry_id)
-    if not entry:
-        return {"ok": False, "error": "Not found"}, 404
-
-    html_name = entry.get("html_name")
-    if html_name:
-        (paths["html_dir"] / html_name).write_text(source, encoding="utf-8")
-
-    updated_entry = update_history_item(
-        paths["html_history_file"],
-        entry_id,
-        {
-            "title": title[:120],
-            "updated": now_iso(),
-            "source": source
-        },
-    )
-    return {"ok": True, "entry": updated_entry}
-
-
 @app.post("/html/delete/<entry_id>")
 @login_required
 def delete_html_entry(entry_id: str):
@@ -3578,7 +3433,7 @@ def download_public_file(token: str):
     hit = find_public_file_by_token(token)
     if not hit:
         raise NotFound()
-    owner, filename, permission = hit
+    owner, filename = hit
     paths = ensure_user_paths(owner)
     target = paths["uploads_dir"] / filename
     if not target.exists() or not target.is_file():
@@ -3663,7 +3518,6 @@ def get_all_items():
             "folder": file.get("folder", ""),
             "public_enabled": bool(file.get("public_enabled", False)),
             "public_token": str(file.get("public_token", "")),
-            "public_permission": file.get("public_permission", "viewer"),
             "url": url_for("download_file", filename=file.get("name"), owner=file.get("owner"))
         })
 
@@ -3831,7 +3685,7 @@ def api_add():
     # Save as text note
     item = {
         "id": uuid4().hex,
-        "title": data.get("title", "Quick Note")[:120],
+        "title": "Quick Note",
         "content": text_content,
         "created": now_iso(),
     }

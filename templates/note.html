@@ -114,16 +114,5 @@
     </main>
 
     <script src="{{ url_for('static', filename='app.js') }}" defer></script>
-    <script>
-    document.addEventListener("DOMContentLoaded", function() {
-        const backBtn = document.querySelector("header a[title='Back to Dashboard']");
-        if (backBtn && window.parent !== window) {
-            backBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                window.parent.postMessage({type: 'close-viewer'}, '*');
-            });
-        }
-    });
-  </script>
-</body>
+  </body>
 </html>

@@ -55,7 +55,7 @@
 
         <!-- Desktop New Menu Popup -->
         <transition name="fade">
-          <div v-if="showNewMenu" class="absolute bottom-full left-0 w-full mb-2 bg-slate-900 border border-slate-700/50 rounded-xl shadow-xl overflow-hidden z-50 py-1 origin-bottom">
+          <div v-if="showNewMenu" class="absolute bottom-full left-0 w-full mb-2 bg-slate-900 border border-slate-700/50 rounded-xl shadow-xl overflow-hidden z-50 py-1">
             <button @click="promptUploadDialog(); showNewMenu = false" class="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-800 flex items-center gap-3 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-sky-400"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
               Upload File
@@ -256,7 +256,7 @@
 
         <!-- Mobile Bottom New Menu Sheet -->
         <transition name="fade">
-          <div v-if="showNewMenu" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:hidden" @click.self="showNewMenu=false">
+          <div v-if="showNewMenu" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-end sm:hidden" @click.self="showNewMenu=false">
             <transition name="slide-up" appear>
               <div class="bg-slate-900 border-t border-slate-800 rounded-t-3xl w-full p-6 shadow-2xl pb-safe">
                 <div class="flex justify-between items-center mb-6">
@@ -320,7 +320,7 @@
     </div>
 
     <transition name="fade">
-      <div v-if="showUpload" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="showUpload=false">
+      <div v-if="showUpload" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="showUpload=false">
         <transition name="slide-up" appear>
           <div class="glass-panel border border-slate-700/50 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md p-6 shadow-2xl">
             <div class="flex items-center gap-3 mb-6">
@@ -362,7 +362,7 @@
     </transition>
 
     <transition name="fade">
-      <div v-if="showNewNote" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="showNewNote=false">
+      <div v-if="showNewNote" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="showNewNote=false">
         <transition name="slide-up" appear>
           <div class="glass-panel border border-slate-700/50 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-2xl p-6 shadow-2xl">
             <div class="flex items-center gap-3 mb-6">
@@ -395,7 +395,7 @@
     </transition>
 
     <transition name="fade">
-      <div v-if="showNewHtml" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="showNewHtml=false">
+      <div v-if="showNewHtml" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="showNewHtml=false">
         <transition name="slide-up" appear>
           <div class="glass-panel border border-slate-700/50 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-2xl p-6 shadow-2xl">
             <div class="flex items-center gap-3 mb-6">
@@ -428,7 +428,7 @@
     </transition>
 
     <transition name="fade">
-      <div v-if="showNewLatex" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="showNewLatex=false">
+      <div v-if="showNewLatex" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="showNewLatex=false">
         <transition name="slide-up" appear>
           <div class="glass-panel border border-slate-700/50 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-2xl p-6 shadow-2xl">
             <div class="flex items-center gap-3 mb-6">
@@ -462,7 +462,7 @@
     </transition>
 
     <transition name="fade">
-      <div v-if="showProxy" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="showProxy=false">
+      <div v-if="showProxy" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="showProxy=false">
         <transition name="slide-up" appear>
           <div class="glass-panel border border-slate-700/50 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md p-6 shadow-2xl">
             <div class="flex items-center gap-3 mb-6">
@@ -491,7 +491,7 @@
     </transition>
 
     <transition name="fade">
-      <div v-if="permItem" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="permItem=null">
+      <div v-if="permItem" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="permItem=null">
         <transition name="slide-up" appear>
           <div class="glass-panel border border-slate-700/50 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg p-6 shadow-2xl">
             <div class="flex items-center gap-3 mb-6">
@@ -550,7 +550,7 @@
     </transition>
 
     <transition name="fade">
-      <div v-if="folderItem" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="folderItem=null">
+      <div v-if="folderItem" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="folderItem=null">
         <transition name="slide-up" appear>
           <div class="glass-panel border border-slate-700/50 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md p-6 shadow-2xl">
             <div class="flex items-center gap-3 mb-6">
@@ -581,7 +581,7 @@
     </transition>
 
     <transition name="fade">
-      <div v-if="showAccessControl" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="showAccessControl=false">
+      <div v-if="showAccessControl" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="showAccessControl=false">
         <transition name="slide-up" appear>
           <div class="glass-panel border border-slate-700/50 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div class="flex items-center gap-3 mb-6 sticky top-0 bg-slate-900/90 backdrop-blur pb-2 z-10 border-b border-slate-800/50 -mx-6 px-6 -mt-6 pt-6">
@@ -662,7 +662,7 @@
     </transition>
 
     <transition name="fade">
-      <div v-if="showSettings" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="showSettings=false">
+      <div v-if="showSettings" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="showSettings=false">
         <transition name="slide-up" appear>
           <div class="glass-panel border border-slate-700/50 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div class="flex items-center gap-3 mb-6 sticky top-0 bg-slate-900/90 backdrop-blur pb-2 z-10 border-b border-slate-800/50 -mx-6 px-6 -mt-6 pt-6">
@@ -798,11 +798,6 @@
         if (saved) document.documentElement.style.setProperty('--accent', saved);
         this.loadSettings();
         this.fetchItems();
-        window.addEventListener('message', (e) => {
-            if (e.data && e.data.type === 'close-viewer') {
-                this.viewer = null;
-            }
-        });
       },
       watch: {
         settings: {
@@ -885,16 +880,10 @@
           await this.fetchItems();
         },
         async submitNewNote() {
-          const payload = {
-            title: this.newItemDraft.title,
-            text: this.newItemDraft.content,
-            type: 'note'
-          };
-          await fetch('/api/add', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-CSRFToken': window.csrfToken },
-              body: JSON.stringify(payload)
-          });
+          const form = new FormData();
+          form.append('title', this.newItemDraft.title);
+          form.append('content', this.newItemDraft.content);
+          await fetch('/text', { method: 'POST', headers: { 'X-CSRFToken': window.csrfToken }, body: form });
           this.showNewNote = false;
           this.newItemDraft = { title: '', content: '' };
           await this.fetchItems();
