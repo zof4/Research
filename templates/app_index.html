@@ -143,7 +143,7 @@
       <template v-else>
         <section v-if="sortMode==='recent'">
           <transition-group name="list" tag="div" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 xl:gap-5">
-            <article v-for="item in displayItems" :key="item.type + '-' + item.id" class="bento-card group relative bg-slate-900/40 border border-slate-800/80 rounded-2xl p-5 overflow-hidden flex flex-col h-56">
+            <article v-for="item in displayItems" :key="item.type + '-' + item.id" class="bento-card group relative bg-slate-900/40 border border-slate-800/80 rounded-2xl p-5 overflow-hidden flex flex-col h-56 cursor-pointer" @click="openItemOptions(item)">
               <div class="absolute top-0 right-0 p-4 opacity-10 pointer-events-none group-hover:opacity-20 transition-opacity">
                 <!-- Icon based on type -->
                 <svg v-if="item.type==='file'" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -166,24 +166,7 @@
                 <p class="text-sm text-slate-300/80 leading-relaxed line-clamp-3">{{ item.content || 'No preview available' }}</p>
               </div>
 
-              <div class="mt-auto pt-4 flex gap-2 relative z-10 border-t border-slate-800/50 opacity-0 group-hover:opacity-100 transition-opacity focus-within:opacity-100">
-                <button v-if="item.url" @click="openItem(item)" class="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 accent-bg bg-opacity-10 hover:bg-opacity-20 accent-text rounded-lg text-xs font-medium transition-colors">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
-                  Open
-                </button>
-                <div v-if="item.type==='file' && settings.showPermissionButtons" class="flex gap-1">
-                  <button @click="openPerms(item)" class="p-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors tooltip" title="Share / Permissions">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-                  </button>
-                  <button @click="openFolder(item)" class="p-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors tooltip" title="Folder">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                  </button>
-                </div>
-                <button @click="deleteItem(item)" class="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg transition-colors tooltip" title="Delete">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                </button>
-              </div>
-            </article>
+              </article>
           </transition-group>
         </section>
 
@@ -197,7 +180,7 @@
               </h2>
             </div>
             <transition-group name="list" tag="div" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 xl:gap-5">
-              <article v-for="item in group.items" :key="item.type + '-' + item.id" class="bento-card group relative bg-slate-900/40 border border-slate-800/80 rounded-2xl p-5 overflow-hidden flex flex-col h-56">
+              <article v-for="item in group.items" :key="item.type + '-' + item.id" class="bento-card group relative bg-slate-900/40 border border-slate-800/80 rounded-2xl p-5 overflow-hidden flex flex-col h-56 cursor-pointer" @click="openItemOptions(item)">
                 <!-- Group item identical to above (DRY in vue usually via component, but we inline here) -->
                 <div class="absolute top-0 right-0 p-4 opacity-10 pointer-events-none group-hover:opacity-20 transition-opacity">
                   <svg v-if="item.type==='file'" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -217,18 +200,7 @@
                 <div class="flex-1 overflow-hidden relative z-10">
                   <p class="text-sm text-slate-300/80 leading-relaxed line-clamp-3">{{ item.content || 'No preview available' }}</p>
                 </div>
-                <div class="mt-auto pt-4 flex gap-2 relative z-10 border-t border-slate-800/50 opacity-0 group-hover:opacity-100 transition-opacity focus-within:opacity-100">
-                  <button v-if="item.url" @click="openItem(item)" class="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 accent-bg bg-opacity-10 hover:bg-opacity-20 accent-text rounded-lg text-xs font-medium transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
-                    Open
-                  </button>
-                  <div v-if="item.type==='file' && settings.showPermissionButtons" class="flex gap-1">
-                    <button @click="openPerms(item)" class="p-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button>
-                    <button @click="openFolder(item)" class="p-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></button>
-                  </div>
-                  <button @click="deleteItem(item)" class="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
-                </div>
-              </article>
+                </article>
             </transition-group>
           </div>
         </section>
@@ -313,11 +285,18 @@
       </div>
     </nav>
 
+
     <div v-if="viewer" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-sm transition-all" @click.self="viewer=null">
+      <div class="absolute top-4 left-4 z-[60]">
+        <button @click="viewer=null" class="w-10 h-10 rounded-full bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/50 flex items-center justify-center text-slate-300 hover:text-white transition-colors shadow-lg backdrop-blur-md" title="Close Viewer">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
       <div class="w-full h-full sm:p-6">
         <iframe :src="viewer.url" class="w-full h-full bg-white rounded-none sm:rounded-xl"></iframe>
       </div>
     </div>
+
 
     <transition name="fade">
       <div v-if="showUpload" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="showUpload=false">
@@ -738,6 +717,43 @@
         </transition>
       </div>
     </transition>
+
+    <transition name="fade">
+      <div v-if="itemOptionsModal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" @click.self="itemOptionsModal=null">
+        <transition name="slide-up" appear>
+          <div class="glass-panel border border-slate-700/50 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-sm p-6 shadow-2xl">
+            <div class="flex items-center gap-3 mb-6">
+              <div class="flex-1 min-w-0">
+                <h2 class="font-bold text-lg text-slate-100 truncate">{{ itemOptionsModal.title }}</h2>
+                <p class="text-xs text-slate-400 uppercase tracking-widest">{{ itemOptionsModal.type }}</p>
+              </div>
+            </div>
+            <div class="flex flex-col gap-2 mb-6">
+              <button v-if="itemOptionsModal.url" @click="openItem(itemOptionsModal); itemOptionsModal=null" class="btn flex items-center justify-start gap-3 w-full p-4 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-medium transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-indigo-400"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
+                Open
+              </button>
+              <button v-if="itemOptionsModal.type==='file' && settings.showPermissionButtons" @click="openPerms(itemOptionsModal); itemOptionsModal=null" class="btn flex items-center justify-start gap-3 w-full p-4 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-medium transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                Share / Permissions
+              </button>
+              <button v-if="itemOptionsModal.type==='file'" @click="openFolder(itemOptionsModal); itemOptionsModal=null" class="btn flex items-center justify-start gap-3 w-full p-4 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-medium transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-amber-400"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                Move to Folder
+              </button>
+              <button @click="deleteItem(itemOptionsModal); itemOptionsModal=null" class="btn flex items-center justify-start gap-3 w-full p-4 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-xl font-medium transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                Delete
+              </button>
+            </div>
+            <div class="mt-2 flex justify-end">
+              <button @click="itemOptionsModal=null" class="w-full p-4 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-xl font-medium transition-colors">Cancel</button>
+            </div>
+          </div>
+        </transition>
+      </div>
+    </transition>
+
   </div>
   {% endraw %}
 
@@ -750,7 +766,7 @@
           items: [], loading: true, filter: 'all', search: '', sortMode: 'recent',
           viewer: null, showUpload: false, uploadFolder: '',
           showNewMenu: false, showNewNote: false, showNewHtml: false, showNewLatex: false, showProxy: false,
-          newItemDraft: { title: '', content: '' }, proxyUrl: '',
+          newItemDraft: { title: '', content: '' }, proxyUrl: '', itemOptionsModal: null,
           csrfToken: window.csrfToken,
           permItem: null, shareUsers: [], shareUsername: '',
           folderItem: null, folderDraft: '', folderOptions: [],
@@ -854,6 +870,7 @@
         },
         formatDate(v) { const d = new Date(v || 0); return isNaN(d) ? 'Unknown' : d.toLocaleString(); },
         openItem(item) { this.viewer = item; },
+        openItemOptions(item) { this.itemOptionsModal = item; },
         openUploadModal() { this.showUpload = true; },
         promptUploadDialog() {
           this.$refs.quickUploadInput?.click();
