@@ -163,7 +163,29 @@ org_chart_html = """<!DOCTYPE html>
             state: { nodes: [], edges: [], selectedNodes: [], selectedEdgeId: null, linkingMode: null, zoom: 1 },
             ui: { viewport: document.getElementById('viewport'), workspace: document.getElementById('workspace'), nodesLayer: document.getElementById('nodes-layer'), edgesLayer: document.getElementById('edges-layer'), propPanel: document.getElementById('properties-panel'), linkingOverlay: document.getElementById('linking-overlay') },
             interaction: { isDragging: false, isPanning: false, isSelecting: false, isDrawingLink: false, linkStartNodeId: null, linkType: null, dragNodeId: null, dragMoved: false, startX: 0, startY: 0, panStartX: 0, panStartY: 0, scrollStartX: 0, scrollStartY: 0, selectionStartX: 0, selectionStartY: 0, dragStartPositions: {}, initialSelectedNodes: [], initialPinchDist: 0, initialZoom: 1, longPressTimeout: null },
-            init() { this.loadSampleData(); this.bindEvents(); if (this.state.zoom !== 1) { const z = this.state.zoom; this.state.zoom = 1; this.setZoom(z); } this.render(); setTimeout(() => this.centerView(), 100); },
+
+                saveStateToDOM() {
+                    let script = document.getElementById('org-chart-state');
+                    if (!script) {
+                        script = document.createElement('script');
+                        script.id = 'org-chart-state';
+                        script.type = 'application/json';
+                        document.body.appendChild(script);
+                    }
+                    script.textContent = JSON.stringify(this.state);
+                },
+
+            saveStateToDOM() {
+                let script = document.getElementById('org-chart-state');
+                if (!script) {
+                    script = document.createElement('script');
+                    script.id = 'org-chart-state';
+                    script.type = 'application/json';
+                    document.body.appendChild(script);
+                }
+                script.textContent = JSON.stringify(this.state);
+            },
+            init() { const savedState = document.getElementById('org-chart-state'); if (savedState && savedState.textContent) {   try { this.state = JSON.parse(savedState.textContent); }   catch (e) { this.loadSampleData(); } } else { this.loadSampleData(); }  } } else { this.loadSampleData(); }  } } else { this.loadSampleData(); }  } } else { this.loadSampleData(); }  } } else { this.loadSampleData(); }  } } else { this.loadSampleData(); }  } } else { this.loadSampleData(); }  } } else { this.loadSampleData(); }  } } else { this.loadSampleData(); }  } } else { this.loadSampleData(); }  } } else { this.loadSampleData(); }  } } else { this.loadSampleData(); }  this.bindEvents(); if (this.state.zoom !== 1) { const z = this.state.zoom; this.state.zoom = 1; this.setZoom(z); } this.render(); setTimeout(() => this.centerView(), 100); },
             loadSampleData() {
                 this.state.nodes = [
                     { "id": "n_owner", "x": 2464.450280668679, "y": 1666.885963302809, "name": "Dr. Randall Steffens DO", "title": "OWNER / CEO / Medical Director", "color": "#b32323", "inheritColor": false, "tags": [ "Executive" ], "_w": 220, "_h": 117 },
@@ -298,18 +320,18 @@ org_chart_html = """<!DOCTYPE html>
             addNode() {
                 const vLeft = this.ui.viewport.scrollLeft; const vTop = this.ui.viewport.scrollTop; const vWidth = this.ui.viewport.clientWidth; const vHeight = this.ui.viewport.clientHeight;
                 const newNode = { id: this.generateId(), x: (vLeft + vWidth / 2) / this.state.zoom - 110, y: (vTop + vHeight / 2) / this.state.zoom - 50, name: 'New Node', title: 'Role', color: '#3b82f6', inheritColor: false, tags: [] };
-                this.state.nodes.push(newNode); this.selectNode(newNode.id); this.render();
+                this.state.nodes.push(newNode); this.selectNode(newNode.id); this.render(); this.saveStateToDOM();
             },
-            deleteNode(id) { this.state.nodes = this.state.nodes.filter(n => n.id !== id); this.state.edges = this.state.edges.filter(e => e.source !== id && e.target !== id); this.state.selectedNodes = this.state.selectedNodes.filter(sid => sid !== id); this.refreshAllNodes(); this.render(); this.updatePropertiesPanel(); },
+            deleteNode(id) { this.state.nodes = this.state.nodes.filter(n => n.id !== id); this.state.edges = this.state.edges.filter(e => e.source !== id && e.target !== id); this.state.selectedNodes = this.state.selectedNodes.filter(sid => sid !== id); this.refreshAllNodes(); this.render(); this.updatePropertiesPanel(); this.saveStateToDOM(); },
             addLink(sourceId, targetId, type) {
                 if (sourceId === targetId) return;
                 const exists = this.state.edges.some(e => (e.source === sourceId && e.target === targetId) || (e.source === targetId && e.target === sourceId && type === 'lateral'));
                 if (!exists) { this.state.edges.push({ id: this.generateId(), source: sourceId, target: targetId, type }); this.refreshAllNodes(); this.renderEdges(); this.updatePropertiesPanel(); }
                 this.cancelLinkingMode();
             },
-            deleteEdge(edgeId) { this.state.edges = this.state.edges.filter(e => e.id !== edgeId); if (this.state.selectedEdgeId === edgeId) this.state.selectedEdgeId = null; this.refreshAllNodes(); this.renderEdges(); this.updatePropertiesPanel(); },
+            deleteEdge(edgeId) { this.state.edges = this.state.edges.filter(e => e.id !== edgeId); if (this.state.selectedEdgeId === edgeId) this.state.selectedEdgeId = null; this.refreshAllNodes(); this.renderEdges(); this.updatePropertiesPanel(); this.saveStateToDOM(); },
             deleteSelectedEdge() { if (this.state.selectedEdgeId) this.deleteEdge(this.state.selectedEdgeId); },
-            clearAll() { if(confirm("Are you sure you want to clear the entire chart?")) { this.state.nodes = []; this.state.edges = []; this.deselectAll(); this.render(); } },
+            clearAll() { if(confirm("Are you sure you want to clear the entire chart?")) { this.state.nodes = []; this.state.edges = []; this.deselectAll(); this.render(); this.saveStateToDOM(); } },
             startLinkingMode(type) { this.state.linkingMode = type; this.ui.linkingOverlay.style.display = 'block'; this.ui.linkingOverlay.innerText = `Select target node for ${type} link... (ESC to cancel)`; this.ui.workspace.style.cursor = 'crosshair'; },
             cancelLinkingMode() { this.state.linkingMode = null; this.ui.linkingOverlay.style.display = 'none'; this.ui.workspace.style.cursor = 'default'; },
             handleLinkDragStart(e, nodeId, type) { e.stopPropagation(); const ptr = e.touches ? e.touches[0] : e; this.interaction.isDrawingLink = true; this.interaction.linkStartNodeId = nodeId; this.interaction.linkType = type; document.getElementById('temp-edge').style.display = 'block'; this.updateTempEdge(ptr.clientX, ptr.clientY); },
@@ -340,7 +362,7 @@ org_chart_html = """<!DOCTYPE html>
             },
             selectEdge(e, edgeId) { e.stopPropagation(); this.state.selectedEdgeId = edgeId; this.state.selectedNodes = []; this.renderNodes(); this.renderEdges(); this.updatePropertiesPanel(); },
             deselectAll() { this.state.selectedNodes = []; this.state.selectedEdgeId = null; this.renderNodes(); this.renderEdges(); this.ui.propPanel.style.display = 'none'; this.ui.propPanel.classList.remove('collapsed'); this.cancelLinkingMode(); },
-            updateSelectedNode(key, value) { if (this.state.selectedNodes.length !== 1) return; const node = this.state.nodes.find(n => n.id === this.state.selectedNodes[0]); if (node) { node[key] = value; this.refreshAllNodes(); this.updateNodeDOM(node); } },
+            updateSelectedNode(key, value) { if (this.state.selectedNodes.length !== 1) return; const node = this.state.nodes.find(n => n.id === this.state.selectedNodes[0]); if (node) { node[key] = value; this.refreshAllNodes(); this.updateNodeDOM(node); } this.saveStateToDOM(); },
             updatePropertiesPanel() { /* Skipped for brevity in payload */ },
             toggleTag(tag, isAdded) { /* Skipped for brevity */ },
             addNewTag() { /* Skipped for brevity */ },
