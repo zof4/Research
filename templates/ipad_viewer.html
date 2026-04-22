@@ -349,6 +349,36 @@
         opacity: 1;
       }
 
+      .save-status {
+        font-size: 0.75rem;
+        font-weight: 600;
+        border-radius: 9999px;
+        padding: 0.2rem 0.55rem;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        color: #cbd5e1;
+        background: rgba(15, 23, 42, 0.55);
+      }
+
+      .save-status[data-state="saved"] {
+        border-color: rgba(16, 185, 129, 0.5);
+        color: #86efac;
+      }
+
+      .save-status[data-state="saving"] {
+        border-color: rgba(59, 130, 246, 0.5);
+        color: #93c5fd;
+      }
+
+      .save-status[data-state="dirty"] {
+        border-color: rgba(250, 204, 21, 0.55);
+        color: #fde68a;
+      }
+
+      .save-status[data-state="error"] {
+        border-color: rgba(248, 113, 113, 0.55);
+        color: #fca5a5;
+      }
+
       /* Modals */
       .modal-overlay {
         position: fixed;
@@ -435,6 +465,7 @@
           </div>
 
           <div class="flex items-center gap-2">
+            <span id="save-status" class="save-status" data-state="saved" title="Autosave status">Saved</span>
             <button class="btn btn-secondary" id="btn-inject" title="Inject Library">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
               Libraries
@@ -543,20 +574,24 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/htmlmixed/htmlmixed.min.js"></script>
 
     <script>
-      console.log("Step 1");
 const csrfToken = "{{ csrf_token }}";
 const isPublicView = {{ 'true' if is_public_view else 'false' }};
 const publicPermission = "{{ public_permission | default('') }}";
 const publicToken = "{{ public_token | default('') }}";
-      console.log("Step 2");
 const htmlHistoryData = JSON.parse(document.getElementById('html-data').textContent || '[]');
-console.log("Step 3");
 
       let files = htmlHistoryData;
       let currentFileId = null;
       let editor = null;
       let previewUpdateTimeout = null;
       let isLiveEditing = false;
+      let isApplyingRemoteUpdate = false;
+      let autosaveTimeout = null;
+      let saveInFlight = false;
+      let queuedSave = false;
+      let lastKnownRevision = 0;
+      let hasUnsavedChanges = false;
+      let pollingHandle = null;
 
       // DOM Elements
       const elements = {
@@ -581,9 +616,10 @@ console.log("Step 3");
         btnCloseInject: document.getElementById('btn-close-inject'),
         btnInjectLibs: document.querySelectorAll('.btn-inject-lib'),
         toast: document.getElementById('toast'),
+        saveStatus: document.getElementById('save-status'),
       };
 
-      const DEFAULT_HTML = `<!doctype html>
+const DEFAULT_HTML = `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -598,15 +634,8 @@ console.log("Step 3");
   <h1>Interactive System</h1>
   <div class="box">
     Content goes here
-  </div></div>
-
-        <div class="mt-6 flex justify-end">
-          <button class="btn btn-secondary" onclick="document.getElementById('share-modal').classList.remove('active')">Close</button>
-        </div>
-      </div>
-    </div>
-
-  </body>
+  </div>
+</body>
 </html>`;
 
       const LIBRARY_SNIPPETS = {
@@ -630,6 +659,35 @@ console.log("Step 3");
       function getActiveFile() {
         if (!currentFileId) return null;
         return files.find(f => f.id === currentFileId);
+      }
+
+      function normalizeRevision(value) {
+        const parsed = Number.parseInt(value, 10);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+      }
+
+      function updateSaveStatus(state, message) {
+        if (!elements.saveStatus) return;
+        elements.saveStatus.dataset.state = state;
+        elements.saveStatus.textContent = message;
+      }
+
+      function setUnsavedChanges(isDirty) {
+        hasUnsavedChanges = isDirty;
+        if (isDirty) {
+          updateSaveStatus('dirty', 'Unsaved');
+        } else if (!saveInFlight) {
+          updateSaveStatus('saved', 'Saved');
+        }
+      }
+
+      function queueAutosave(delayMs = 350) {
+        clearTimeout(autosaveTimeout);
+        autosaveTimeout = setTimeout(() => {
+          if (currentFileId || editor.getValue().trim()) {
+            saveCurrentFile(true);
+          }
+        }, delayMs);
       }
 
       function updateShareModal() {
@@ -805,23 +863,14 @@ console.log("Step 3");
         });
 
         editor.on("change", () => {
-          if (isLiveEditing) {
-            isLiveEditing = false;
-            clearTimeout(previewUpdateTimeout);
-            previewUpdateTimeout = setTimeout(() => {
-              if (currentFileId) {
-                saveCurrentFile(true); // auto-save silently
-              }
-            }, 500);
-            return;
-          }
+          if (isApplyingRemoteUpdate) return;
+          setUnsavedChanges(true);
           clearTimeout(previewUpdateTimeout);
           previewUpdateTimeout = setTimeout(() => {
             updatePreview();
-            if (currentFileId) {
-              saveCurrentFile(true); // auto-save silently
-            }
-          }, 500);
+          }, isLiveEditing ? 150 : 220);
+          queueAutosave(isLiveEditing ? 350 : 220);
+          isLiveEditing = false;
         });
 
         // Load specific file from URL if specified
@@ -840,6 +889,7 @@ console.log("Step 3");
 
         setupEventListeners();
         setupDrawing();
+        startCollaborationPolling();
       }
 
       function renderFileList() {
@@ -898,20 +948,29 @@ console.log("Step 3");
         if (!file) return;
 
         currentFileId = id;
+        lastKnownRevision = normalizeRevision(file.revision);
+        setUnsavedChanges(false);
+        updateSaveStatus('saved', 'Saved');
         elements.fileTitleInput.value = file.title || file.html_name || 'Untitled Document';
         elements.fileTitleInput.disabled = false;
 
+        isApplyingRemoteUpdate = true;
         editor.setValue(file.source || '');
+        isApplyingRemoteUpdate = false;
         updatePreview();
         renderFileList();
       }
 
       function createNewFile() {
         currentFileId = null;
+        lastKnownRevision = 0;
+        setUnsavedChanges(true);
         elements.fileTitleInput.value = '';
         elements.fileTitleInput.placeholder = 'Untitled Document';
         elements.fileTitleInput.disabled = false;
+        isApplyingRemoteUpdate = true;
         editor.setValue(DEFAULT_HTML);
+        isApplyingRemoteUpdate = false;
         updatePreview();
         renderFileList();
       }
@@ -1142,6 +1201,58 @@ console.log("Step 3");
         }, 3000);
       }
 
+      async function fetchCurrentFileState() {
+        if (!currentFileId) return null;
+        const url = isPublicView
+          ? `/p/html/${publicToken}/state`
+          : `{% if is_admin %}{{ url_for('html_ipad_viewer_state', entry_id='ENTRY_ID_PLACEHOLDER', owner=selected_owner) }}{% else %}{{ url_for('html_ipad_viewer_state', entry_id='ENTRY_ID_PLACEHOLDER') }}{% endif %}`.replace('ENTRY_ID_PLACEHOLDER', currentFileId);
+        const response = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        if (!response.ok) {
+          throw new Error(`State fetch failed (${response.status})`);
+        }
+        const payload = await response.json();
+        if (!payload.ok || !payload.entry) {
+          throw new Error(payload.error || 'State payload malformed');
+        }
+        return payload.entry;
+      }
+
+      async function pollForRemoteUpdates() {
+        if (!currentFileId || saveInFlight || hasUnsavedChanges) return;
+        try {
+          const remoteEntry = await fetchCurrentFileState();
+          if (!remoteEntry) return;
+          const remoteRevision = normalizeRevision(remoteEntry.revision);
+          if (remoteRevision <= lastKnownRevision) return;
+          const remoteSource = String(remoteEntry.source || '');
+          if (remoteSource === editor.getValue()) {
+            lastKnownRevision = remoteRevision;
+            return;
+          }
+
+          isApplyingRemoteUpdate = true;
+          editor.setValue(remoteSource);
+          isApplyingRemoteUpdate = false;
+          updatePreview();
+          lastKnownRevision = remoteRevision;
+          setUnsavedChanges(false);
+          const fileIdx = files.findIndex(f => f.id === currentFileId);
+          if (fileIdx !== -1) files[fileIdx] = remoteEntry;
+          renderFileList();
+          updateSaveStatus('saved', 'Synced');
+        } catch (error) {
+          console.error('Polling failed', error);
+          updateSaveStatus('error', 'Sync error');
+        }
+      }
+
+      function startCollaborationPolling() {
+        if (pollingHandle) clearInterval(pollingHandle);
+        pollingHandle = setInterval(() => {
+          pollForRemoteUpdates();
+        }, 800);
+      }
+
       async function saveCurrentFile(silent = false) {
         const title = elements.fileTitleInput.value.trim();
         const source = editor.getValue();
@@ -1151,12 +1262,19 @@ console.log("Step 3");
           return;
         }
 
-        const payload = { title, source };
+        if (saveInFlight) {
+          queuedSave = true;
+          return;
+        }
+
+        const payload = { title, source, base_revision: lastKnownRevision };
         if (currentFileId) {
           payload.id = currentFileId;
         }
 
         try {
+          saveInFlight = true;
+          updateSaveStatus('saving', 'Saving…');
           let url;
           if (isPublicView) {
               url = `/p/html/${publicToken}/save`;
@@ -1190,13 +1308,37 @@ console.log("Step 3");
               files.unshift(data.entry);
               currentFileId = data.entry.id;
             }
+            lastKnownRevision = normalizeRevision(data.entry?.revision);
+            setUnsavedChanges(false);
             renderFileList();
+            updateSaveStatus('saved', 'Saved');
           } else {
+            updateSaveStatus('error', 'Save failed');
             if (!silent) alert('Error saving: ' + (data.error || 'Unknown error'));
+          }
+          if (response.status === 409 && data?.entry) {
+            const latest = data.entry;
+            const latestRevision = normalizeRevision(latest.revision);
+            if (latestRevision > lastKnownRevision && !hasUnsavedChanges) {
+              isApplyingRemoteUpdate = true;
+              editor.setValue(String(latest.source || ''));
+              isApplyingRemoteUpdate = false;
+              lastKnownRevision = latestRevision;
+              setUnsavedChanges(false);
+              updatePreview();
+            }
+            updateSaveStatus('error', 'Conflict');
           }
         } catch (err) {
           console.error(err);
+          updateSaveStatus('error', 'Save error');
           if (!silent) alert('Failed to save document. See console for details.');
+        } finally {
+          saveInFlight = false;
+          if (queuedSave) {
+            queuedSave = false;
+            saveCurrentFile(true);
+          }
         }
       }
 
@@ -1377,8 +1519,11 @@ console.log("Step 3");
 
         window.addEventListener('message', (event) => {
           if (event.data && event.data.type === 'live-edit-save') {
+            if (isApplyingRemoteUpdate) return;
+            const incomingSource = String(event.data.source || '');
+            if (incomingSource === editor.getValue()) return;
             isLiveEditing = true;
-            editor.setValue(event.data.source);
+            editor.setValue(incomingSource);
           }
         });
       }
