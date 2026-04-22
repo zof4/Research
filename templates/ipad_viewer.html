@@ -923,33 +923,204 @@ console.log("Step 3");
 <script class="live-edit-script">
   (function() {
     document.addEventListener("DOMContentLoaded", function() {
-      document.body.contentEditable = "true";
+      if (!document.body || window.__dropperLiveEditInit) return;
+      window.__dropperLiveEditInit = true;
+
       let timeout;
+      let dragTarget = null;
+      let dragOffsetX = 0;
+      let dragOffsetY = 0;
+      let persistCounter = 0;
+
+      function ensurePersistId(el) {
+        if (!el.dataset.persistId) {
+          persistCounter += 1;
+          el.dataset.persistId = "item-" + Date.now() + "-" + persistCounter;
+        }
+        return el.dataset.persistId;
+      }
+
+      function normalizeElementRuntimeState(root) {
+        root.querySelectorAll("input, textarea, select").forEach((field) => {
+          const tag = field.tagName.toLowerCase();
+          if (tag === "textarea") {
+            field.textContent = field.value;
+          } else if (tag === "select") {
+            Array.from(field.options).forEach((opt) => {
+              opt.selected = opt.selected;
+              if (opt.selected) opt.setAttribute("selected", "selected");
+              else opt.removeAttribute("selected");
+            });
+          } else if (field.type === "checkbox" || field.type === "radio") {
+            if (field.checked) field.setAttribute("checked", "checked");
+            else field.removeAttribute("checked");
+          } else {
+            field.setAttribute("value", field.value);
+          }
+        });
+
+        root.querySelectorAll("details").forEach((details) => {
+          if (details.open) details.setAttribute("open", "open");
+          else details.removeAttribute("open");
+        });
+
+        root.querySelectorAll("[contenteditable]").forEach((editable) => {
+          editable.innerHTML = editable.innerHTML;
+        });
+      }
+
+      function captureStorage() {
+        const storagePayload = { localStorage: {}, sessionStorage: {} };
+        try {
+          for (let i = 0; i < window.localStorage.length; i += 1) {
+            const key = window.localStorage.key(i);
+            if (!key) continue;
+            storagePayload.localStorage[key] = window.localStorage.getItem(key);
+          }
+        } catch (_error) {}
+
+        try {
+          for (let i = 0; i < window.sessionStorage.length; i += 1) {
+            const key = window.sessionStorage.key(i);
+            if (!key) continue;
+            storagePayload.sessionStorage[key] = window.sessionStorage.getItem(key);
+          }
+        } catch (_error) {}
+        return storagePayload;
+      }
+
+      function captureRuntimeModels() {
+        const runtime = {};
+        try {
+          if (window.app && window.app.state && typeof window.app.state === "object") {
+            runtime.appState = JSON.parse(JSON.stringify(window.app.state));
+          }
+        } catch (_error) {}
+
+        try {
+          const viewport = document.getElementById("viewport");
+          if (viewport) {
+            runtime.viewport = {
+              scrollLeft: viewport.scrollLeft,
+              scrollTop: viewport.scrollTop
+            };
+          }
+        } catch (_error) {}
+        return runtime;
+      }
+
+      function injectStateBootstrap(clone, storagePayload, runtimePayload) {
+        if (!clone || !clone.querySelector) return;
+        const head = clone.querySelector("head") || clone.querySelector("html");
+        if (!head) return;
+
+        const existing = head.querySelector("#dropper-runtime-bootstrap");
+        if (existing) existing.remove();
+
+        const bootstrap = clone.ownerDocument.createElement("script");
+        bootstrap.id = "dropper-runtime-bootstrap";
+        bootstrap.textContent =
+          "(function(){try{" +
+          "var payload={storage:" + JSON.stringify(storagePayload).replace(/</g, "\\u003c") + ",runtime:" + JSON.stringify(runtimePayload).replace(/</g, "\\u003c") + "};" +
+          "Object.entries((payload.storage&&payload.storage.localStorage)||{}).forEach(function(kv){window.localStorage.setItem(kv[0],kv[1]);});" +
+          "Object.entries((payload.storage&&payload.storage.sessionStorage)||{}).forEach(function(kv){window.sessionStorage.setItem(kv[0],kv[1]);});" +
+          "window.__DROPPER_PERSISTED=payload;" +
+          "}catch(_error){}})();";
+        head.insertBefore(bootstrap, head.firstChild);
+      }
+
+      function applyRuntimeModels() {
+        const payload = window.__DROPPER_PERSISTED || {};
+        const runtime = payload.runtime || {};
+        try {
+          if (runtime.appState && window.app && window.app.state) {
+            window.app.state = JSON.parse(JSON.stringify(runtime.appState));
+            if (typeof window.app.render === "function") window.app.render();
+            if (typeof window.app.updatePropertiesPanel === "function") window.app.updatePropertiesPanel();
+          }
+        } catch (_error) {}
+
+        try {
+          if (runtime.viewport) {
+            const viewport = document.getElementById("viewport");
+            if (viewport) {
+              viewport.scrollLeft = Number(runtime.viewport.scrollLeft || 0);
+              viewport.scrollTop = Number(runtime.viewport.scrollTop || 0);
+            }
+          }
+        } catch (_error) {}
+      }
 
       const saveContent = function() {
         clearTimeout(timeout);
         timeout = setTimeout(function() {
-          let clone = document.documentElement.cloneNode(true);
-          let scripts = clone.querySelectorAll('.live-edit-script');
-          scripts.forEach(s => s.remove());
-          let body = clone.querySelector('body');
-          if (body) body.removeAttribute('contenteditable');
-          window.parent.postMessage({ type: 'live-edit-save', source: '<!doctype html>\\n' + clone.outerHTML }, '*');
-        }, 500);
+          const clone = document.documentElement.cloneNode(true);
+          clone.querySelectorAll(".live-edit-script").forEach((s) => s.remove());
+          normalizeElementRuntimeState(clone);
+          injectStateBootstrap(clone, captureStorage(), captureRuntimeModels());
+          window.parent.postMessage({ type: "live-edit-save", source: "<!doctype html>\\n" + clone.outerHTML }, "*");
+        }, 350);
       };
 
-      document.body.addEventListener('input', saveContent);
+      function pointerMove(event) {
+        if (!dragTarget) return;
+        dragTarget.style.left = (event.clientX - dragOffsetX) + "px";
+        dragTarget.style.top = (event.clientY - dragOffsetY) + "px";
+        dragTarget.style.right = "auto";
+        dragTarget.style.bottom = "auto";
+        dragTarget.style.transform = "none";
+      }
+
+      function pointerUp() {
+        if (!dragTarget) return;
+        const previous = dragTarget;
+        dragTarget.classList.remove("dropper-moving");
+        dragTarget = null;
+        previous.style.willChange = "";
+        saveContent();
+        document.removeEventListener("pointermove", pointerMove, true);
+        document.removeEventListener("pointerup", pointerUp, true);
+      }
+
+      document.addEventListener("pointerdown", (event) => {
+        if (!event.altKey) return;
+        const target = event.target.closest("[data-movable], .moveable, .draggable");
+        if (!target) return;
+        const rect = target.getBoundingClientRect();
+        ensurePersistId(target);
+        target.style.position = "absolute";
+        target.style.left = rect.left + "px";
+        target.style.top = rect.top + "px";
+        target.style.margin = "0";
+        target.style.willChange = "left, top";
+        target.classList.add("dropper-moving");
+        dragTarget = target;
+        dragOffsetX = event.clientX - rect.left;
+        dragOffsetY = event.clientY - rect.top;
+        document.addEventListener("pointermove", pointerMove, true);
+        document.addEventListener("pointerup", pointerUp, true);
+        event.preventDefault();
+        event.stopPropagation();
+      }, true);
+
+      document.body.addEventListener("input", saveContent);
+      document.body.addEventListener("change", saveContent);
+      document.body.addEventListener("click", saveContent, true);
+      document.body.addEventListener("pointerup", saveContent, true);
+      window.addEventListener("keyup", saveContent, true);
 
       const observer = new MutationObserver((mutations) => {
-          let shouldSave = false;
-          mutations.forEach(mutation => {
-              if (mutation.type === 'childList' || mutation.type === 'attributes' || mutation.type === 'characterData') {
-                  shouldSave = true;
-              }
-          });
-          if (shouldSave) saveContent();
+        const shouldSave = mutations.some((mutation) => (
+          mutation.type === "childList" ||
+          mutation.type === "attributes" ||
+          mutation.type === "characterData"
+        ));
+        if (shouldSave) saveContent();
       });
       observer.observe(document.body, { attributes: true, childList: true, subtree: true, characterData: true });
+
+      setTimeout(applyRuntimeModels, 0);
+      window.addEventListener("load", applyRuntimeModels, { once: true });
     });
   })();
 <\/script>`;
